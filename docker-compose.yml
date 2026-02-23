@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - appnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  init-script:
+    image: postgres:18
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - appnet
+    volumes:
+      - ./scripts:/scripts
+    entrypoint: >
+      bash -c "
+      export PGPASSWORD=password;
+      psql -h postgres -U postgres -d Finances -f /scripts/UpdateAccountBalanceHistory.sql
+      "
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase_user
+      MB_DB_PASS: password
+      MB_DB_HOST: postgres
+      TZ: America/Chicago
+    volumes:
+      - metabase_data:/metabase-data
+    depends_on:
+      - postgres
+    networks:
+      - appnet
+
+  appsmith:
+    image: index.docker.io/appsmith/appsmith-ee
+    container_name: appsmith
+    ports:
+      - "8080:80"
+    volumes:
+     - appsmith_data:/appsmith-stacks
+    depends_on:
+      - postgres
+    networks:
+      - appnet
+
+volumes:
+  postgres_data:
+  metabase_data:
+  appsmith_data:
+
+networks:
+  appnet:
+    driver: bridge
+
