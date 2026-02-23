@@ -16,17 +16,7 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 
 ## Getting Started
 
-### 1. Restore the database
-
-Before starting the stack for the first time, restore the database backup:
-
-```bash
-docker compose up postgres -d
-docker exec -i postgres psql -U postgres < backup/all_databases.sql
-docker compose down
-```
-
-### 2. Start the stack
+### 1. Start the stack
 
 ```bash
 docker compose up
@@ -37,7 +27,7 @@ This will:
 2. Run `UpdateAccountBalanceHistory.sql` to rebuild daily cumulative balances
 3. Start Metabase and Appsmith
 
-### 3. Access the services
+### 2. Access the services
 
 - **Metabase:** http://localhost:3000
 - **Appsmith:** http://localhost:8080
@@ -64,12 +54,6 @@ This will:
 To run it manually:
 
 ```bash
-docker exec postgres psql -U postgres -d Finances -f /scripts/UpdateAccountBalanceHistory.sql
-```
-
-Note: The `/scripts` volume is only mounted on the `init-script` container, not `postgres`. To run manually, use the init-script container:
-
-```bash
 docker compose run --rm init-script
 ```
 
@@ -78,8 +62,6 @@ docker compose run --rm init-script
 ```
 finance-stack/
 ├── docker-compose.yml            # Infrastructure definition
-├── backup/
-│   └── all_databases.sql         # Full PostgreSQL database dump
 └── scripts/
     └── UpdateAccountBalanceHistory.sql   # Balance history rebuild script
 ```

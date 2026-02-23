@@ -1,37 +1,48 @@
+# Defines the four services that make up the finance stack:
+# postgres (data store), init-script (one-shot balance rebuild),
+# metabase (BI dashboards), and appsmith (internal app builder).
+
 services:
+
+  # Primary PostgreSQL database that stores all financial data.
   postgres:
     image: postgres:18
     container_name: postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: postgres
+      POSTGRES_DB: postgres      # Default system DB; the Finances DB is created by the backup restore
     ports:
-      - "5433:5432"
+      - "5433:5432"              # Exposed on 5433 to avoid conflicts with a local Postgres on the default port
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - appnet
-    healthcheck:
+    healthcheck:                 # Other services wait on this check before starting
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # One-shot job: runs UpdateAccountBalanceHistory.sql after postgres is healthy,
+  # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
   init-script:
     image: postgres:18
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_healthy  # Waits for postgres to pass its healthcheck before running
     networks:
       - appnet
     volumes:
-      - ./scripts:/scripts
+      - ./scripts:/scripts          # Only this container mounts the scripts directory
     entrypoint: >
       bash -c "
       export PGPASSWORD=password;
       psql -h postgres -U postgres -d Finances -f /scripts/UpdateAccountBalanceHistory.sql
       "
 
+  # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
+  # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
   metabase:
     image: metabase/metabase:latest
     container_name: metabase
@@ -39,12 +50,12 @@ services:
       - "3000:3000"
     environment:
       MB_DB_TYPE: postgres
-      MB_DB_DBNAME: metabase
+      MB_DB_DBNAME: metabase      # Metabase's internal state DB — separate from the Finances DB
       MB_DB_PORT: 5432
       MB_DB_USER: metabase_user
       MB_DB_PASS: password
       MB_DB_HOST: postgres
-      TZ: America/Chicago
+      TZ: America/Chicago         # Ensures chart timestamps and date grouping use local time
     volumes:
       - metabase_data:/metabase-data
     depends_on:
@@ -52,11 +63,12 @@ services:
     networks:
       - appnet
 
+  # Appsmith Enterprise Edition — low-code platform for building internal financial apps.
   appsmith:
     image: index.docker.io/appsmith/appsmith-ee
     container_name: appsmith
     ports:
-      - "8080:80"
+      - "8080:80"                 # Appsmith's internal server runs on port 80
     volumes:
      - appsmith_data:/appsmith-stacks
     depends_on:
@@ -65,11 +77,10 @@ services:
       - appnet
 
 volumes:
-  postgres_data:
-  metabase_data:
-  appsmith_data:
+  postgres_data:    # Persists PostgreSQL data across container restarts
+  metabase_data:    # Persists Metabase dashboards, questions, and settings
+  appsmith_data:    # Persists Appsmith app definitions and configuration
 
 networks:
   appnet:
-    driver: bridge
-
+    driver: bridge  # Shared bridge network so services can reach each other by container name
