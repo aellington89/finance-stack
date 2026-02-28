@@ -15,7 +15,7 @@ services:
     ports:
       - "5433:5432"              # Exposed on 5433 to avoid conflicts with a local Postgres on the default port
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     networks:
       - appnet
     healthcheck:                 # Other services wait on this check before starting
