@@ -1,0 +1,13 @@
+# Version control
+.git
+
+# IDE and tooling
+.vs
+.claude
+
+# Credentials
+.env
+secrets/
+
+# Documentation
+*.md

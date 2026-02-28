@@ -24,8 +24,7 @@ docker compose up
 
 This will:
 1. Start PostgreSQL and wait until it is healthy
-2. Run `UpdateAccountBalanceHistory.sql` to rebuild daily cumulative balances
-3. Start Metabase and Appsmith
+2. Start Metabase and Appsmith
 
 ### 2. Access the services
 
@@ -51,10 +50,10 @@ This will:
 
 `account_balance_history` is rebuilt automatically every time the stack starts via the `init-script` service. It calculates a running cumulative balance for each account for every calendar day, filling in days with no transactions with a zero daily change.
 
-To run it manually:
+The init-script is behind a profile and does not run automatically. To run it:
 
 ```bash
-docker compose run --rm init-script
+docker compose --profile init run --rm init-script
 ```
 
 ## Project Structure
@@ -63,6 +62,7 @@ docker compose run --rm init-script
 finance-stack/
 ├── docker-compose.yml                    # Infrastructure definition
 ├── .env.example                          # Template for credentials (copy to .env)
+├── .dockerignore                         # Excludes files from Docker build context
 ├── init-db/
 │   └── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
 └── scripts/
@@ -95,3 +95,10 @@ Changed the Postgres volume mount from `/var/lib/postgresql/data` to `/var/lib/p
 - Added log rotation (30 MB max per service) to prevent disk fills
 - Added `init-db/01-create-databases.sh` so the stack self-initializes on a fresh clone
 - Added memory and CPU resource limits to all services
+
+**Tier 3 — Developer experience**
+- Init-script moved behind `profiles: ["init"]` — no longer runs on every `docker compose up`
+- Hardened init-script entrypoint with `set -euo pipefail`, retry loop, and read-only script mount
+- Added `name: finance-stack` for consistent container/volume naming
+- Added labels to all services for filtering with `docker ps --filter`
+- Created `.dockerignore`
