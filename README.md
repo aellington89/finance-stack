@@ -16,7 +16,15 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 
 ## Getting Started
 
-### 1. Start the stack
+### 1. Set up environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and replace the `changeme` placeholder passwords with your own values.
+
+### 2. Start the stack
 
 ```bash
 docker compose up
@@ -26,7 +34,7 @@ This will:
 1. Start PostgreSQL and wait until it is healthy
 2. Start Metabase and Appsmith
 
-### 2. Access the services
+### 3. Access the services
 
 - **Metabase:** http://localhost:3000
 - **Appsmith:** http://localhost:8080
@@ -48,9 +56,7 @@ This will:
 
 ### Balance History
 
-`account_balance_history` is rebuilt automatically every time the stack starts via the `init-script` service. It calculates a running cumulative balance for each account for every calendar day, filling in days with no transactions with a zero daily change.
-
-The init-script is behind a profile and does not run automatically. To run it:
+`account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change. The init-script that rebuilds it is behind a profile and does not run automatically. To run it:
 
 ```bash
 docker compose --profile init run --rm init-script
