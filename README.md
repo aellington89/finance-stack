@@ -76,4 +76,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-- **2025-02-27 — PostgreSQL 18 volume path fix:** Changed the Postgres volume mount from `/var/lib/postgresql/data` to `/var/lib/postgresql` to match PG18's updated `PGDATA` directory.
+### 2025-02-27
+
+**PostgreSQL 18 volume path fix**
+Changed the Postgres volume mount from `/var/lib/postgresql/data` to `/var/lib/postgresql` to match PG18's updated `PGDATA` directory.
+
+**Tier 1 — Security and reliability hardening**
+- Extracted all credentials to `.env` (see `.env.example` for the template)
+- Added `restart: unless-stopped` to long-running services
+- Metabase and Appsmith now wait for Postgres to be healthy before starting
+- Pinned all image tags: `postgres:18.0`, `metabase:v0.58.8`, `appsmith-ee:v1.87`

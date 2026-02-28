@@ -1,2 +1,6 @@
-﻿/.vs
+﻿# IDE and tooling
+/.vs
 /.claude
+
+# Credentials — never commit
+.env
