@@ -61,7 +61,10 @@ docker compose run --rm init-script
 
 ```
 finance-stack/
-├── docker-compose.yml            # Infrastructure definition
+├── docker-compose.yml                    # Infrastructure definition
+├── .env.example                          # Template for credentials (copy to .env)
+├── init-db/
+│   └── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
 └── scripts/
     └── UpdateAccountBalanceHistory.sql   # Balance history rebuild script
 ```
@@ -78,7 +81,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ### 2025-02-27
 
-**PostgreSQL 18 volume path fix**
+**Critical Bug Fix - PostgreSQL 18 volume path fix**
 Changed the Postgres volume mount from `/var/lib/postgresql/data` to `/var/lib/postgresql` to match PG18's updated `PGDATA` directory.
 
 **Tier 1 — Security and reliability hardening**
@@ -86,3 +89,9 @@ Changed the Postgres volume mount from `/var/lib/postgresql/data` to `/var/lib/p
 - Added `restart: unless-stopped` to long-running services
 - Metabase and Appsmith now wait for Postgres to be healthy before starting
 - Pinned all image tags: `postgres:18.0`, `metabase:v0.58.8`, `appsmith-ee:v1.87`
+
+**Tier 2 — Operational improvements**
+- Added healthchecks for Metabase and Appsmith so `docker compose ps` reports accurate status
+- Added log rotation (30 MB max per service) to prevent disk fills
+- Added `init-db/01-create-databases.sh` so the stack self-initializes on a fresh clone
+- Added memory and CPU resource limits to all services

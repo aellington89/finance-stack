@@ -2,6 +2,13 @@
 # postgres (data store), init-script (one-shot balance rebuild),
 # metabase (BI dashboards), and appsmith (internal app builder).
 
+# Shared logging config — keeps logs from filling the disk (30 MB max per service).
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   # Primary PostgreSQL database that stores all financial data.
@@ -13,17 +20,29 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}           # Default system DB; the Finances DB is created by the backup restore
+      MB_DB_USER: ${MB_DB_USER}             # Passed through so init-db script can create the Metabase role
+      MB_DB_PASS: ${MB_DB_PASS}
+      MB_DB_DBNAME: ${MB_DB_DBNAME}
     ports:
       - "5433:5432"              # Exposed on 5433 to avoid conflicts with a local Postgres on the default port
     volumes:
       - postgres_data:/var/lib/postgresql  # PG18 moved PGDATA to /var/lib/postgresql/18/docker; mount the parent
+      - ./init-db:/docker-entrypoint-initdb.d:ro  # Runs once on first start (empty data dir) to create DBs and roles
     networks:
       - appnet
+    logging: *default-logging
     healthcheck:                 # Other services wait on this check before starting
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
 
   # One-shot job: runs UpdateAccountBalanceHistory.sql after postgres is healthy,
   # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
@@ -43,6 +62,11 @@ services:
       bash -c "
       psql -h postgres -U ${POSTGRES_USER} -d ${INIT_SCRIPT_DB} -f /scripts/UpdateAccountBalanceHistory.sql
       "
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
 
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
@@ -67,6 +91,20 @@ services:
         condition: service_healthy  # Waits for postgres healthcheck, not just container start
     networks:
       - appnet
+    logging: *default-logging
+    healthcheck:                   # Metabase exposes a health API endpoint
+      test: ["CMD-SHELL", "curl --fail -I http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s          # Metabase can take 1-2 min on first startup (DB migrations)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
 
   # Appsmith Enterprise Edition — low-code platform for building internal financial apps.
   appsmith:
@@ -82,6 +120,20 @@ services:
         condition: service_healthy  # Waits for postgres healthcheck, not just container start
     networks:
       - appnet
+    logging: *default-logging
+    healthcheck:                   # Appsmith ships a built-in healthcheck script
+      test: ["CMD-SHELL", "/opt/appsmith/healthcheck.sh"]
+      interval: 15s
+      timeout: 15s
+      retries: 3
+      start_period: 120s          # Appsmith can take up to 2 min on first start
+    deploy:
+      resources:
+        limits:
+          memory: 3G              # Appsmith idles near 2 GB; 3 GB gives headroom under load
+          cpus: "1.0"
+        reservations:
+          memory: 512M
 
 volumes:
   postgres_data:    # Persists PostgreSQL data across container restarts
