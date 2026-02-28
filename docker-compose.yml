@@ -2,6 +2,8 @@
 # postgres (data store), init-script (one-shot balance rebuild),
 # metabase (BI dashboards), and appsmith (internal app builder).
 
+name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
+
 # Shared logging config — keeps logs from filling the disk (30 MB max per service).
 x-logging: &default-logging
   driver: "json-file"
@@ -43,30 +45,50 @@ services:
           cpus: "1.0"
         reservations:
           memory: 256M
+    labels:
+      com.finance-stack.component: "database"
+      com.finance-stack.description: "Primary PostgreSQL database"
 
   # One-shot job: runs UpdateAccountBalanceHistory.sql after postgres is healthy,
   # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
+  # Behind the "init" profile — only runs when explicitly requested:
+  #   docker compose --profile init run --rm init-script
   init-script:
     image: postgres:18.0
+    profiles: ["init"]                   # Not started by default; run with --profile init
     restart: "no"                        # One-shot job — must not restart after exiting
     depends_on:
       postgres:
         condition: service_healthy  # Waits for postgres to pass its healthcheck before running
     networks:
       - appnet
-    environment:                         # Password passed via env var instead of inline in the entrypoint
+    environment:                         # Credentials via env vars; PGHOST/PGUSER/PGDATABASE are native psql vars
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGDATABASE: ${INIT_SCRIPT_DB:-Finances}
     volumes:
-      - ./scripts:/scripts          # Only this container mounts the scripts directory
+      - ./scripts:/scripts:ro            # Read-only mount — container should not modify scripts
     entrypoint: >
       bash -c "
-      psql -h postgres -U ${POSTGRES_USER} -d ${INIT_SCRIPT_DB} -f /scripts/UpdateAccountBalanceHistory.sql
+      set -euo pipefail;
+      echo 'Waiting for $${PGDATABASE} database...';
+      until psql -c 'SELECT 1' > /dev/null 2>&1; do
+        echo 'Database not ready, retrying in 2s...';
+        sleep 2;
+      done;
+      echo 'Running UpdateAccountBalanceHistory.sql...';
+      psql -f /scripts/UpdateAccountBalanceHistory.sql;
+      echo 'Done.';
       "
     deploy:
       resources:
         limits:
           memory: 512M
           cpus: "0.5"
+    labels:
+      com.finance-stack.component: "init"
+      com.finance-stack.description: "One-shot balance history rebuild"
 
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
@@ -105,6 +127,9 @@ services:
           cpus: "1.0"
         reservations:
           memory: 512M
+    labels:
+      com.finance-stack.component: "bi"
+      com.finance-stack.description: "Metabase BI dashboards"
 
   # Appsmith Enterprise Edition — low-code platform for building internal financial apps.
   appsmith:
@@ -134,6 +159,9 @@ services:
           cpus: "1.0"
         reservations:
           memory: 512M
+    labels:
+      com.finance-stack.component: "app-builder"
+      com.finance-stack.description: "Appsmith low-code platform"
 
 volumes:
   postgres_data:    # Persists PostgreSQL data across container restarts
