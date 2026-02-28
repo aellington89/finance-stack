@@ -73,3 +73,7 @@ docker compose down
 ```
 
 Data is persisted in Docker volumes and will be available on next startup.
+
+## Updates
+
+- **2025-02-27 — PostgreSQL 18 volume path fix:** Changed the Postgres volume mount from `/var/lib/postgresql/data` to `/var/lib/postgresql` to match PG18's updated `PGDATA` directory.
