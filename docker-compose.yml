@@ -6,16 +6,17 @@ services:
 
   # Primary PostgreSQL database that stores all financial data.
   postgres:
-    image: postgres:18
+    image: postgres:18.0
     container_name: postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: postgres      # Default system DB; the Finances DB is created by the backup restore
+    restart: unless-stopped              # Auto-restart on crash or Docker daemon restart
+    environment:                         # All credentials sourced from .env — see .env.example for the template
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}           # Default system DB; the Finances DB is created by the backup restore
     ports:
       - "5433:5432"              # Exposed on 5433 to avoid conflicts with a local Postgres on the default port
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql  # PG18 moved PGDATA to /var/lib/postgresql/18/docker; mount the parent
     networks:
       - appnet
     healthcheck:                 # Other services wait on this check before starting
@@ -27,52 +28,58 @@ services:
   # One-shot job: runs UpdateAccountBalanceHistory.sql after postgres is healthy,
   # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
   init-script:
-    image: postgres:18
+    image: postgres:18.0
+    restart: "no"                        # One-shot job — must not restart after exiting
     depends_on:
       postgres:
         condition: service_healthy  # Waits for postgres to pass its healthcheck before running
     networks:
       - appnet
+    environment:                         # Password passed via env var instead of inline in the entrypoint
+      PGPASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./scripts:/scripts          # Only this container mounts the scripts directory
     entrypoint: >
       bash -c "
-      export PGPASSWORD=password;
-      psql -h postgres -U postgres -d Finances -f /scripts/UpdateAccountBalanceHistory.sql
+      psql -h postgres -U ${POSTGRES_USER} -d ${INIT_SCRIPT_DB} -f /scripts/UpdateAccountBalanceHistory.sql
       "
 
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
   metabase:
-    image: metabase/metabase:latest
+    image: metabase/metabase:v0.58.8
     container_name: metabase
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       MB_DB_TYPE: postgres
-      MB_DB_DBNAME: metabase      # Metabase's internal state DB — separate from the Finances DB
+      MB_DB_DBNAME: ${MB_DB_DBNAME}         # Metabase's internal state DB — separate from the Finances DB
       MB_DB_PORT: 5432
-      MB_DB_USER: metabase_user
-      MB_DB_PASS: password
+      MB_DB_USER: ${MB_DB_USER}
+      MB_DB_PASS: ${MB_DB_PASS}
       MB_DB_HOST: postgres
-      TZ: America/Chicago         # Ensures chart timestamps and date grouping use local time
+      TZ: ${TZ:-America/Chicago}            # Ensures chart timestamps and date grouping use local time
     volumes:
       - metabase_data:/metabase-data
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy  # Waits for postgres healthcheck, not just container start
     networks:
       - appnet
 
   # Appsmith Enterprise Edition — low-code platform for building internal financial apps.
   appsmith:
-    image: index.docker.io/appsmith/appsmith-ee
+    image: appsmith/appsmith-ee:v1.87
     container_name: appsmith
+    restart: unless-stopped
     ports:
       - "8080:80"                 # Appsmith's internal server runs on port 80
     volumes:
      - appsmith_data:/appsmith-stacks
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy  # Waits for postgres healthcheck, not just container start
     networks:
       - appnet
 
