@@ -62,6 +62,74 @@ This will:
 docker compose --profile init run --rm init-script
 ```
 
+## Test Database
+
+A `Finances_Test` database is available for development and testing. It has the same schema as the production `Finances` database but contains sample data.
+
+### Fresh installation (automatic)
+
+On a fresh clone with no existing Postgres data volume, `Finances_Test` is created automatically when you run `docker compose up` for the first time. To seed it with test data:
+
+```bash
+docker exec -i postgres psql -U postgres -d Finances_Test < scripts/seed-test-data.sql
+```
+
+Then rebuild balance history for the test data:
+
+```bash
+docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
+```
+
+### Existing installation (manual setup)
+
+If you already have a running stack and want to add the test database:
+
+```bash
+# Create the database
+docker exec postgres psql -U postgres -c 'CREATE DATABASE "Finances_Test";'
+
+# Apply the schema
+docker exec -i postgres psql -U postgres -d Finances_Test < init-db/schema.sql
+
+# Seed with test data
+docker exec -i postgres psql -U postgres -d Finances_Test < scripts/seed-test-data.sql
+
+# Build balance history
+docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
+```
+
+### Running balance history against test data
+
+Override the target database inline (no `.env` change needed):
+
+```bash
+docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
+```
+
+Or set `INIT_SCRIPT_DB=Finances_Test` in `.env` and run normally:
+
+```bash
+docker compose --profile init run --rm init-script
+```
+
+### Schema changes
+
+When you modify the production schema (add tables, columns, etc.), re-sync the test database:
+
+```bash
+# 1. Re-extract the schema from production
+docker exec postgres pg_dump -U postgres -d Finances --schema-only --no-owner --no-privileges > init-db/schema.sql
+
+# 2. Drop and recreate the test database
+docker exec postgres psql -U postgres -c 'DROP DATABASE IF EXISTS "Finances_Test";'
+docker exec postgres psql -U postgres -c 'CREATE DATABASE "Finances_Test";'
+docker exec -i postgres psql -U postgres -d Finances_Test < init-db/schema.sql
+docker exec -i postgres psql -U postgres -d Finances_Test < scripts/seed-test-data.sql
+docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
+```
+
+Commit the updated `init-db/schema.sql` so fresh installs get the latest schema.
+
 ## Project Structure
 
 ```
@@ -70,9 +138,11 @@ finance-stack/
 ├── .env.example                          # Template for credentials (copy to .env)
 ├── .dockerignore                         # Excludes files from Docker build context
 ├── init-db/
-│   └── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
+│   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
+│   └── schema.sql                        # Table definitions (applied to Finances and Finances_Test)
 └── scripts/
-    └── UpdateAccountBalanceHistory.sql   # Balance history rebuild script
+    ├── UpdateAccountBalanceHistory.sql    # Balance history rebuild script
+    └── seed-test-data.sql                # Sample data for Finances_Test
 ```
 
 ## Stopping the Stack
@@ -84,6 +154,14 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-01
+
+**Test database and version-controlled schema**
+- Added `Finances_Test` database for development and testing (same schema, sample data)
+- Added `init-db/schema.sql` — version-controlled schema DDL extracted from production via `pg_dump`
+- Added `scripts/seed-test-data.sql` — sample accounts and transactions for the test database
+- Updated `init-db/01-create-databases.sh` to create both `Finances` and `Finances_Test` and apply schema on first start
 
 ### 2025-02-27
 
