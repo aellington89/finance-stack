@@ -131,9 +131,9 @@ services:
       com.finance-stack.component: "bi"
       com.finance-stack.description: "Metabase BI dashboards"
 
-  # Appsmith Enterprise Edition — low-code platform for building internal financial apps.
+  # Appsmith Community Edition — low-code platform for building internal financial apps.
   appsmith:
-    image: appsmith/appsmith-ee:v1.87
+    image: appsmith/appsmith-ce:v1.95
     container_name: appsmith
     restart: unless-stopped
     ports:
