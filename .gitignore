@@ -4,3 +4,9 @@
 
 # Credentials — never commit
 .env
+
+# Next.js application (app/ directory)
+app/node_modules
+app/.next
+app/.env.local
+app/out

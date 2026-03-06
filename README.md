@@ -7,12 +7,14 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 | Service | Description | Local Port |
 |---|---|---|
 | PostgreSQL 18 | Primary database | 5433 |
+| Next.js 16 | Custom finance application | 3001 |
 | Metabase | BI dashboards and analytics | 3000 |
-| Appsmith EE | Internal app builder | 8080 |
+| Appsmith CE | Internal app builder (being replaced) | 8080 |
 
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Node.js 20+](https://nodejs.org/) (for the Next.js application)
 
 ## Getting Started
 
@@ -34,8 +36,28 @@ This will:
 1. Start PostgreSQL and wait until it is healthy
 2. Start Metabase and Appsmith
 
-### 3. Access the services
+### 3. Set up the Next.js application
 
+```bash
+cd app
+cp .env.local.example .env.local
+npm install
+```
+
+Edit `app/.env.local` and set `DATABASE_URL` to match your PostgreSQL credentials from `.env`.
+
+### 4. Start the Next.js dev server
+
+```bash
+cd app
+npm run dev
+```
+
+The app starts on http://localhost:3001 with Turbopack for fast refresh.
+
+### 5. Access the services
+
+- **Finance App:** http://localhost:3001
 - **Metabase:** http://localhost:3000
 - **Appsmith:** http://localhost:8080
 - **PostgreSQL:** `localhost:5433` (user: `postgres`, database: `Finances`)
@@ -137,6 +159,21 @@ finance-stack/
 ├── docker-compose.yml                    # Infrastructure definition
 ├── .env.example                          # Template for credentials (copy to .env)
 ├── .dockerignore                         # Excludes files from Docker build context
+├── app/                                  # Next.js 16 application (App Router)
+│   ├── package.json                      # Node.js dependencies and scripts
+│   ├── next.config.ts                    # Next.js config (standalone output for Docker)
+│   ├── .env.local.example                # Template for app env vars (copy to .env.local)
+│   ├── app/                              # App Router — pages and layouts
+│   │   ├── layout.tsx                    # Root layout
+│   │   ├── page.tsx                      # Landing page (/)
+│   │   ├── dashboard/                    # /dashboard, /dashboard/accounting, /dashboard/work-expenses
+│   │   ├── transactions/                 # /transactions, /transactions/new
+│   │   ├── accounts/                     # /accounts, /accounts/new
+│   │   └── settings/categories/          # /settings/categories
+│   ├── components/ui/                    # UI components (shadcn/ui — Issue #20)
+│   └── lib/                              # Shared libraries
+│       ├── db/                           # Database client and schema (Drizzle — Issue #19)
+│       └── utils.ts                      # Utility helpers
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
 │   └── schema.sql                        # Table definitions (applied to Finances and Finances_Test)
@@ -154,6 +191,16 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-05
+
+**Next.js application scaffold (Issue #17)**
+- Initialized Next.js 16 project in `app/` subdirectory with TypeScript, Tailwind CSS v4, and App Router
+- Configured `output: 'standalone'` in `next.config.ts` for future Docker deployment (Issue #18)
+- Created placeholder routes: `/dashboard`, `/dashboard/accounting`, `/dashboard/work-expenses`, `/transactions`, `/transactions/new`, `/accounts`, `/accounts/new`, `/settings/categories`
+- Added stub directories for Drizzle ORM (`lib/db/`) and shadcn/ui (`components/ui/`)
+- Added `.env.local.example` template for database connection
+- Dev server runs on port 3001 to avoid conflict with Metabase (port 3000)
 
 ### 2026-03-01
 
