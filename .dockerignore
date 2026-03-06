@@ -11,3 +11,8 @@ secrets/
 
 # Documentation
 *.md
+
+# Next.js development artifacts
+app/node_modules
+app/.next
+app/.env.local
