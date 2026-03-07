@@ -205,6 +205,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
+### 2026-03-07
+
+**Add database indexes for query performance (Issue #21)**
+- Added secondary indexes on `transactions` table: `transaction_date`, `(account_id, transaction_date)`, `transaction_category_id`, `transaction_type_id`
+- Added index on `account_balance_history.balance_date` for cross-account date-range queries
+- Indexes included in `init-db/schema.sql` for fresh installs
+
 ### 2026-03-06
 
 **Install and configure shadcn/ui with charting libraries (Issue #20)**

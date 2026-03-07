@@ -175,3 +175,22 @@ ALTER TABLE ONLY public.transactions
 
 ALTER TABLE ONLY public.transactions
     ADD CONSTRAINT transactions_transaction_type_id_fkey FOREIGN KEY (transaction_type_id) REFERENCES public.transaction_types(transaction_type_id);
+
+-- --------------------------------------------
+-- Indexes
+-- --------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_transactions_date
+    ON public.transactions (transaction_date);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_account_date
+    ON public.transactions (account_id, transaction_date);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_category
+    ON public.transactions (transaction_category_id);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_type
+    ON public.transactions (transaction_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_balance_history_date
+    ON public.account_balance_history (balance_date);
