@@ -34,9 +34,14 @@ docker compose up
 
 This will:
 1. Start PostgreSQL and wait until it is healthy
-2. Start Metabase and Appsmith
+2. Build and start the Next.js finance application
+3. Start Metabase and Appsmith
 
-### 3. Set up the Next.js application
+### 3. Set up the Next.js application (local development only)
+
+> **Note:** Steps 3 and 4 are for local development only. When running
+> `docker compose up`, the Next.js app is built and started automatically
+> inside a container.
 
 ```bash
 cd app
@@ -46,7 +51,7 @@ npm install
 
 Edit `app/.env.local` and set `DATABASE_URL` to match your PostgreSQL credentials from `.env`.
 
-### 4. Start the Next.js dev server
+### 4. Start the Next.js dev server (local development only)
 
 ```bash
 cd app
@@ -160,10 +165,13 @@ finance-stack/
 ├── .env.example                          # Template for credentials (copy to .env)
 ├── .dockerignore                         # Excludes files from Docker build context
 ├── app/                                  # Next.js 16 application (App Router)
+│   ├── Dockerfile                        # Multi-stage Docker build (deps → build → runner)
+│   ├── .dockerignore                     # Excludes node_modules, .next, etc. from build context
 │   ├── package.json                      # Node.js dependencies and scripts
 │   ├── next.config.ts                    # Next.js config (standalone output for Docker)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
 │   ├── app/                              # App Router — pages and layouts
+│   │   ├── api/health/route.ts           # Health check endpoint for Docker
 │   │   ├── layout.tsx                    # Root layout
 │   │   ├── page.tsx                      # Landing page (/)
 │   │   ├── dashboard/                    # /dashboard, /dashboard/accounting, /dashboard/work-expenses
@@ -191,6 +199,15 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-06
+
+**Dockerize Next.js application (Issue #18)**
+- Created `app/Dockerfile` with multi-stage build (deps, build, runner) on `node:22-alpine`
+- Added `finance-app` service to `docker-compose.yml` (port 3001, 512M memory, 0.5 CPU)
+- App connects to PostgreSQL via `DATABASE_URL` composed from existing `.env` credentials
+- Health check via `GET /api/health` with `wget` (no curl install needed)
+- Added `app/.dockerignore` to keep build context lean
 
 ### 2026-03-05
 
