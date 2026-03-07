@@ -1,11 +1,14 @@
-// Database client — Drizzle ORM connection to PostgreSQL.
-// Will be configured in Issue #19 using the DATABASE_URL
-// environment variable from .env.local.
-//
-// Planned implementation:
-//   import { drizzle } from "drizzle-orm/node-postgres";
-//   import { Pool } from "pg";
-//   import * as schema from "./schema";
-//
-//   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-//   export const db = drizzle(pool, { schema });
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import * as schema from "@/drizzle/schema";
+import * as relations from "@/drizzle/relations";
+
+const globalForDb = globalThis as unknown as { pool: Pool };
+
+const pool =
+  globalForDb.pool ??
+  new Pool({ connectionString: process.env.DATABASE_URL });
+
+if (process.env.NODE_ENV !== "production") globalForDb.pool = pool;
+
+export const db = drizzle(pool, { schema: { ...schema, ...relations } });
