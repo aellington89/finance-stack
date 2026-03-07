@@ -1,6 +1,6 @@
-# Defines the four services that make up the finance stack:
+# Defines the five services that make up the finance stack:
 # postgres (data store), init-script (one-shot balance rebuild),
-# metabase (BI dashboards), and appsmith (internal app builder).
+# finance-app (Next.js UI), metabase (BI dashboards), and appsmith (internal app builder).
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
@@ -89,6 +89,41 @@ services:
     labels:
       com.finance-stack.component: "init"
       com.finance-stack.description: "One-shot balance history rebuild"
+
+  # Next.js 16 application — custom finance management UI.
+  # Built from the app/ directory using a multi-stage Dockerfile.
+  finance-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: finance-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://localhost:3001/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    labels:
+      com.finance-stack.component: "app"
+      com.finance-stack.description: "Next.js finance application"
 
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
