@@ -111,3 +111,12 @@ export const vTransactionsFull = pgView("v_transactions_full", {	transactionId: 
 	transactionCategoryId: integer("transaction_category_id"),
 	transactionCategory: text("transaction_category"),
 }).as(sql`SELECT t.transaction_id, t.transaction_description, t.transaction_date, t.amount, t.account_id, t.related_account_id, a.account_name, a.account_type_id, at.account_type, atc.account_type_category, ra.account_name AS related_account_name, tt.transaction_type_id, tt.transaction_type, tc.transaction_category_id, tc.transaction_category FROM transactions t JOIN accounts a USING (account_id) JOIN account_types at USING (account_type_id) JOIN account_type_categories atc USING (account_type_category_id) LEFT JOIN accounts ra ON t.related_account_id = ra.account_id JOIN transaction_types tt USING (transaction_type_id) JOIN transaction_categories tc USING (transaction_category_id)`);
+export const vAccountBalancesCurrent = pgView("v_account_balances_current", {
+	accountId: integer("account_id"),
+	accountName: text("account_name"),
+	accountType: text("account_type"),
+	accountTypeCategory: text("account_type_category"),
+	accountTypeCategoryId: integer("account_type_category_id"),
+	currentBalance: numeric("current_balance", { precision: 15, scale: 2 }),
+	balanceDate: date("balance_date"),
+}).as(sql`SELECT abh.account_id, a.account_name, at.account_type, atc.account_type_category, atc.account_type_category_id, abh.cumulative_balance AS current_balance, abh.balance_date FROM account_balance_history abh JOIN accounts a USING (account_id) JOIN account_types at USING (account_type_id) JOIN account_type_categories atc USING (account_type_category_id) WHERE abh.balance_date = (SELECT max(balance_date) FROM account_balance_history WHERE account_id = abh.account_id)`);
