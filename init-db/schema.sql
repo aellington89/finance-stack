@@ -215,3 +215,19 @@ JOIN account_type_categories atc USING (account_type_category_id)
 LEFT JOIN accounts ra ON t.related_account_id = ra.account_id
 JOIN transaction_types tt USING (transaction_type_id)
 JOIN transaction_categories tc USING (transaction_category_id);
+
+CREATE OR REPLACE VIEW public.v_account_balances_current AS
+SELECT
+    abh.account_id, a.account_name,
+    at.account_type, atc.account_type_category,
+    atc.account_type_category_id,
+    abh.cumulative_balance AS current_balance,
+    abh.balance_date
+FROM account_balance_history abh
+JOIN accounts a USING (account_id)
+JOIN account_types at USING (account_type_id)
+JOIN account_type_categories atc USING (account_type_category_id)
+WHERE abh.balance_date = (
+    SELECT MAX(balance_date) FROM account_balance_history
+    WHERE account_id = abh.account_id
+);

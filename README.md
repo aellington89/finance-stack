@@ -86,6 +86,7 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 | View | Description |
 |---|---|
 | `v_transactions_full` | Fully joined transaction view with account names, types, categories, and related account info |
+| `v_account_balances_current` | Current balance per account with full classification hierarchy (type, category) |
 
 ### Balance History
 
@@ -212,6 +213,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-03-08
+
+**Create v_account_balances_current database view (Issue #23)**
+- Created `v_account_balances_current` view returning the latest cumulative balance per account with account type and category hierarchy
+- View serves as the data source for the accounts balance table page
+- Applied to both `Finances` and `Finances_Test` databases
+- Added view definition to `init-db/schema.sql` for fresh installs
+- Added typed `pgView` definition to Drizzle ORM schema
 
 **Create v_transactions_full database view (Issue #22)**
 - Created `v_transactions_full` view joining transactions with accounts, account types, account type categories, transaction types, transaction categories, and related accounts
