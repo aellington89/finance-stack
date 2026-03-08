@@ -194,3 +194,24 @@ CREATE INDEX IF NOT EXISTS idx_transactions_type
 
 CREATE INDEX IF NOT EXISTS idx_balance_history_date
     ON public.account_balance_history (balance_date);
+
+-- --------------------------------------------
+-- Views
+-- --------------------------------------------
+
+CREATE OR REPLACE VIEW public.v_transactions_full AS
+SELECT
+    t.transaction_id, t.transaction_description, t.transaction_date,
+    t.amount, t.account_id, t.related_account_id,
+    a.account_name, a.account_type_id,
+    at.account_type, atc.account_type_category,
+    ra.account_name AS related_account_name,
+    tt.transaction_type_id, tt.transaction_type,
+    tc.transaction_category_id, tc.transaction_category
+FROM transactions t
+JOIN accounts a USING (account_id)
+JOIN account_types at USING (account_type_id)
+JOIN account_type_categories atc USING (account_type_category_id)
+LEFT JOIN accounts ra ON t.related_account_id = ra.account_id
+JOIN transaction_types tt USING (transaction_type_id)
+JOIN transaction_categories tc USING (transaction_category_id);
