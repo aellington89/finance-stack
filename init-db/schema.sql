@@ -231,3 +231,12 @@ WHERE abh.balance_date = (
     SELECT MAX(balance_date) FROM account_balance_history
     WHERE account_id = abh.account_id
 );
+
+CREATE OR REPLACE VIEW public.v_daily_totals AS
+SELECT
+    t.transaction_date,
+    tt.transaction_type,
+    SUM(t.amount) AS daily_total
+FROM transactions t
+JOIN transaction_types tt USING (transaction_type_id)
+GROUP BY t.transaction_date, tt.transaction_type;

@@ -87,6 +87,7 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 |---|---|
 | `v_transactions_full` | Fully joined transaction view with account names, types, categories, and related account info |
 | `v_account_balances_current` | Current balance per account with full classification hierarchy (type, category) |
+| `v_daily_totals` | Daily transaction totals grouped by transaction type (for income/expense line charts) |
 
 ### Balance History
 
@@ -213,6 +214,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-03-08
+
+**Create v_daily_totals database view (Issue #24)**
+- Created `v_daily_totals` view returning daily transaction totals grouped by transaction type
+- View serves as the data source for income/expense/investment line charts on the Personal Accounting page
+- Applied to both `Finances` and `Finances_Test` databases
+- Added view definition to `init-db/schema.sql` for fresh installs
+- Regenerated Drizzle ORM schema to include typed `pgView` definition
 
 **Create v_account_balances_current database view (Issue #23)**
 - Created `v_account_balances_current` view returning the latest cumulative balance per account with account type and category hierarchy
