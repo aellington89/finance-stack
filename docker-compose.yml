@@ -1,6 +1,6 @@
 # Defines the five services that make up the finance stack:
 # postgres (data store), init-script (one-shot balance rebuild),
-# finance-app (Next.js UI), metabase (BI dashboards), and appsmith (internal app builder).
+# finance-app (Next.js UI), metabase (BI dashboards, --profile bi), and appsmith (internal app builder).
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
@@ -130,6 +130,7 @@ services:
   metabase:
     image: metabase/metabase:v0.58.8
     container_name: metabase
+    profiles: ["bi"]                   # Not started by default; run with --profile bi
     restart: unless-stopped
     ports:
       - "3000:3000"

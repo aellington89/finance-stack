@@ -8,7 +8,7 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 |---|---|---|
 | PostgreSQL 18 | Primary database | 5433 |
 | Next.js 16 | Custom finance application | 3001 |
-| Metabase | BI dashboards and analytics | 3000 |
+| Metabase | BI dashboards and analytics (`--profile bi`) | 3000 |
 | Appsmith CE | Internal app builder (being replaced) | 8080 |
 
 ## Prerequisites
@@ -35,7 +35,21 @@ docker compose up
 This will:
 1. Start PostgreSQL and wait until it is healthy
 2. Build and start the Next.js finance application
-3. Start Metabase and Appsmith
+3. Start Appsmith
+
+### Start Metabase (optional)
+
+Metabase is behind a Docker Compose profile and does not start by default. To start it:
+
+```bash
+docker compose --profile bi up metabase -d
+```
+
+To start the full stack including Metabase:
+
+```bash
+docker compose --profile bi up
+```
 
 ### 3. Set up the Next.js application (local development only)
 
@@ -63,7 +77,7 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 ### 5. Access the services
 
 - **Finance App:** http://localhost:3001
-- **Metabase:** http://localhost:3000
+- **Metabase:** http://localhost:3000 (requires `--profile bi`)
 - **Appsmith:** http://localhost:8080
 - **PostgreSQL:** `localhost:5433` (user: `postgres`, database: `Finances`)
 
@@ -214,6 +228,12 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-03-08
+
+**Move Metabase behind Docker Compose profile (Issue #25)**
+- Added `profiles: ["bi"]` to the Metabase service so it no longer starts by default
+- Saves ~2GB RAM during normal operation
+- Start Metabase on demand: `docker compose --profile bi up metabase -d`
+- Existing dashboards, metrics, and models preserved in `metabase_data` volume
 
 **Create v_daily_totals database view (Issue #24)**
 - Created `v_daily_totals` view returning daily transaction totals grouped by transaction type
