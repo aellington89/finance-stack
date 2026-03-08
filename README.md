@@ -81,6 +81,12 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 | `transaction_types` | Transaction classifications (e.g. Debit, Credit, Transfer) |
 | `account_balance_history` | Daily cumulative balance snapshots per account |
 
+### Views
+
+| View | Description |
+|---|---|
+| `v_transactions_full` | Fully joined transaction view with account names, types, categories, and related account info |
+
 ### Balance History
 
 `account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change. The init-script that rebuilds it is behind a profile and does not run automatically. To run it:
@@ -189,7 +195,7 @@ finance-stack/
 │       └── utils.ts                      # Utility helpers (cn() class merge)
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
-│   └── schema.sql                        # Table definitions (applied to Finances and Finances_Test)
+│   └── schema.sql                        # Tables, indexes, and views (applied to Finances and Finances_Test)
 └── scripts/
     ├── UpdateAccountBalanceHistory.sql    # Balance history rebuild script
     └── seed-test-data.sql                # Sample data for Finances_Test
@@ -204,6 +210,15 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-08
+
+**Create v_transactions_full database view (Issue #22)**
+- Created `v_transactions_full` view joining transactions with accounts, account types, account type categories, transaction types, transaction categories, and related accounts
+- View serves as the primary data source for the transaction list, filters, and aggregations
+- Applied to both `Finances` and `Finances_Test` databases
+- Added view definition to `init-db/schema.sql` for fresh installs
+- Regenerated Drizzle ORM schema to include typed `pgView` definition
 
 ### 2026-03-07
 
