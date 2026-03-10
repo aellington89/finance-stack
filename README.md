@@ -208,6 +208,7 @@ finance-stack/
 │   ├── components/ui/                    # shadcn/ui components (Button, Card, Table, Dialog, etc.)
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
+│       ├── validations/transaction.ts    # Zod schema for transaction form validation
 │       └── utils.ts                      # Utility helpers (cn() class merge)
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
@@ -228,6 +229,17 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-03-08
+
+**Build transaction entry form page (Issue #26)**
+- Created `/transactions/new` page with transaction entry form replacing Appsmith's Transaction Entry page
+- Form fields: description, date picker, currency amount, searchable account/related account/type/category dropdowns
+- Installed shadcn/ui Combobox component (searchable select using `@base-ui/react` Combobox primitive)
+- Created reusable DatePicker component (Popover + Calendar composition)
+- Created reusable CurrencyInput component with `$` prefix and format-on-blur
+- Added Zod validation schema at `lib/validations/transaction.ts`
+- Added stub Server Action with validation (Issue #27 will wire up the actual DB insert)
+- Installed sonner for toast notifications; added `<Toaster />` to root layout
+- Server Component page fetches accounts, types, and categories via Drizzle and passes to client form
 
 **Move Metabase behind Docker Compose profile (Issue #25)**
 - Added `profiles: ["bi"]` to the Metabase service so it no longer starts by default
