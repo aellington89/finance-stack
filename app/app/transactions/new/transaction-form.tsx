@@ -218,6 +218,7 @@ export function TransactionForm({
             id="transactionDescription"
             name="transactionDescription"
             placeholder="e.g. Grocery Store"
+            autoComplete="off"
             required
             aria-invalid={state.errors.transactionDescription ? true : undefined}
           />
@@ -249,6 +250,7 @@ export function TransactionForm({
           <CurrencyInput
             value={amount}
             onChange={setAmount}
+            autoComplete="off"
             aria-invalid={state.errors.amount ? true : undefined}
           />
           {state.errors.amount && (
