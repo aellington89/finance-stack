@@ -208,6 +208,7 @@ finance-stack/
 │   ├── components/ui/                    # shadcn/ui components (Button, Card, Table, Dialog, etc.)
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
+│       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── validations/transaction.ts    # Zod schema for transaction form validation
 │       └── utils.ts                      # Utility helpers (cn() class merge)
 ├── init-db/
@@ -237,9 +238,23 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Created reusable DatePicker component (Popover + Calendar composition)
 - Created reusable CurrencyInput component with `$` prefix and format-on-blur
 - Added Zod validation schema at `lib/validations/transaction.ts`
-- Added stub Server Action with validation (Issue #27 will wire up the actual DB insert)
+- Added stub Server Action with validation (wired up in Issue #27)
 - Installed sonner for toast notifications; added `<Toaster />` to root layout
 - Server Component page fetches accounts, types, and categories via Drizzle and passes to client form
+
+**Implement Server Action for transaction insertion (Issue #27)**
+- Replaced stub Server Action with actual Drizzle insert wrapped in a Postgres transaction
+- Validates form data via Zod, inserts into `transactions` table, then rebuilds balance history
+- Calls `revalidatePath()` for `/dashboard` and `/accounts` after successful insert
+- Returns field-level validation errors or generic DB error message on failure
+- Disabled browser autocomplete on description and amount fields
+
+**Implement per-account balance history rebuild (Issue #28)**
+- Created `lib/queries/rebuild-balance.ts` — scoped version of `UpdateAccountBalanceHistory.sql`
+- Rebuilds balance history for a single account (~400 rows, <100ms) instead of all accounts (~15K rows)
+- Uses parameterized raw SQL via Drizzle's `sql` template tag (same CTE logic as the full rebuild)
+- Auto-triggers inside the Server Action after transaction insert; also rebuilds the related account if present
+- Full rebuild script preserved in `scripts/` for bulk operations
 
 **Move Metabase behind Docker Compose profile (Issue #25)**
 - Added `profiles: ["bi"]` to the Metabase service so it no longer starts by default
