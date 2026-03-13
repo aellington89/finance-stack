@@ -1,6 +1,6 @@
-# Defines the five services that make up the finance stack:
+# Defines the four services that make up the finance stack:
 # postgres (data store), init-script (one-shot balance rebuild),
-# finance-app (Next.js UI), metabase (BI dashboards, --profile bi), and appsmith (internal app builder).
+# finance-app (Next.js UI), and metabase (BI dashboards, --profile bi).
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
@@ -167,42 +167,9 @@ services:
       com.finance-stack.component: "bi"
       com.finance-stack.description: "Metabase BI dashboards"
 
-  # Appsmith Community Edition — low-code platform for building internal financial apps.
-  appsmith:
-    image: appsmith/appsmith-ce:v1.95
-    container_name: appsmith
-    restart: unless-stopped
-    ports:
-      - "8080:80"                 # Appsmith's internal server runs on port 80
-    volumes:
-     - appsmith_data:/appsmith-stacks
-    depends_on:
-      postgres:
-        condition: service_healthy  # Waits for postgres healthcheck, not just container start
-    networks:
-      - appnet
-    logging: *default-logging
-    healthcheck:                   # Appsmith ships a built-in healthcheck script
-      test: ["CMD-SHELL", "/opt/appsmith/healthcheck.sh"]
-      interval: 15s
-      timeout: 15s
-      retries: 3
-      start_period: 120s          # Appsmith can take up to 2 min on first start
-    deploy:
-      resources:
-        limits:
-          memory: 3G              # Appsmith idles near 2 GB; 3 GB gives headroom under load
-          cpus: "1.0"
-        reservations:
-          memory: 512M
-    labels:
-      com.finance-stack.component: "app-builder"
-      com.finance-stack.description: "Appsmith low-code platform"
-
 volumes:
   postgres_data:    # Persists PostgreSQL data across container restarts
   metabase_data:    # Persists Metabase dashboards, questions, and settings
-  appsmith_data:    # Persists Appsmith app definitions and configuration
 
 networks:
   appnet:
