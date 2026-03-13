@@ -9,7 +9,6 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 | PostgreSQL 18 | Primary database | 5433 |
 | Next.js 16 | Custom finance application | 3001 |
 | Metabase | BI dashboards and analytics (`--profile bi`) | 3000 |
-| Appsmith CE | Internal app builder (being replaced) | 8080 |
 
 ## Prerequisites
 
@@ -35,7 +34,6 @@ docker compose up
 This will:
 1. Start PostgreSQL and wait until it is healthy
 2. Build and start the Next.js finance application
-3. Start Appsmith
 
 ### Start Metabase (optional)
 
@@ -78,7 +76,6 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 
 - **Finance App:** http://localhost:3001
 - **Metabase:** http://localhost:3000 (requires `--profile bi`)
-- **Appsmith:** http://localhost:8080
 - **PostgreSQL:** `localhost:5433` (user: `postgres`, database: `Finances`)
 
 ## Database
@@ -242,6 +239,11 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-13
+
+**Appsmith removal (Issue #37)**
+- Removed Appsmith service from stack (~3GB memory saved)
 
 ### 2026-03-12
 
