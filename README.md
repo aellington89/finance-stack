@@ -211,6 +211,11 @@ finance-stack/
 │   ├── components/
 │   │   ├── ui/                           # shadcn/ui components (Button, Card, Table, Dialog, etc.)
 │   │   │   └── date-range-picker.tsx     # Date range picker with quick select + manual input
+│   │   ├── charts/                       # Chart components (client components)
+│   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
+│   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
+│   │   ├── dashboard/                    # Dashboard-specific components
+│   │   │   └── date-range-filter.tsx     # URL-param-driven date range filter wrapper
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
 │   │       ├── transaction-list.tsx      # Sortable transaction table (client component)
@@ -218,6 +223,7 @@ finance-stack/
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │       ├── actions/transaction.ts        # Server action for transaction submission
+│       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │       ├── validations/transaction.ts    # Zod schema for transaction form validation
@@ -241,6 +247,20 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-03-13
+
+**Net worth summary dashboard (Issue #29)**
+- Built `/dashboard` Summary tab replacing Metabase's Summary view
+- Two-section layout: Key Performance Metrics (top) and Historical Trends (bottom)
+- Net Worth headline (`$292,229.40`) computed from today's `cumulative_balance` snapshot, excluding Restricted Asset category
+- 3 KPI gauge badges inline with Net Worth: Assets per $ of Debt, % Owned Assets, Equity per $ of Debt
+- Custom SVG semicircular gauges with color-coded range segments (red→yellow→green→blue) and triangle pointers
+- Client-side only SVG rendering to avoid SSR/client floating-point hydration mismatches
+- 3 time-series line charts (Recharts): Net Worth, Total Assets, Total Liabilities over time
+- Full-precision currency tooltips ($292,229.40) with compact Y-axis labels ($292K)
+- Auto-scaling Y-axis domain to match plotted data range
+- Date range filter defaults to last 30 days; URL search params for server-side re-render
+- New query module at `lib/queries/dashboard.ts` — queries `account_balance_history` with `account_type_category_id` classification matching Metabase formulas
+- Responsive layout (flex row desktop, stacked mobile)
 
 **Appsmith removal (Issue #37)**
 - Removed Appsmith service from stack (~3GB memory saved)
