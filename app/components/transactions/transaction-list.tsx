@@ -13,6 +13,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { amountColorClass } from "@/components/accounts/accounts-table";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
 
 interface TransactionRow {
@@ -24,6 +25,7 @@ interface TransactionRow {
   relatedAccountName: string | null;
   transactionType: string | null;
   transactionCategory: string | null;
+  accountTypeCategory: string | null;
 }
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -141,7 +143,7 @@ export function TransactionList({
               <TableCell
                 className={cn(
                   "text-right",
-                  amount < 0 && "text-red-600 dark:text-red-400"
+                  amountColorClass(amount)
                 )}
               >
                 {currencyFormatter.format(amount)}
