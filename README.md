@@ -251,6 +251,15 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ### 2026-03-15
 
+**Transaction page card theming, pagination, and column visibility (Issue #31)**
+- Wrapped transaction list (filters + table) and "New Transaction" form in `Card` components matching the Summary and Accounts page design
+- Filters placed in `CardHeader`; table in `CardContent`; form sidebar in its own `Card` with `self-start` for content-fit sizing
+- Replaced hardcoded `text-zinc-600 dark:text-zinc-400` empty state color with semantic `text-muted-foreground`
+- Server-side pagination via `page` and `pageSize` URL params (default 25 per page); extracted shared `buildWhereClause` and added `getFilteredTransactionsCount` query; Previous/Next controls with page count
+- Page resets to 1 on filter or sort changes
+- Column visibility toggle via Popover with checkboxes; persists to `localStorage` (`txn-visible-columns` key); minimum 1 column always visible
+- Refactored `TransactionList` to use a `COLUMNS` definition array for data-driven header and cell rendering
+
 **Accounts balance sheet page (Issue #30)**
 - Replaced the placeholder Accounts tab with a visual balance sheet layout
 - Two-column side-by-side cards: Assets (Current Asset, Fixed Asset, Investment, Restricted Asset) on the left; Liabilities (Current Liability, Non-current Liability) on the right
