@@ -170,6 +170,7 @@ export function TransactionFilters({
   const updateParams = useCallback(
     (updates: Record<string, string | undefined>) => {
       const params = new URLSearchParams(searchParams.toString());
+      params.delete("page"); // reset to page 1 on any filter change
       for (const [key, value] of Object.entries(updates)) {
         if (value) {
           params.set(key, value);

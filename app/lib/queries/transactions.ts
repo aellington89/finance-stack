@@ -31,6 +31,8 @@ export interface TransactionFilters {
   categoryIds?: number[];
   sortBy?: SortableColumn;
   sortDir?: SortDirection;
+  page?: number;
+  pageSize?: number;
 }
 
 export async function getTransactionFormOptions() {
@@ -56,7 +58,7 @@ export async function getTransactionFormOptions() {
   return { accounts: accountList, types: typeList, categories: categoryList };
 }
 
-export async function getFilteredTransactions(filters: TransactionFilters) {
+function buildWhereClause(filters: TransactionFilters): SQL | undefined {
   const conditions: SQL[] = [];
 
   if (filters.dateFrom) {
@@ -81,6 +83,26 @@ export async function getFilteredTransactions(filters: TransactionFilters) {
     conditions.push(inArray(vTransactionsFull.transactionCategoryId, filters.categoryIds));
   }
 
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+export async function getFilteredTransactionsCount(filters: TransactionFilters): Promise<number> {
+  const where = buildWhereClause(filters);
+  const query = db
+    .select({ count: sql<number>`cast(count(*) as integer)` })
+    .from(vTransactionsFull);
+
+  const [result] = where ? await query.where(where) : await query;
+  return result.count;
+}
+
+export async function getFilteredTransactions(filters: TransactionFilters) {
+  const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? 25;
+  const offset = (page - 1) * pageSize;
+
+  const where = buildWhereClause(filters);
+
   const sortColumn = filters.sortBy && SORTABLE_COLUMNS[filters.sortBy]
     ? SORTABLE_COLUMNS[filters.sortBy]
     : vTransactionsFull.transactionDate;
@@ -89,13 +111,11 @@ export async function getFilteredTransactions(filters: TransactionFilters) {
   const query = db
     .select()
     .from(vTransactionsFull)
-    .orderBy(sortFn(sortColumn), desc(vTransactionsFull.transactionId));
+    .orderBy(sortFn(sortColumn), desc(vTransactionsFull.transactionId))
+    .limit(pageSize)
+    .offset(offset);
 
-  if (conditions.length > 0) {
-    return query.where(and(...conditions));
-  }
-
-  return query.limit(50);
+  return where ? query.where(where) : query;
 }
 
 export async function getUniqueDescriptions() {
