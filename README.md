@@ -198,7 +198,7 @@ finance-stack/
 │   │   │   ├── page.tsx                  #   Summary tab (/)
 │   │   │   ├── accounting/               #   Personal Accounting tab
 │   │   │   ├── transactions/             #   Transactions tab (form + list)
-│   │   │   ├── accounts/                 #   Accounts tab (balance pivot table)
+│   │   │   ├── accounts/                 #   Accounts tab (visual balance sheet)
 │   │   │   └── work-expenses/            #   Work Expenses tab
 │   │   ├── transactions/                 # /transactions, /transactions/new
 │   │   ├── accounts/                     # /accounts, /accounts/new
@@ -214,6 +214,8 @@ finance-stack/
 │   │   ├── charts/                       # Chart components (client components)
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
+│   │   ├── accounts/                     # Accounts page components
+│   │   │   └── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
 │   │   ├── dashboard/                    # Dashboard-specific components
 │   │   │   └── date-range-filter.tsx     # URL-param-driven date range filter wrapper
 │   │   └── transactions/                 # Transaction-specific components
@@ -223,6 +225,7 @@ finance-stack/
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │       ├── actions/transaction.ts        # Server action for transaction submission
+│       ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
@@ -245,6 +248,18 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-15
+
+**Accounts balance sheet page (Issue #30)**
+- Replaced the placeholder Accounts tab with a visual balance sheet layout
+- Two-column side-by-side cards: Assets (Current Asset, Fixed Asset, Investment, Restricted Asset) on the left; Liabilities (Current Liability, Non-current Liability) on the right
+- Card footers (Total Assets / Total Liabilities) are pinned to the bottom so totals always align regardless of row count
+- Three-level hierarchy: Account Type Category → Account Type (collapsible) → individual accounts (italic)
+- All rows collapsed by default; Expand All / Collapse All buttons per card
+- Only open accounts shown (closed accounts excluded from query)
+- Unified `amountColorClass(value)` helper exported from `accounts-table.tsx`: green for positive, red for negative, white/default for zero — applied consistently across Accounts and Transactions pages
+- New query at `lib/queries/accounts.ts` using `ROLLUP` aggregation on `v_account_balances_current` to produce category, account-type, and account-level subtotals in a single query
 
 ### 2026-03-13
 
