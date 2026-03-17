@@ -200,7 +200,6 @@ finance-stack/
 │   │   │   ├── transactions/             #   Transactions tab (form + list)
 │   │   │   ├── accounts/                 #   Accounts tab (visual balance sheet)
 │   │   │   └── work-expenses/            #   Work Expenses tab
-│   │   ├── transactions/                 # /transactions, /transactions/new
 │   │   ├── accounts/                     # /accounts, /accounts/new
 │   │   ├── settings/categories/          # /settings/categories
 │   │   └── test-ui/                      # /test-ui — UI component verification page
@@ -248,6 +247,14 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-16
+
+**Remove standalone /transactions and /transactions/new pages (Issue #69)**
+- Deleted the standalone `/transactions` ("Coming soon" placeholder) and `/transactions/new` (standalone transaction form) pages
+- All transaction functionality remains available via `/dashboard/transactions`, which includes the transaction list (with filtering, sorting, pagination) and an inline new transaction form
+- No shared components, server actions, queries, or npm dependencies were affected — all are still used by the dashboard
+- No navigation links referenced these routes, so no UI updates were needed
 
 ### 2026-03-15
 
@@ -334,12 +341,12 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Moved server action to `lib/actions/transaction.ts` for shared access
 - Created `TransactionList` component using shadcn Table with currency formatting
 - Tab navigation uses `usePathname` + `useRouter` synced to sub-routes
-- `/transactions/new` page still works independently via re-exports
+- `/transactions/new` page still worked independently via re-exports (removed in Issue #69)
 
 ### 2026-03-08
 
 **Build transaction entry form page (Issue #26)**
-- Created `/transactions/new` page with transaction entry form replacing Appsmith's Transaction Entry page
+- Created `/transactions/new` page with transaction entry form replacing Appsmith's Transaction Entry page (removed in Issue #69)
 - Form fields: description, date picker, currency amount, searchable account/related account/type/category dropdowns
 - Installed shadcn/ui Combobox component (searchable select using `@base-ui/react` Combobox primitive)
 - Created reusable DatePicker component (Popover + Calendar composition)
@@ -428,7 +435,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 **Next.js application scaffold (Issue #17)**
 - Initialized Next.js 16 project in `app/` subdirectory with TypeScript, Tailwind CSS v4, and App Router
 - Configured `output: 'standalone'` in `next.config.ts` for future Docker deployment (Issue #18)
-- Created placeholder routes: `/dashboard`, `/dashboard/accounting`, `/dashboard/work-expenses`, `/transactions`, `/transactions/new`, `/accounts`, `/accounts/new`, `/settings/categories`
+- Created placeholder routes: `/dashboard`, `/dashboard/accounting`, `/dashboard/work-expenses`, `/accounts`, `/accounts/new`, `/settings/categories`
 - Added stub directories for Drizzle ORM (`lib/db/`) and shadcn/ui (`components/ui/`)
 - Added `.env.local.example` template for database connection
 - Dev server runs on port 3001 to avoid conflict with Metabase (port 3000)
