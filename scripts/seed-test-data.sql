@@ -181,4 +181,17 @@ INSERT INTO transactions (transaction_description, transaction_date, account_id,
 
     -- Vacation savings (account_id = 7)
     ('Transfer from Checking',               '2024-08-01',  7,   200.00,    1, 1,  5),
-    ('Transfer from Checking',               '2024-09-01',  7,   200.00,    1, 1,  5);
+    ('Transfer from Checking',               '2024-09-01',  7,   200.00,    1, 1,  5),
+
+    -- Work expenses (type 5) and reimbursements (type 6) — Checking (account_id = 1)
+    ('Business Travel - Hotel',              '2024-07-08',  1,  -325.00, NULL, 5, 46),
+    ('Conference Registration',              '2024-07-15',  1,  -199.99, NULL, 5, 46),
+    ('Client Lunch',                         '2024-08-06',  1,   -47.50, NULL, 5, 46),
+    ('Office Supplies',                      '2024-08-19',  1,   -82.30, NULL, 5, 46),
+    ('Business Travel - Flight',             '2024-09-03',  1,  -412.00, NULL, 5, 46),
+    ('Parking - Client Site',                '2024-09-12',  1,   -18.00, NULL, 5, 46),
+
+    ('Reimbursement - Hotel & Conference',   '2024-07-25',  1,   524.99, NULL, 6, 46),
+    ('Reimbursement - Client Lunch',         '2024-08-22',  1,    47.50, NULL, 6, 46),
+    ('Reimbursement - Office Supplies',      '2024-09-05',  1,    82.30, NULL, 6, 46),
+    ('Reimbursement - Travel & Parking',     '2024-09-20',  1,   430.00, NULL, 6, 46);

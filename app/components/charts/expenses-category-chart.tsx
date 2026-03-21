@@ -43,10 +43,11 @@ const formatCurrencyFull = (value: number) =>
 
 interface ExpensesCategoryChartProps {
   data: CategoryBreakdown[];
+  title?: string;
   description?: React.ReactNode;
 }
 
-export function ExpensesCategoryChart({ data, description }: ExpensesCategoryChartProps) {
+export function ExpensesCategoryChart({ data, title = "Total Expenses by Category", description }: ExpensesCategoryChartProps) {
   const grandTotal = data.reduce((sum, d) => sum + d.total, 0);
 
   // Top 10 categories + "Other" bucket
@@ -72,7 +73,7 @@ export function ExpensesCategoryChart({ data, description }: ExpensesCategoryCha
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium">
-          Total Expenses by Category
+          {title}
         </CardTitle>
         {description && <div className="mt-1">{description}</div>}
       </CardHeader>
