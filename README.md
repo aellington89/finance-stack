@@ -211,11 +211,15 @@ finance-stack/
 │   │   ├── ui/                           # shadcn/ui components (Button, Card, Table, Dialog, etc.)
 │   │   │   └── date-range-picker.tsx     # Date range picker with quick select + manual input
 │   │   ├── charts/                       # Chart components (client components)
+│   │   │   ├── accounting-chart.tsx      # Time-series area chart for income/expenses/investments (Chart.js)
+│   │   │   ├── expenses-category-chart.tsx # Donut chart for expense category breakdown (Chart.js)
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
 │   │   │   └── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
 │   │   ├── dashboard/                    # Dashboard-specific components
+│   │   │   ├── accounting-filters.tsx    # Multi-select combobox filters for accounting page
+│   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
 │   │   │   └── date-range-filter.tsx     # URL-param-driven date range filter wrapper
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
@@ -225,6 +229,7 @@ finance-stack/
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │       ├── actions/transaction.ts        # Server action for transaction submission
 │       ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
+│       ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
@@ -247,6 +252,20 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-20
+
+**Personal Accounting dashboard (Issue #33)**
+- Built the Personal Accounting tab with interactive filters, time-series chart, expense category breakdown, and KPI cards
+- 5 server-side queries run in parallel: time series, period totals, to-date comparison, category breakdown, and 12-month rolling averages
+- Filters: date range, description (multi-select), account (multi-select), category (multi-select), and time grouping (11 options including day-of-week, month-of-year, etc.)
+- All filter state stored in URL search params for shareable/bookmarkable views
+- Time-series area chart (Chart.js) with toggleable legend and smart date formatting per grouping type
+- Donut chart showing top 10 expense categories with "Other" rollup and center total label
+- 9 KPI cards across 3 columns (Income, Expenses, Investments): to-date totals with period-over-period change, period totals, and 12-month averages
+- Color-coded change indicators (green/red) based on metric direction (up is good for income, down is good for expenses)
+- Chip overflow on multi-select filters: max 2 chips shown with "+N more" badge and hover tooltip
+- New query module at `lib/queries/accounting.ts` with raw SQL for `generate_series`, `date_trunc`, and `EXTRACT` operations
 
 ### 2026-03-16
 
