@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 
-export function DashboardDateRangeFilter() {
+export function DashboardDateRangeFilter({ basePath = "/dashboard" }: { basePath?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -22,7 +22,7 @@ export function DashboardDateRangeFilter() {
     if (to) params.set("dateTo", to);
     else params.delete("dateTo");
     const qs = params.toString();
-    router.push(`/dashboard${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   };
 
   return (

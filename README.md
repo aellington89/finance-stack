@@ -213,6 +213,7 @@ finance-stack/
 │   │   ├── charts/                       # Chart components (client components)
 │   │   │   ├── accounting-chart.tsx      # Time-series area chart for income/expenses/investments (Chart.js)
 │   │   │   ├── expenses-category-chart.tsx # Donut chart for expense category breakdown (Chart.js)
+│   │   │   ├── work-expenses-chart.tsx   # Grouped bar chart for work expenses vs reimbursements over time
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
@@ -230,6 +231,7 @@ finance-stack/
 │       ├── actions/transaction.ts        # Server action for transaction submission
 │       ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │       ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
+│       ├── queries/work-expenses.ts     # Work expense queries (period totals, time series, category breakdown)
 │       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
@@ -252,6 +254,19 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-21
+
+**Work Expenses dashboard (Issue #34)**
+- Built the Work Expenses tab replacing Metabase's Work Expenses view
+- 4 KPI cards: Total Work Expenses, Total Work Expense Reimbursement, Net Unreimbursed, and Reimbursement Rate (%)
+- "Expenses vs Reimbursements Over Time" grouped bar chart with toggleable legend (Recharts `BarChart`)
+- "Work Expenses by Category" donut chart reusing `ExpensesCategoryChart` with new optional `title` prop
+- Date range filter (default last 30 days) with URL search params for bookmarkable views
+- Made `DashboardDateRangeFilter` reusable across pages via new `basePath` prop
+- New query module at `lib/queries/work-expenses.ts` with period totals, time series (`generate_series` gap filling), and category breakdown queries
+- New chart component at `components/charts/work-expenses-chart.tsx`
+- Added work expense and reimbursement test seed data (6 expenses + 4 reimbursements across Jul–Sep 2024)
 
 ### 2026-03-20
 
