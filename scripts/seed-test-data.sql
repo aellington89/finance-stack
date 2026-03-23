@@ -73,9 +73,10 @@ INSERT INTO transaction_types (transaction_type_id, transaction_type) OVERRIDING
     (8, 'External Transfer'),
     (9, 'Accrued Amoritized Interest'),
     (10, 'Investment'),
-    (11, 'Asset Re-Evaluation');
+    (11, 'Asset Re-Evaluation'),
+    (12, 'Opening Balance');
 
-SELECT setval('transaction_types_transaction_type_id_seq', 11);
+SELECT setval('transaction_types_transaction_type_id_seq', 12);
 
 -- =====================
 -- Transaction Categories (representative subset)

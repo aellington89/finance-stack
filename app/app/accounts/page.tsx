@@ -1,12 +1,28 @@
-// /accounts — Account balance table.
-// Will display all accounts with current balances, grouped by
-// account type category. Implementation tracked in Issue #30.
+import Link from "next/link";
+import { getAccountsList } from "@/lib/queries/accounts";
+import { AccountsByCategory } from "@/components/accounts/accounts-by-category";
 
-export default function AccountsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AccountsPage() {
+  const accounts = await getAccountsList();
+
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-bold">Accounts</h1>
-      <p className="mt-2 text-zinc-600 dark:text-zinc-400">Coming soon.</p>
+    <main className="p-6 w-3/4 mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold">Accounts</h1>
+      </div>
+      {accounts.length === 0 ? (
+        <p className="text-muted-foreground">
+          No accounts yet.{" "}
+          <Link href="/accounts/new" className="underline">
+            Create one
+          </Link>
+          .
+        </p>
+      ) : (
+        <AccountsByCategory accounts={accounts} />
+      )}
     </main>
   );
 }

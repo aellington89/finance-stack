@@ -200,7 +200,7 @@ finance-stack/
 │   │   │   ├── transactions/             #   Transactions tab (form + list)
 │   │   │   ├── accounts/                 #   Accounts tab (visual balance sheet)
 │   │   │   └── work-expenses/            #   Work Expenses tab
-│   │   ├── accounts/                     # /accounts, /accounts/new
+│   │   ├── accounts/                     # /accounts, /accounts/new, /accounts/[id]/edit
 │   │   ├── settings/categories/          # /settings/categories
 │   │   └── test-ui/                      # /test-ui — UI component verification page
 │   ├── components.json                   # shadcn/ui configuration
@@ -217,7 +217,10 @@ finance-stack/
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
-│   │   │   └── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
+│   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
+│   │   │   ├── accounts-by-category.tsx  # Grouped card view: Assets (2x2) + Liabilities, with per-type + icon
+│   │   │   ├── account-form.tsx          # Create/edit account form with combobox type selector
+│   │   │   └── delete-account-dialog.tsx # Delete confirmation dialog with transaction check
 │   │   ├── dashboard/                    # Dashboard-specific components
 │   │   │   ├── accounting-filters.tsx    # Multi-select combobox filters for accounting page
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
@@ -229,6 +232,7 @@ finance-stack/
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │       ├── actions/transaction.ts        # Server action for transaction submission
+│       ├── actions/account.ts           # Server actions for account create, update, delete
 │       ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │       ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │       ├── queries/work-expenses.ts     # Work expense queries (period totals, time series, category breakdown)
@@ -236,6 +240,7 @@ finance-stack/
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │       ├── validations/transaction.ts    # Zod schema for transaction form validation
+│       ├── validations/account.ts       # Zod schema for account form validation
 │       └── utils.ts                      # Utility helpers (cn() class merge)
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
@@ -254,6 +259,20 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-22
+
+**Account CRUD pages and grouped accounts view (Issue #35)**
+- Built `/accounts/new` and `/accounts/[id]/edit` pages with full create, update, and delete support
+- Account form with combobox type selector, date pickers, currency input for initial balance, and Zod validation
+- Delete confirmation dialog that prevents deletion of accounts with transactions
+- Server actions at `lib/actions/account.ts` for create (with opening balance transaction), update, and delete
+- Reorganized `/accounts` page from a flat table into a grouped card layout
+- Cards grouped by Account Type Category, with sub-sections per Account Type (bordered `bg-muted/30` containers)
+- Two visual group sections: Assets (2x2 grid of cards) and Liabilities (stacked), wrapped in matching `GroupSection` containers
+- All cards uniform height with scrollable content overflow
+- Per-type `+` icon links to `/accounts/new?typeId=X` with the Account Type combobox pre-selected
+- Page uses 75% viewport width (`w-3/4 mx-auto`) for the 3-column layout
 
 ### 2026-03-21
 
