@@ -1,13 +1,36 @@
-// /accounts/new — Account CRUD page.
-// Will provide forms for creating and editing accounts with
-// type selection, identifiers, and open/close dates.
-// Implementation tracked in Issue #35.
+import { getAccountTypes } from "@/lib/queries/accounts";
+import { AccountForm } from "@/components/accounts/account-form";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
-export default function NewAccountPage() {
+export const dynamic = "force-dynamic";
+
+export default async function NewAccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ typeId?: string }>;
+}) {
+  const { typeId } = await searchParams;
+  const accountTypes = await getAccountTypes();
+  const defaultTypeId = typeId ? Number(typeId) : undefined;
+
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-bold">New Account</h1>
-      <p className="mt-2 text-zinc-600 dark:text-zinc-400">Coming soon.</p>
+    <main className="p-6 max-w-2xl mx-auto">
+      <Card>
+        <CardHeader>
+          <CardTitle>New Account</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AccountForm
+            accountTypes={accountTypes}
+            defaultTypeId={defaultTypeId}
+          />
+        </CardContent>
+      </Card>
     </main>
   );
 }
