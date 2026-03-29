@@ -1,7 +1,3 @@
-// Root layout — wraps every page in the application.
-// Global navigation sidebar will be added here once the base
-// UI components are installed (Issue #20).
-
 import type { Metadata } from "next";
 import "./globals.css";
 import { Geist } from "next/font/google";

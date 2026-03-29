@@ -19,7 +19,7 @@ export default async function NewAccountPage({
   const defaultTypeId = typeId ? Number(typeId) : undefined;
 
   return (
-    <main className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto">
       <Card>
         <CardHeader>
           <CardTitle>New Account</CardTitle>
@@ -31,6 +31,6 @@ export default async function NewAccountPage({
           />
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

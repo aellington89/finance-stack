@@ -8,7 +8,7 @@ export default async function AccountsPage() {
   const accounts = await getAccountsList();
 
   return (
-    <main className="p-6 w-3/4 mx-auto">
+    <div className="p-6 w-3/4 mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Accounts</h1>
       </div>
@@ -23,6 +23,6 @@ export default async function AccountsPage() {
       ) : (
         <AccountsByCategory accounts={accounts} />
       )}
-    </main>
+    </div>
   );
 }

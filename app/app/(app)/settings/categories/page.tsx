@@ -45,7 +45,7 @@ export default async function CategoriesPage() {
   }));
 
   return (
-    <main className="p-6 w-3/4 mx-auto">
+    <div className="p-6 w-3/4 mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Categories &amp; Types</h1>
       </div>
@@ -76,6 +76,6 @@ export default async function CategoriesPage() {
           deleteAction={deleteAccountType}
         />
       </div>
-    </main>
+    </div>
   );
 }
