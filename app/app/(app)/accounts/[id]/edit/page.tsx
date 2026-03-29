@@ -28,7 +28,7 @@ export default async function EditAccountPage({
   if (!account) notFound();
 
   return (
-    <main className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Edit Account</CardTitle>
@@ -41,6 +41,6 @@ export default async function EditAccountPage({
           <AccountForm accountTypes={accountTypes} account={account} />
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }
