@@ -201,7 +201,7 @@ finance-stack/
 │   │   │   ├── accounts/                 #   Accounts tab (visual balance sheet)
 │   │   │   └── work-expenses/            #   Work Expenses tab
 │   │   ├── accounts/                     # /accounts, /accounts/new, /accounts/[id]/edit
-│   │   ├── settings/categories/          # /settings/categories
+│   │   ├── settings/categories/          # /settings/categories — CRUD for all reference-data tables
 │   │   └── test-ui/                      # /test-ui — UI component verification page
 │   ├── components.json                   # shadcn/ui configuration
 │   ├── drizzle/                          # Drizzle ORM (generated)
@@ -221,6 +221,11 @@ finance-stack/
 │   │   │   ├── accounts-by-category.tsx  # Grouped card view: Assets (2x2) + Liabilities, with per-type + icon
 │   │   │   ├── account-form.tsx          # Create/edit account form with combobox type selector
 │   │   │   └── delete-account-dialog.tsx # Delete confirmation dialog with transaction check
+│   │   ├── settings/                     # Settings page components
+│   │   │   ├── entity-card.tsx           # Reusable card for flat entities (name-only CRUD)
+│   │   │   ├── account-types-card.tsx    # Account Types card with types nested under category
+│   │   │   ├── entity-dialog.tsx         # Add/edit modal dialog (name + optional category combobox)
+│   │   │   └── delete-entity-dialog.tsx  # Delete confirmation dialog with in-use guard
 │   │   ├── dashboard/                    # Dashboard-specific components
 │   │   │   ├── accounting-filters.tsx    # Multi-select combobox filters for accounting page
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
@@ -241,6 +246,9 @@ finance-stack/
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │       ├── validations/transaction.ts    # Zod schema for transaction form validation
 │       ├── validations/account.ts       # Zod schema for account form validation
+│       ├── actions/categories.ts        # Server actions for category/type create, update, delete
+│       ├── queries/categories.ts        # Queries for all four reference-data tables
+│       ├── validations/categories.ts    # Zod schemas for category/type forms
 │       └── utils.ts                      # Utility helpers (cn() class merge)
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
@@ -259,6 +267,17 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-03-28
+
+**Category and type management (Issue #36)**
+- Built `/settings/categories` with full CRUD for all four reference-data tables: transaction categories, transaction types, account types, and account type categories
+- 2×2 card grid layout matching the Accounts page style, with 75% viewport width container
+- Add/edit via modal dialogs (no page navigation); delete via confirmation dialog with in-use guard
+- Account Types card shows types nested under their parent category with collapse/expand per group
+- Server actions at `lib/actions/categories.ts`; queries at `lib/queries/categories.ts`; Zod validation at `lib/validations/categories.ts`
+- Delete is blocked with an error message if the entity is referenced by existing transactions or accounts
+- Revalidates `/dashboard/transactions` and `/accounts/new` dropdowns after any mutation
 
 ### 2026-03-22
 
