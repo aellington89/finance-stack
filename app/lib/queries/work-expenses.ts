@@ -29,13 +29,21 @@ const WORK_EXPENSE_TYPE_IDS = [WORK_EXPENSE_TYPE_ID, REIMBURSEMENT_TYPE_ID];
 
 // ── Helpers ──
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function safeDate(value: string | undefined): string | undefined {
+  return value && DATE_RE.test(value) ? value : undefined;
+}
+
 function buildDateConditions(filters: WorkExpenseFilters, tableAlias = "t"): SQL[] {
   const conditions: SQL[] = [];
-  if (filters.dateFrom) {
-    conditions.push(sql.raw(`${tableAlias}.transaction_date >= '${filters.dateFrom}'`));
+  const dateFrom = safeDate(filters.dateFrom);
+  const dateTo = safeDate(filters.dateTo);
+  if (dateFrom) {
+    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date >= ${dateFrom}`);
   }
-  if (filters.dateTo) {
-    conditions.push(sql.raw(`${tableAlias}.transaction_date <= '${filters.dateTo}'`));
+  if (dateTo) {
+    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date <= ${dateTo}`);
   }
   return conditions;
 }
@@ -74,8 +82,8 @@ export async function getWorkExpenseTotals(
 export async function getWorkExpenseTimeSeries(
   filters: WorkExpenseFilters
 ): Promise<WorkExpenseTimeSeriesPoint[]> {
-  const dateFrom = filters.dateFrom ?? new Date().toISOString().slice(0, 10);
-  const dateTo = filters.dateTo ?? new Date().toISOString().slice(0, 10);
+  const dateFrom = safeDate(filters.dateFrom) ?? new Date().toISOString().slice(0, 10);
+  const dateTo = safeDate(filters.dateTo) ?? new Date().toISOString().slice(0, 10);
 
   const result = await db.execute(sql`
     WITH series AS (

@@ -11,3 +11,7 @@ app/.next
 app/.env.local
 app/out
 app/.claude
+
+# Test output
+app/coverage
+app/.vitest

@@ -15,8 +15,6 @@ export interface NetWorthSummary {
 }
 
 // Category IDs
-const ASSET_CATEGORY_IDS = [1, 2, 3, 4]; // Current, Restricted, Fixed, Investment
-const LIABILITY_CATEGORY_IDS = [5, 6]; // Current Liability, Non-current Liability
 const NET_WORTH_EXCLUDED_CATEGORY_ID = 2; // Restricted Asset excluded from net worth
 
 export async function getCurrentNetWorth(): Promise<NetWorthSummary> {

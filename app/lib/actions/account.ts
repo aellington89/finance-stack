@@ -7,15 +7,12 @@ import { accounts, accountBalanceHistory, transactions } from "@/drizzle/schema"
 import { accountFormSchema } from "@/lib/validations/account";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { eq, or } from "drizzle-orm";
+import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 
+// transaction_types row: "Opening Balance" (seeded reference data — do not delete)
 const OPENING_BALANCE_TYPE_ID = 12;
-const OPENING_BALANCE_CATEGORY_ID = 6; // "Other"
-
-interface ActionState {
-  success: boolean;
-  errors: Record<string, string[]>;
-  message: string;
-}
+// transaction_categories row: "Other" (seeded reference data — do not delete)
+const OPENING_BALANCE_CATEGORY_ID = 6;
 
 function revalidateAccountPaths() {
   revalidatePath("/accounts");
@@ -40,13 +37,7 @@ export async function createAccount(
   const result = accountFormSchema.safeParse(raw);
 
   if (!result.success) {
-    const fieldErrors: Record<string, string[]> = {};
-    for (const issue of result.error.issues) {
-      const field = String(issue.path[0]);
-      if (!fieldErrors[field]) fieldErrors[field] = [];
-      fieldErrors[field].push(issue.message);
-    }
-    return { success: false, errors: fieldErrors, message: "Validation failed" };
+    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   const data = result.data;
@@ -119,13 +110,7 @@ export async function updateAccount(
   const result = accountFormSchema.safeParse(raw);
 
   if (!result.success) {
-    const fieldErrors: Record<string, string[]> = {};
-    for (const issue of result.error.issues) {
-      const field = String(issue.path[0]);
-      if (!fieldErrors[field]) fieldErrors[field] = [];
-      fieldErrors[field].push(issue.message);
-    }
-    return { success: false, errors: fieldErrors, message: "Validation failed" };
+    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   const data = result.data;

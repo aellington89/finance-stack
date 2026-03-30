@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { eq, or, sql, isNull } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import {
   accounts,
   accountTypes,
@@ -15,6 +15,9 @@ export interface AccountBalanceRow {
 }
 
 export async function getAccountBalances(): Promise<AccountBalanceRow[]> {
+  // GROUP BY ROLLUP produces subtotal rows (account_type_category + account_type
+  // subtotals) and a grand-total row. Those rows have NULL in the grouped columns,
+  // which the caller uses to distinguish summary rows from leaf rows.
   const result = await db.execute(sql`
     SELECT
       atc.account_type_category,

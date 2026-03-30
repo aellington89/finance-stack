@@ -1,5 +1,6 @@
 "use client"
 
+import { notFound } from "next/navigation"
 import { useState } from "react"
 import {
   createColumnHelper,
@@ -156,8 +157,11 @@ const columns = [
 // -- Page component --
 
 export default function TestUIPage() {
+  if (process.env.NODE_ENV !== "development") notFound()
+
   const [sorting, setSorting] = useState<SortingState>([])
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoizable functions by design
   const table = useReactTable({
     data: transactions,
     columns,

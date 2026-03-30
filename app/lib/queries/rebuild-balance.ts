@@ -12,7 +12,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
  * Designed to run inside an existing Drizzle transaction.
  */
 export async function rebuildAccountBalance(
-  tx: NodePgDatabase<any>,
+  tx: NodePgDatabase<Record<string, unknown>>,
   accountId: number
 ): Promise<void> {
   await tx.execute(sql`
