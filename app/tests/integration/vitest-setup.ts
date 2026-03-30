@@ -20,9 +20,11 @@ beforeAll(async () => {
     sql`TRUNCATE TABLE account_type_categories RESTART IDENTITY CASCADE`
   );
   await db.execute(
-    sql`TRUNCATE TABLE transaction_categories RESTART IDENTITY`
+    sql`TRUNCATE TABLE transaction_categories RESTART IDENTITY CASCADE`
   );
-  await db.execute(sql`TRUNCATE TABLE transaction_types RESTART IDENTITY`);
+  await db.execute(
+    sql`TRUNCATE TABLE transaction_types RESTART IDENTITY CASCADE`
+  );
 
   await db.execute(
     sql`INSERT INTO account_type_categories (account_type_category) VALUES ('Asset')`
