@@ -33,9 +33,15 @@ beforeAll(async () => {
     sql`INSERT INTO account_types (account_type, account_type_category_id) VALUES ('Checking', 1)`
   );
   await db.execute(
-    sql`INSERT INTO transaction_categories (transaction_category) VALUES ('General')`
+    sql`INSERT INTO transaction_categories (transaction_category_id, transaction_category) VALUES (1, 'General'), (6, 'Other') ON CONFLICT DO NOTHING`
   );
   await db.execute(
-    sql`INSERT INTO transaction_types (transaction_type) VALUES ('Expense')`
+    sql`INSERT INTO transaction_types (transaction_type_id, transaction_type) VALUES (1, 'Expense'), (12, 'Opening Balance') ON CONFLICT DO NOTHING`
+  );
+  await db.execute(
+    sql`SELECT setval('transaction_categories_transaction_category_id_seq', (SELECT MAX(transaction_category_id) FROM transaction_categories))`
+  );
+  await db.execute(
+    sql`SELECT setval('transaction_types_transaction_type_id_seq', (SELECT MAX(transaction_type_id) FROM transaction_types))`
   );
 });
