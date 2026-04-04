@@ -266,7 +266,8 @@ finance-stack/
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown
-│   │       └── actions/                  #   Server action tests (account, transaction)
+│   │       ├── actions/                  #   Server action tests (account, transaction)
+│   │       └── queries/                  #   Query function tests (rebuild-balance)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── .github/workflows/ci.yml             # CI: lint + unit tests + integration tests on push/PR
 ├── init-db/
@@ -317,6 +318,13 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-04-04 — v0.1.2
+
+**Fix dashboard showing incorrect balances (Issue #68)**
+- Added `ensureTodayBalances()` carry-forward function in `lib/queries/rebuild-balance.ts`: on each dashboard load, inserts a today row for every open account (carrying forward the most recent cumulative balance) if one doesn't already exist
+- Called from `app/(app)/dashboard/layout.tsx` as an async server component — runs on every dashboard page load but is a no-op after the first call of the day
+- Added integration tests for the new function covering carry-forward, idempotency, closed-account exclusion, and coexistence with `rebuildAccountBalance()`
 
 ### 2026-03-29 — v0.1.1
 
