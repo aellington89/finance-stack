@@ -62,25 +62,35 @@ const EXPENSE_TYPE_ID = 2;
 const INVESTMENT_TYPE_ID = 10;
 const ACCOUNTING_TYPE_IDS = [INCOME_TYPE_ID, EXPENSE_TYPE_ID, INVESTMENT_TYPE_ID];
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function safeDate(value: string | undefined): string | undefined {
+  return value && DATE_RE.test(value) ? value : undefined;
+}
+
 function buildFilterConditions(filters: AccountingFilters, tableAlias = "t"): SQL[] {
   const conditions: SQL[] = [];
 
-  if (filters.dateFrom) {
-    conditions.push(sql.raw(`${tableAlias}.transaction_date >= '${filters.dateFrom}'`));
+  const dateFrom = safeDate(filters.dateFrom);
+  const dateTo = safeDate(filters.dateTo);
+
+  if (dateFrom) {
+    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date >= ${dateFrom}`);
   }
-  if (filters.dateTo) {
-    conditions.push(sql.raw(`${tableAlias}.transaction_date <= '${filters.dateTo}'`));
+  if (dateTo) {
+    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date <= ${dateTo}`);
   }
   if (filters.descriptions && filters.descriptions.length > 0) {
-    const escaped = filters.descriptions.map((d) => d.replace(/'/g, "''"));
-    const list = escaped.map((d) => `'${d}'`).join(", ");
-    conditions.push(sql.raw(`${tableAlias}.transaction_description IN (${list})`));
+    const placeholders = filters.descriptions.map((d) => sql`${d}`);
+    conditions.push(sql`${sql.raw(tableAlias)}.transaction_description IN (${sql.join(placeholders, sql`, `)})`);
   }
   if (filters.accountIds && filters.accountIds.length > 0) {
-    conditions.push(sql.raw(`${tableAlias}.account_id IN (${filters.accountIds.join(", ")})`));
+    const placeholders = filters.accountIds.map((id) => sql`${id}`);
+    conditions.push(sql`${sql.raw(tableAlias)}.account_id IN (${sql.join(placeholders, sql`, `)})`);
   }
   if (filters.categoryIds && filters.categoryIds.length > 0) {
-    conditions.push(sql.raw(`${tableAlias}.transaction_category_id IN (${filters.categoryIds.join(", ")})`));
+    const placeholders = filters.categoryIds.map((id) => sql`${id}`);
+    conditions.push(sql`${sql.raw(tableAlias)}.transaction_category_id IN (${sql.join(placeholders, sql`, `)})`);
   }
 
   return conditions;
@@ -142,8 +152,8 @@ export async function getAccountingTimeSeries(
 
   if (interval) {
     // Date-trunc groupings: generate continuous date series
-    const dateFrom = filters.dateFrom ?? new Date().toISOString().slice(0, 10);
-    const dateTo = filters.dateTo ?? new Date().toISOString().slice(0, 10);
+    const dateFrom = safeDate(filters.dateFrom) ?? new Date().toISOString().slice(0, 10);
+    const dateTo = safeDate(filters.dateTo) ?? new Date().toISOString().slice(0, 10);
     const truncUnit = TO_DATE_TRUNCATIONS[grouping] ?? "month";
 
     const result = await db.execute(sql`
@@ -301,20 +311,21 @@ export async function getAccountingToDateComparison(
   const prevLabelExpr = getLabelExpr(truncation, "p.prev_start");
 
   // Use dateTo as reference date (or today)
-  const refDate = filters.dateTo ?? new Date().toISOString().slice(0, 10);
+  const refDate = safeDate(filters.dateTo) ?? new Date().toISOString().slice(0, 10);
 
   // Build optional filter conditions (excluding date range — we handle that ourselves)
   const extraConditions: SQL[] = [];
   if (filters.descriptions && filters.descriptions.length > 0) {
-    const escaped = filters.descriptions.map((d) => d.replace(/'/g, "''"));
-    const list = escaped.map((d) => `'${d}'`).join(", ");
-    extraConditions.push(sql.raw(`t.transaction_description IN (${list})`));
+    const placeholders = filters.descriptions.map((d) => sql`${d}`);
+    extraConditions.push(sql`t.transaction_description IN (${sql.join(placeholders, sql`, `)})`);
   }
   if (filters.accountIds && filters.accountIds.length > 0) {
-    extraConditions.push(sql.raw(`t.account_id IN (${filters.accountIds.join(", ")})`));
+    const placeholders = filters.accountIds.map((id) => sql`${id}`);
+    extraConditions.push(sql`t.account_id IN (${sql.join(placeholders, sql`, `)})`);
   }
   if (filters.categoryIds && filters.categoryIds.length > 0) {
-    extraConditions.push(sql.raw(`t.transaction_category_id IN (${filters.categoryIds.join(", ")})`));
+    const placeholders = filters.categoryIds.map((id) => sql`${id}`);
+    extraConditions.push(sql`t.transaction_category_id IN (${sql.join(placeholders, sql`, `)})`);
   }
   extraConditions.push(sql.raw(`t.transaction_type_id IN (${ACCOUNTING_TYPE_IDS.join(", ")})`));
 
@@ -393,15 +404,16 @@ export async function getAccountingMonthlyAverages(
   // Extra filters (non-date)
   const extraConditions: SQL[] = [];
   if (filters.descriptions && filters.descriptions.length > 0) {
-    const escaped = filters.descriptions.map((d) => d.replace(/'/g, "''"));
-    const list = escaped.map((d) => `'${d}'`).join(", ");
-    extraConditions.push(sql.raw(`t.transaction_description IN (${list})`));
+    const placeholders = filters.descriptions.map((d) => sql`${d}`);
+    extraConditions.push(sql`t.transaction_description IN (${sql.join(placeholders, sql`, `)})`);
   }
   if (filters.accountIds && filters.accountIds.length > 0) {
-    extraConditions.push(sql.raw(`t.account_id IN (${filters.accountIds.join(", ")})`));
+    const placeholders = filters.accountIds.map((id) => sql`${id}`);
+    extraConditions.push(sql`t.account_id IN (${sql.join(placeholders, sql`, `)})`);
   }
   if (filters.categoryIds && filters.categoryIds.length > 0) {
-    extraConditions.push(sql.raw(`t.transaction_category_id IN (${filters.categoryIds.join(", ")})`));
+    const placeholders = filters.categoryIds.map((id) => sql`${id}`);
+    extraConditions.push(sql`t.transaction_category_id IN (${sql.join(placeholders, sql`, `)})`);
   }
   extraConditions.push(sql.raw(`t.transaction_type_id IN (${ACCOUNTING_TYPE_IDS.join(", ")})`));
 

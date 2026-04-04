@@ -1,6 +1,9 @@
 # Version control
 .git
 
+# CI / GitHub
+.github
+
 # IDE and tooling
 .vs
 .claude
@@ -16,3 +19,9 @@ secrets/
 app/node_modules
 app/.next
 app/.env.local
+
+# Test files and output
+app/tests
+app/coverage
+app/.vitest
+app/vitest.config.ts

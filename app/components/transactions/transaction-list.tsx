@@ -23,7 +23,6 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { amountColorClass } from "@/components/accounts/accounts-table";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
 
@@ -208,12 +207,15 @@ export function TransactionList({
   const searchParams = useSearchParams();
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  // Column visibility — initialize with all, then load from localStorage on mount
+  // Column visibility — initialize with all, then load from localStorage on mount.
+  // Two-step init avoids hydration mismatch: SSR and initial client render both
+  // use ALL_COLUMN_KEYS; localStorage preference is applied after mount.
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
     () => new Set(ALL_COLUMN_KEYS)
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: post-mount hydration step to load persisted column preference from localStorage
     setVisibleColumns(loadVisibleColumns());
   }, []);
 

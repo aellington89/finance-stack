@@ -79,9 +79,11 @@ export function EntityDialog({
     defaultCategoryId ? String(defaultCategoryId) : ""
   );
 
-  // Sync controlled inputs when dialog opens or target item changes
+  // Sync controlled inputs when dialog opens or target item changes.
+  // Intentional: resets form to fresh values each time the dialog opens for a (potentially different) item.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setName(defaultName);
       setCategoryId(defaultCategoryId ? String(defaultCategoryId) : "");
     }

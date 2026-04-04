@@ -70,8 +70,6 @@ function ComboboxField({
   required?: boolean;
   error?: string[];
 }) {
-  const selectedOption = options.find((o) => String(o.id) === value);
-
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>{label}{required && " *"}</Label>
@@ -192,6 +190,7 @@ export function TransactionForm({
       if (state.success) {
         toast.success(state.message);
         formRef.current?.reset();
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: resets controlled inputs to empty after successful form submission
         setAmount("");
         setAccountId("");
         setRelatedAccountId("");

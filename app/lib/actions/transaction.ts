@@ -5,11 +5,12 @@ import { db } from "@/lib/db";
 import { transactions } from "@/drizzle/schema";
 import { transactionFormSchema } from "@/lib/validations/transaction";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
+import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 
 export async function submitTransaction(
-  prevState: { success: boolean; errors: Record<string, string[]>; message: string },
+  prevState: ActionState,
   formData: FormData
-): Promise<{ success: boolean; errors: Record<string, string[]>; message: string }> {
+): Promise<ActionState> {
   const raw = {
     transactionDescription: formData.get("transactionDescription") as string,
     transactionDate: formData.get("transactionDate") as string,
@@ -24,13 +25,7 @@ export async function submitTransaction(
   const result = transactionFormSchema.safeParse(raw);
 
   if (!result.success) {
-    const fieldErrors: Record<string, string[]> = {};
-    for (const issue of result.error.issues) {
-      const field = String(issue.path[0]);
-      if (!fieldErrors[field]) fieldErrors[field] = [];
-      fieldErrors[field].push(issue.message);
-    }
-    return { success: false, errors: fieldErrors, message: "Validation failed" };
+    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   const data = result.data;

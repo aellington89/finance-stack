@@ -12,12 +12,7 @@ import {
 } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categories";
-
-interface ActionState {
-  success: boolean;
-  errors: Record<string, string[]>;
-  message: string;
-}
+import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
@@ -27,16 +22,6 @@ function revalidateCategoryPaths() {
 
 function parseNameForm(formData: FormData) {
   return entityNameSchema.safeParse({ name: formData.get("name") as string });
-}
-
-function buildFieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
-  const fieldErrors: Record<string, string[]> = {};
-  for (const issue of issues) {
-    const field = String(issue.path[0]);
-    if (!fieldErrors[field]) fieldErrors[field] = [];
-    fieldErrors[field].push(issue.message);
-  }
-  return fieldErrors;
 }
 
 // ─── Transaction Categories ───────────────────────────────────────────────────

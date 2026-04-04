@@ -13,7 +13,7 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Node.js 20+](https://nodejs.org/) (for the Next.js application)
+- [Node.js 22+](https://nodejs.org/) (for the Next.js application)
 
 ## Getting Started
 
@@ -196,6 +196,7 @@ finance-stack/
 │   │   │   └── page.tsx                  #   Landing page (/)
 │   │   └── (app)/                        # Route group — sidebar navigation shell
 │   │       ├── layout.tsx                #   App shell (SidebarProvider + AppSidebar + SidebarInset)
+│   │       ├── error.tsx                 #   Error boundary — catches unhandled errors with retry UI
 │   │       ├── dashboard/                #   Tabbed dashboard with 5 tabs:
 │   │       │   ├── layout.tsx            #     Layout with tab navigation
 │   │       │   ├── page.tsx              #     Summary tab (/)
@@ -242,6 +243,7 @@ finance-stack/
 │   │       └── transaction-filters.tsx   # Filter bar with date range, multi-select, amount
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
+│       ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
 │       ├── actions/transaction.ts        # Server action for transaction submission
 │       ├── actions/account.ts           # Server actions for account create, update, delete
 │       ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
@@ -256,6 +258,17 @@ finance-stack/
 │       ├── queries/categories.ts        # Queries for all four reference-data tables
 │       ├── validations/categories.ts    # Zod schemas for category/type forms
 │       └── utils.ts                      # Utility helpers (cn() class merge)
+│   ├── tests/                            # Vitest test suite
+│   │   ├── unit/                         # Unit tests (no DB required)
+│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
+│   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
+│   │   │   └── lib/                      #   Library utility tests (cn, formatters)
+│   │   └── integration/                  # Integration tests (requires Finances_Test DB)
+│   │       ├── setup.ts                  #   Global setup — asserts test DB URL
+│   │       ├── vitest-setup.ts           #   Per-test setup/teardown
+│   │       └── actions/                  #   Server action tests (account, transaction)
+│   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
+├── .github/workflows/ci.yml             # CI: lint + unit tests + integration tests on push/PR
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
 │   └── schema.sql                        # Tables, indexes, and views (applied to Finances and Finances_Test)
@@ -263,6 +276,37 @@ finance-stack/
     ├── UpdateAccountBalanceHistory.sql    # Balance history rebuild script
     └── seed-test-data.sql                # Sample data for Finances_Test
 ```
+
+## Running Tests
+
+Tests use [Vitest](https://vitest.dev/) and are split into two projects:
+
+| Project | Command | Requires DB? |
+|---|---|---|
+| Unit | `npm run test:unit` | No |
+| Integration | `npm run test:integration` | Yes (`Finances_Test`) |
+
+**Unit tests** cover Zod validation schemas and pure utility functions. They run with no external dependencies.
+
+**Integration tests** run server actions against `Finances_Test`. Ensure `DATABASE_URL` in `app/.env.local` points to `Finances_Test` before running them. The integration test global setup will throw if it detects a non-test URL.
+
+```bash
+cd app
+
+# Run all tests
+npm test
+
+# Run only unit tests (no DB needed)
+npm run test:unit
+
+# Run only integration tests (requires Finances_Test DB)
+npm run test:integration
+
+# Generate coverage report
+npm run test:coverage
+```
+
+---
 
 ## Stopping the Stack
 
@@ -274,7 +318,20 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-03-29
+### 2026-03-29 — v0.1.1
+
+**Codebase hardening (Issue #79)**
+- Fixed SQL injection vulnerability in `accounting.ts` and `work-expenses.ts`: date inputs from URL params were interpolated directly into `sql.raw()`. Added `safeDate()` validation (`/^\d{4}-\d{2}-\d{2}$/`) and switched all user-controlled filter values (descriptions, accountIds, categoryIds) from manual string interpolation to Drizzle parameterized queries
+- Added `app/(app)/error.tsx` error boundary so unhandled database or runtime errors show a user-friendly retry UI instead of the default Next.js error page
+- Added `.refine()` to `transactionFormSchema` preventing self-referential transactions (`accountId === relatedAccountId`)
+- Added Vitest test suite: unit tests for all Zod validation schemas and utility functions; integration tests for account and transaction server actions against `Finances_Test`
+- Added GitHub Actions CI workflow (lint + unit tests + integration tests on push/PR)
+- Extracted shared `ActionState` type and `buildFieldErrors()` helper from action files into `lib/actions/utils.ts`
+- Added explanatory comments to non-obvious logic: magic constants in `actions/account.ts`, HMR pool pattern in `lib/db/index.ts`, SQL ROLLUP in `queries/accounts.ts`
+- Gated `/test-ui` page to development-only (returns 404 in production builds)
+- Updated `.gitignore` and `.dockerignore` to exclude test output and CI config from Docker builds
+
+### 2026-03-29 — v0.1.0
 
 **Unified sidebar navigation (Issue #77)**
 - Added a persistent sidebar navigation using shadcn's Sidebar component, connecting all application sections

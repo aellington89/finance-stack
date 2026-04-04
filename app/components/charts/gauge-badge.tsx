@@ -55,6 +55,7 @@ export function GaugeBadge({
   segments,
 }: GaugeBadgeProps) {
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration guard: renders nothing until mounted to avoid SSR/client SVG mismatch
   useEffect(() => setMounted(true), []);
 
   // Determine which segment color the value falls in

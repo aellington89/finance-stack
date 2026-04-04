@@ -89,6 +89,7 @@ export default async function DashboardTransactionsPage({
       getFilteredTransactionsCount(filters),
     ]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { page: _p, pageSize: _ps, sortBy: _sb, sortDir: _sd, ...filterOnly } = filters;
   const hasFilters = Object.values(filterOnly).some(
     (v) => v !== undefined && (typeof v !== "object" || (v as unknown[]).length > 0)
