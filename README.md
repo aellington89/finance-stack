@@ -319,14 +319,12 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-04 — v0.1.2
+### 2026-03-29 — v0.1.1
 
 **Fix dashboard showing incorrect balances (Issue #68)**
 - Added `ensureTodayBalances()` carry-forward function in `lib/queries/rebuild-balance.ts`: on each dashboard load, inserts a today row for every open account (carrying forward the most recent cumulative balance) if one doesn't already exist
 - Called from `app/(app)/dashboard/layout.tsx` as an async server component — runs on every dashboard page load but is a no-op after the first call of the day
 - Added integration tests for the new function covering carry-forward, idempotency, closed-account exclusion, and coexistence with `rebuildAccountBalance()`
-
-### 2026-03-29 — v0.1.1
 
 **Codebase hardening (Issue #79)**
 - Fixed SQL injection vulnerability in `accounting.ts` and `work-expenses.ts`: date inputs from URL params were interpolated directly into `sql.raw()`. Added `safeDate()` validation (`/^\d{4}-\d{2}-\d{2}$/`) and switched all user-controlled filter values (descriptions, accountIds, categoryIds) from manual string interpolation to Drizzle parameterized queries
