@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { db } from "@/lib/db";
 
 /**
  * Rebuilds account_balance_history rows for a single account.
@@ -69,5 +70,35 @@ export async function rebuildAccountBalance(
     DO UPDATE
     SET daily_balance = EXCLUDED.daily_balance,
         cumulative_balance = EXCLUDED.cumulative_balance
+  `);
+}
+
+/**
+ * Ensures every open account has an account_balance_history row for today.
+ *
+ * If a row doesn't already exist, carries forward the most recent
+ * cumulative_balance with daily_balance = 0.  Idempotent via
+ * ON CONFLICT DO NOTHING — existing rows (e.g. from rebuildAccountBalance)
+ * are never overwritten.
+ */
+export async function ensureTodayBalances(): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO account_balance_history
+      (account_id, balance_date, daily_balance, cumulative_balance)
+    SELECT
+      a.account_id,
+      CURRENT_DATE,
+      0,
+      COALESCE(abh.cumulative_balance, 0)
+    FROM accounts a
+    LEFT JOIN account_balance_history abh
+      ON abh.account_id = a.account_id
+      AND abh.balance_date = (
+        SELECT MAX(balance_date)
+        FROM account_balance_history
+        WHERE account_id = a.account_id
+      )
+    WHERE a.closed_date IS NULL
+    ON CONFLICT (account_id, balance_date) DO NOTHING
   `);
 }
