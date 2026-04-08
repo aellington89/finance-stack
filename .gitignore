@@ -12,6 +12,10 @@ app/.env.local
 app/out
 app/.claude
 
+# Importer — parsers are user-specific, drop folder contains user documents
+imports/
+importer/parsers/
+
 # Test output
 app/coverage
 app/.vitest

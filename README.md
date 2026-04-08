@@ -8,6 +8,7 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 |---|---|---|
 | PostgreSQL 18 | Primary database | 5433 |
 | Next.js 16 | Custom finance application | 3001 |
+| importer | File ingestion (polls `imports/` subfolders) | — |
 | Metabase | BI dashboards and analytics (`--profile bi`) | 3000 |
 
 ## Prerequisites
@@ -34,6 +35,22 @@ docker compose up
 This will:
 1. Start PostgreSQL and wait until it is healthy
 2. Build and start the Next.js finance application
+3. Start the importer service
+
+### Importer (`importer`)
+
+The `importer` service automates file-to-transaction ingestion. It polls subdirectories under `imports/` every 60 seconds, routing each file to a matching parser module in `importer/parsers/`. Each line item is mapped to primary keys in the database (`accounts`, `transaction_categories`, `transaction_category_types`) and inserted as transaction rows. Unmatched fields cause a hard failure — no silent skips.
+
+The `importer/poll.py` dispatcher is committed to the repo. The `importer/parsers/` directory and `imports/` drop folder are gitignored — parser logic is user-specific since the field mapping depends on how you categorize your transactions.
+
+**Adding a new import type:**
+
+1. Create a subdirectory under `imports/` (e.g., `imports/bank-statements/`)
+2. Create a matching parser at `importer/parsers/bank_statements.py` (hyphens become underscores)
+3. The parser module must expose a `process(filepath, conn, lookup_maps)` function
+4. Drop files into the subdirectory — the importer picks them up on the next poll
+
+Subdirectories without a matching parser are skipped with a warning.
 
 ### Start Metabase (optional)
 
@@ -269,6 +286,10 @@ finance-stack/
 │   │       ├── actions/                  #   Server action tests (account, transaction)
 │   │       └── queries/                  #   Query function tests (rebuild-balance)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
+├── importer/                              # File import service
+│   ├── poll.py                            # Polling loop and parser dispatcher (committed)
+│   └── parsers/                           # One module per import type (gitignored)
+├── imports/                               # Drop folders — one per import type (gitignored)
 ├── .github/workflows/ci.yml             # CI: lint + unit tests + integration tests on push/PR
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
@@ -318,6 +339,17 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-04-07 — v0.1.1 (continued)
+
+**Add importer Docker service for file ingestion (Issue #84)**
+- Added `importer` service to `docker-compose.yml`: always-on Python container that polls `imports/` subdirectories every 60 seconds for new files
+- Subfolder-based routing: each subdirectory under `imports/` maps to a parser module in `importer/parsers/` (e.g., `imports/paystubs/` → `parsers/paystubs.py`)
+- Connects to Postgres over the shared `appnet` network using `DATABASE_URL`
+- Loads PK lookup maps from `accounts`, `transaction_categories`, and `transaction_category_types` on startup
+- Fails loudly on unmatched fields — no silent skips or null placeholders
+- `importer/poll.py` dispatcher is committed; `importer/parsers/` is gitignored (user-specific)
+- Created `imports/` drop folder structure and added `imports/` and `importer/parsers/` to `.gitignore`
 
 ### 2026-03-29 — v0.1.1
 
