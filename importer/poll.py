@@ -1,5 +1,5 @@
 """
-Importer — polls subdirectories under /app/input for new files and routes
+Importer — polls subdirectories under /input for new files and routes
 each one to a matching parser module in /app/parsers/.
 
 To add a new import type:
@@ -18,7 +18,7 @@ import sys
 import time
 import psycopg2
 
-INPUT_DIR = "/app/input"
+INPUT_DIR = "/input"
 PARSERS_DIR = "/app/parsers"
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", 60))
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -28,13 +28,13 @@ def load_lookup_maps(conn):
     """Load reference data from the database for PK resolution."""
     maps = {}
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name FROM accounts")
+        cur.execute("SELECT account_id, account_name FROM accounts")
         maps["accounts"] = {row[1]: row[0] for row in cur.fetchall()}
 
-        cur.execute("SELECT id, name FROM transaction_categories")
+        cur.execute("SELECT transaction_category_id, transaction_category FROM transaction_categories")
         maps["transaction_categories"] = {row[1]: row[0] for row in cur.fetchall()}
 
-        cur.execute("SELECT id, name FROM transaction_category_types")
+        cur.execute("SELECT transaction_type_id, transaction_type FROM transaction_types")
         maps["transaction_category_types"] = {row[1]: row[0] for row in cur.fetchall()}
     return maps
 
