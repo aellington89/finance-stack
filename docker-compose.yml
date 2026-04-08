@@ -1,6 +1,7 @@
-# Defines the four services that make up the finance stack:
+# Defines the five services that make up the finance stack:
 # postgres (data store), init-script (one-shot balance rebuild),
-# finance-app (Next.js UI), and metabase (BI dashboards, --profile bi).
+# finance-app (Next.js UI), importer (file ingestion),
+# and metabase (BI dashboards, --profile bi).
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
@@ -124,6 +125,42 @@ services:
     labels:
       com.finance-stack.component: "app"
       com.finance-stack.description: "Next.js finance application"
+
+  # Importer — polls subdirectories under imports/ every 60 seconds, routes
+  # each file to a matching parser in importer/parsers/, and inserts transaction rows.
+  importer:
+    image: python:3.13-slim
+    container_name: importer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+      POLL_INTERVAL: 60
+    volumes:
+      - ./imports:/app/input                 # Host drop folder — each subdirectory is an import type
+      - ./importer:/app:ro                   # Poll script and parsers (read-only)
+    working_dir: /app
+    entrypoint: >
+      bash -c "
+      pip install --quiet psycopg2-binary &&
+      echo 'importer ready — polling /app/input subdirectories every $${POLL_INTERVAL}s' &&
+      python poll.py
+      "
+    networks:
+      - appnet
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    labels:
+      com.finance-stack.component: "importer"
+      com.finance-stack.description: "File importer service"
 
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
