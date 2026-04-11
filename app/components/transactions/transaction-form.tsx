@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/combobox";
 
 import { submitTransaction } from "@/lib/actions/transaction";
+import { getPostSubmitState } from "@/lib/forms/transaction";
 
 interface TransactionFormState {
   success: boolean;
@@ -190,22 +191,24 @@ export function TransactionForm({
       if (state.success) {
         toast.success(state.message);
         formRef.current?.reset();
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: resets controlled inputs to empty after successful form submission
-        setAmount("");
-        setAccountId("");
-        setRelatedAccountId("");
-        setTransactionTypeId("");
-        setTransactionCategoryId("");
-        const now = new Date();
-        const yyyy = now.getFullYear();
-        const mm = String(now.getMonth() + 1).padStart(2, "0");
-        const dd = String(now.getDate()).padStart(2, "0");
-        setTransactionDate(`${yyyy}-${mm}-${dd}`);
+        const next = getPostSubmitState({
+          transactionDate,
+          amount,
+          accountId,
+          relatedAccountId,
+          transactionTypeId,
+          transactionCategoryId,
+        });
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: resets controlled inputs after successful form submission
+        setAmount(next.amount);
+        setRelatedAccountId(next.relatedAccountId);
+        setTransactionCategoryId(next.transactionCategoryId);
+        // Date, Account, and Transaction Type intentionally retained.
       } else {
         toast.error(state.message);
       }
     }
-  }, [state]);
+  }, [state, transactionDate, amount, accountId, relatedAccountId, transactionTypeId, transactionCategoryId]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">

@@ -340,7 +340,14 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-07 — v0.1.1 (continued)
+### 2026-04-10 — v0.1.1 (continued)
+
+**Persist Date, Account, and Transaction Type on transaction form submit (Issue #67)**
+- After a successful transaction submit, the Date, Account, and Transaction Type fields now retain their values so users can enter runs of related transactions (e.g. reconciling a statement) without re-selecting them each time
+- Description, Amount, Related Account, and Category continue to reset to empty after a successful submit
+- Extracted the post-submit reset decision into a pure helper at `lib/forms/transaction.ts` (`getPostSubmitState`) and covered it with unit tests in `tests/unit/lib/forms/transaction.test.ts`
+
+### 2026-04-07
 
 **Add importer Docker service for file ingestion (Issue #84)**
 - Added `importer` service to `docker-compose.yml`: always-on Python container that polls `imports/` subdirectories every 60 seconds for new files
@@ -351,7 +358,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - `importer/poll.py` dispatcher is committed; `importer/parsers/` is gitignored (user-specific)
 - Created `imports/` drop folder structure and added `imports/` and `importer/parsers/` to `.gitignore`
 
-### 2026-03-29 — v0.1.1
+### 2026-03-29
 
 **Fix dashboard showing incorrect balances (Issue #68)**
 - Added `ensureTodayBalances()` carry-forward function in `lib/queries/rebuild-balance.ts`: on each dashboard load, inserts a today row for every open account (carrying forward the most recent cumulative balance) if one doesn't already exist
