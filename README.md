@@ -340,6 +340,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
+### 2026-04-10 — v0.1.1 (continued)
+
+**Persist Date, Account, and Transaction Type on transaction form submit (Issue #67)**
+- After a successful transaction submit, the Date, Account, and Transaction Type fields now retain their values so users can enter runs of related transactions (e.g. reconciling a statement) without re-selecting them each time
+- Description, Amount, Related Account, and Category continue to reset to empty after a successful submit
+- Extracted the post-submit reset decision into a pure helper at `lib/forms/transaction.ts` (`getPostSubmitState`) and covered it with unit tests in `tests/unit/lib/forms/transaction.test.ts`
+
 ### 2026-04-07 — v0.1.1 (continued)
 
 **Add importer Docker service for file ingestion (Issue #84)**
