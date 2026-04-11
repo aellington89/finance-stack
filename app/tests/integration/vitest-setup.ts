@@ -12,19 +12,19 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
 }));
 
-// Align the static lookup tables (account_type_categories, transaction_types)
-// with the production Finances database — they drive core KPIs, so tests must
-// exercise the same values the real app does. account_types and
-// transaction_categories only need a minimum row (ID 1) to satisfy hardcoded
-// test fixtures.
+// Drift-correction for the static lookup tables. The init-db seed files
+// (init-db/seeds/shared-lookups.sql + finances-test-mock-data.sql) populate
+// everything on first Docker launch, but this beforeAll hook keeps tests
+// self-healing: if a prior run mutated a lookup row, or an individual test
+// file is executed against a Finances_Test DB that predates a lookup
+// addition, the upserts below converge state back to the expected baseline.
 //
-// Uses INSERT ... OVERRIDING SYSTEM VALUE ... ON CONFLICT DO UPDATE so the setup
-// is idempotent and self-healing against drift from prior test runs or an
-// out-of-date scripts/seed-test-data.sql. No TRUNCATE: the FK graph
+// Uses INSERT ... OVERRIDING SYSTEM VALUE ... ON CONFLICT DO UPDATE so the
+// setup is idempotent and safe to re-run. No TRUNCATE: the FK graph
 // (account_types → account_type_categories, transactions → transaction_types /
-// transaction_categories) makes non-CASCADE truncation impossible, and CASCADE
-// would wipe seeded accounts/transactions/account_balance_history that other
-// tests rely on.
+// transaction_categories) makes non-CASCADE truncation impossible, and
+// CASCADE would wipe seeded accounts/transactions/account_balance_history
+// that other tests rely on.
 beforeAll(async () => {
   await db.execute(sql`
     INSERT INTO account_type_categories (account_type_category_id, account_type_category)
@@ -70,7 +70,8 @@ beforeAll(async () => {
   await db.execute(sql`
     INSERT INTO transaction_categories (transaction_category_id, transaction_category)
     OVERRIDING SYSTEM VALUE VALUES
-      (1, 'Credit Card Payment')
+      (1, 'Credit Card Payment'),
+      (6, 'Other')
     ON CONFLICT (transaction_category_id) DO UPDATE
       SET transaction_category = EXCLUDED.transaction_category
   `);

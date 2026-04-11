@@ -46,6 +46,9 @@ jobs:
         run: |
           psql -h localhost -U postgres -c 'CREATE DATABASE "Finances_Test";'
           psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/schema.sql
+          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/shared-lookups.sql
+          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/finances-test-mock-data.sql
+          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/rebuild-balance-history.sql
 
       - name: Lint
         run: npm run lint
