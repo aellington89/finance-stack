@@ -175,6 +175,10 @@ Or set `INIT_SCRIPT_DB=Finances_Test` in `.env` and run normally:
 docker compose --profile init run --rm init-script
 ```
 
+### Static lookup tables in integration tests
+
+The integration test `beforeAll` (in `app/tests/integration/vitest-setup.ts`) automatically upserts the full production row set for `account_type_categories` (6 rows) and `transaction_types` (12 rows) before any test runs, so these two tables are self-healing even if `seed-test-data.sql` has not been applied — or has drifted — in your local `Finances_Test` database. Running `scripts/seed-test-data.sql` is still required to populate `accounts`, `transactions`, and `account_balance_history` fixtures that most integration tests depend on.
+
 ### Schema changes
 
 When you modify the production schema (add tables, columns, etc.), re-sync the test database:
@@ -340,7 +344,15 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-10 — v0.1.1 (continued)
+### 2026-04-10 — Hotfix — v0.1.1 (continued)
+
+**Align integration test DB with production lookup values (Issue #87)**
+- The `beforeAll` in `app/tests/integration/vitest-setup.ts` previously truncated the static lookup tables and re-inserted a tiny non-production subset (`account_type_categories` had only `Asset`; `transaction_types` had only `Expense` and `Opening Balance`). A recent edit that removed `CASCADE` also left the truncates in a broken state because `account_types → account_type_categories` and `transactions → transaction_types` / `transaction_categories` foreign keys block non-CASCADE truncation.
+- Rewrote the setup to idempotently upsert the full production row sets — all 6 `account_type_categories` and all 12 `transaction_types` — using `INSERT ... OVERRIDING SYSTEM VALUE ... ON CONFLICT DO UPDATE`. Identity sequences are advanced to `MAX(id)` after seeding so auto-generated inserts do not collide.
+- Keeps the test DB's static lookup values identical to the `Finances` database so tests exercise realistic KPI-driving data. No test source files needed changes — the Zod schemas only validate IDs as positive integers.
+- Opened [#87](https://github.com/aellington89/finance-stack/issues/87) to track locking these two tables down from user-level editing in the app UI, since they drive core KPIs and should only be mutable by a (future) sys-admin activity.
+
+### 2026-04-10
 
 **Persist Date, Account, and Transaction Type on transaction form submit (Issue #67)**
 - After a successful transaction submit, the Date, Account, and Transaction Type fields now retain their values so users can enter runs of related transactions (e.g. reconciling a statement) without re-selecting them each time
