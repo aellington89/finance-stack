@@ -119,79 +119,62 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 
 ### Balance History
 
-`account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change. The init-script that rebuilds it is behind a profile and does not run automatically. To run it:
+`account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change.
+
+For the production `Finances` database, the rebuild script is behind a profile and does not run automatically. To run it:
 
 ```bash
 docker compose --profile init run --rm init-script
 ```
+
+The `Finances_Test` database has its balance history built automatically as part of the first-launch seed (see below).
+
+## First-launch database initialization
+
+On the first `docker compose up` (empty Postgres data volume), [`init-db/01-create-databases.sh`](init-db/01-create-databases.sh) runs automatically and:
+
+1. Creates both the `Finances` and `Finances_Test` databases (plus the Metabase database).
+2. Applies [`init-db/schema.sql`](init-db/schema.sql) to each.
+3. Seeds the two **shared lookup tables** (`account_type_categories`, `transaction_types`) into both databases so they start in sync. The Finances side uses `ON CONFLICT DO NOTHING` and is additionally guarded by a pre-flight row-count check — **existing Finances user data is never overwritten**, even on a manual re-run.
+4. Seeds `Finances_Test` with mock data: all 19 `account_types`, all 27 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
+5. Rebuilds `Finances_Test.account_balance_history` so balances are up-to-date as of today.
+
+After this completes, `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
 
 ## Test Database
 
-A `Finances_Test` database is available for development and testing. It has the same schema as the production `Finances` database but contains sample data.
+`Finances_Test` is populated automatically on first launch — no manual seeding is required. The seed artifacts live in [`init-db/seeds/`](init-db/seeds/):
 
-### Fresh installation (automatic)
+| File | Purpose |
+|---|---|
+| `shared-lookups.sql` | 6 account type categories + 12 transaction types (runs against both DBs) |
+| `finances-test-mock-data.sql` | 19 account types, 27 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
+| `rebuild-balance-history.sql` | Mirrors `scripts/UpdateAccountBalanceHistory.sql`, runs against `Finances_Test` at seed time |
 
-On a fresh clone with no existing Postgres data volume, `Finances_Test` is created automatically when you run `docker compose up` for the first time. To seed it with test data:
+### Refreshing Finances_Test (dates age out, or schema changed)
 
-```bash
-docker exec -i postgres psql -U postgres -d Finances_Test < scripts/seed-test-data.sql
-```
-
-Then rebuild balance history for the test data:
-
-```bash
-docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
-```
-
-### Existing installation (manual setup)
-
-If you already have a running stack and want to add the test database:
+The mock transaction dates are evaluated once, at seed time. If they drift out of the "past 12 months" window, or the schema changes, drop and re-seed the test database:
 
 ```bash
-# Create the database
-docker exec postgres psql -U postgres -c 'CREATE DATABASE "Finances_Test";'
-
-# Apply the schema
-docker exec -i postgres psql -U postgres -d Finances_Test < init-db/schema.sql
-
-# Seed with test data
-docker exec -i postgres psql -U postgres -d Finances_Test < scripts/seed-test-data.sql
-
-# Build balance history
-docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
-```
-
-### Running balance history against test data
-
-Override the target database inline (no `.env` change needed):
-
-```bash
-docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
-```
-
-Or set `INIT_SCRIPT_DB=Finances_Test` in `.env` and run normally:
-
-```bash
-docker compose --profile init run --rm init-script
-```
-
-### Schema changes
-
-When you modify the production schema (add tables, columns, etc.), re-sync the test database:
-
-```bash
-# 1. Re-extract the schema from production
+# 1. (Only if schema changed) re-extract it from the Finances DB
 docker exec postgres pg_dump -U postgres -d Finances --schema-only --no-owner --no-privileges > init-db/schema.sql
 
-# 2. Drop and recreate the test database
+# 2. Drop and recreate Finances_Test
 docker exec postgres psql -U postgres -c 'DROP DATABASE IF EXISTS "Finances_Test";'
 docker exec postgres psql -U postgres -c 'CREATE DATABASE "Finances_Test";'
+
+# 3. Re-apply schema and seeds
 docker exec -i postgres psql -U postgres -d Finances_Test < init-db/schema.sql
-docker exec -i postgres psql -U postgres -d Finances_Test < scripts/seed-test-data.sql
-docker compose --profile init run --rm -e PGDATABASE=Finances_Test init-script
+docker exec -i postgres psql -U postgres -d Finances_Test < init-db/seeds/shared-lookups.sql
+docker exec -i postgres psql -U postgres -d Finances_Test < init-db/seeds/finances-test-mock-data.sql
+docker exec -i postgres psql -U postgres -d Finances_Test < init-db/seeds/rebuild-balance-history.sql
 ```
 
-Commit the updated `init-db/schema.sql` so fresh installs get the latest schema.
+Commit `init-db/schema.sql` after any schema change so fresh installs get the latest version.
+
+### Static lookup tables in integration tests
+
+The integration test `beforeAll` (in [`app/tests/integration/vitest-setup.ts`](app/tests/integration/vitest-setup.ts)) upserts the full production row set for `account_type_categories` (6 rows) and `transaction_types` (12 rows) before any test runs. This is a drift-correction safety net — the seed files above already populate these tables on first launch. No manual seed step is required.
 
 ## Project Structure
 
@@ -292,11 +275,14 @@ finance-stack/
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── .github/workflows/ci.yml             # CI: lint + unit tests + integration tests on push/PR
 ├── init-db/
-│   ├── 01-create-databases.sh            # First-run DB/role creation (auto-runs on empty data dir)
-│   └── schema.sql                        # Tables, indexes, and views (applied to Finances and Finances_Test)
+│   ├── 01-create-databases.sh            # First-run DB/role creation + seed orchestration (auto-runs on empty data dir)
+│   ├── schema.sql                        # Tables, indexes, and views (applied to Finances and Finances_Test)
+│   └── seeds/
+│       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs)
+│       ├── finances-test-mock-data.sql   # account_types, transaction_categories, accounts, ~400 txns (Finances_Test only)
+│       └── rebuild-balance-history.sql   # Balance history rebuild for Finances_Test post-seed
 └── scripts/
-    ├── UpdateAccountBalanceHistory.sql    # Balance history rebuild script
-    └── seed-test-data.sql                # Sample data for Finances_Test
+    └── UpdateAccountBalanceHistory.sql   # Balance history rebuild script (manual / --profile init)
 ```
 
 ## Running Tests
@@ -340,7 +326,25 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-10 — v0.1.1 (continued)
+### 2026-04-11 — v0.1.1 (continued)
+
+**Sync shared lookups and auto-seed Finances_Test mock data on first launch (PR #88)**
+- `init-db/01-create-databases.sh` now seeds the shared lookup tables (`account_type_categories`, `transaction_types`) into both `Finances` and `Finances_Test` on first launch, so the two databases start in sync. Existing `Finances` user data is protected by three independent safeguards: the init directory only runs on an empty data volume, a pre-flight row-count check skips the insert if `Finances.accounts`/`Finances.transactions` is non-empty, and the SQL itself uses `ON CONFLICT DO NOTHING`.
+- `Finances_Test` is now fully populated on first launch with 19 `account_types`, 27 `transaction_categories`, 8 accounts, and 424 deterministic transactions spanning the past 12 months. All dates are generated via `CURRENT_DATE - INTERVAL` math at seed time, so the mock data is always current relative to when the process runs. `account_balance_history` is rebuilt as the final init step.
+- New seed files live under `init-db/seeds/`: `shared-lookups.sql`, `finances-test-mock-data.sql`, and `rebuild-balance-history.sql`. The mock-data seed is idempotent — re-runs short-circuit inside a `DO $$` block if transactions already exist.
+- `.github/workflows/ci.yml` updated to run the three seed files after applying `schema.sql`, so CI integration tests hit the same baseline as a fresh local install.
+- Deleted the now-redundant `scripts/seed-test-data.sql` (previously had to be run manually with hardcoded 2024-era dates).
+- Rewrote the Test Database and balance-history sections of this README, added a first-launch walkthrough, and documented the resync procedure for when mock data ages out or the schema changes.
+
+### 2026-04-10 — Hotfix
+
+**Align integration test DB with production lookup values (Issue #87)**
+- The `beforeAll` in `app/tests/integration/vitest-setup.ts` previously truncated the static lookup tables and re-inserted a tiny non-production subset (`account_type_categories` had only `Asset`; `transaction_types` had only `Expense` and `Opening Balance`). A recent edit that removed `CASCADE` also left the truncates in a broken state because `account_types → account_type_categories` and `transactions → transaction_types` / `transaction_categories` foreign keys block non-CASCADE truncation.
+- Rewrote the setup to idempotently upsert the full production row sets — all 6 `account_type_categories` and all 12 `transaction_types` — using `INSERT ... OVERRIDING SYSTEM VALUE ... ON CONFLICT DO UPDATE`. Identity sequences are advanced to `MAX(id)` after seeding so auto-generated inserts do not collide.
+- Keeps the test DB's static lookup values identical to the `Finances` database so tests exercise realistic KPI-driving data. No test source files needed changes — the Zod schemas only validate IDs as positive integers.
+- Opened [#87](https://github.com/aellington89/finance-stack/issues/87) to track locking these two tables down from user-level editing in the app UI, since they drive core KPIs and should only be mutable by a (future) sys-admin activity.
+
+### 2026-04-10
 
 **Persist Date, Account, and Transaction Type on transaction form submit (Issue #67)**
 - After a successful transaction submit, the Date, Account, and Transaction Type fields now retain their values so users can enter runs of related transactions (e.g. reconciling a statement) without re-selecting them each time
