@@ -197,9 +197,10 @@ finance-stack/
 │   │   └── (app)/                        # Route group — sidebar navigation shell
 │   │       ├── layout.tsx                #   App shell (SidebarProvider + AppSidebar + SidebarInset)
 │   │       ├── error.tsx                 #   Error boundary — catches unhandled errors with retry UI
-│   │       ├── dashboard/                #   Tabbed dashboard with 5 tabs:
+│   │       ├── dashboard/                #   Tabbed dashboard with 5 tabs + drill-downs:
 │   │       │   ├── layout.tsx            #     Layout with tab navigation
 │   │       │   ├── page.tsx              #     Summary tab (/)
+│   │       │   ├── net-worth/            #     Net Worth drill-down (from Summary KPI click)
 │   │       │   ├── accounting/           #     Personal Accounting tab
 │   │       │   ├── transactions/         #     Transactions tab (form + list)
 │   │       │   ├── accounts/             #     Accounts tab (visual balance sheet)
@@ -222,6 +223,8 @@ finance-stack/
 │   │   │   ├── expenses-category-chart.tsx # Donut chart for expense category breakdown (Chart.js)
 │   │   │   ├── work-expenses-chart.tsx   # Grouped bar chart for work expenses vs reimbursements over time
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
+│   │   │   ├── waterfall-chart.tsx       # Net worth waterfall analysis chart (Recharts)
+│   │   │   ├── trend-decomposition-chart.tsx # Multi-series trend decomposition by category/account (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
 │   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
@@ -236,7 +239,9 @@ finance-stack/
 │   │   ├── dashboard/                    # Dashboard-specific components
 │   │   │   ├── accounting-filters.tsx    # Multi-select combobox filters for accounting page
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
-│   │   │   └── date-range-filter.tsx     # URL-param-driven date range filter wrapper
+│   │   │   ├── date-range-filter.tsx     # URL-param-driven date range filter wrapper
+│   │   │   ├── net-worth-drivers-table.tsx # Net worth drivers table by account type category
+│   │   │   └── summary-drilldown-tabs.tsx # Sub-navigation tabs for Summary drill-down pages
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
 │   │       ├── transaction-list.tsx      # Sortable transaction table (client component)
@@ -250,6 +255,7 @@ finance-stack/
 │       ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │       ├── queries/work-expenses.ts     # Work expense queries (period totals, time series, category breakdown)
 │       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
+│       ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │       ├── validations/transaction.ts    # Zod schema for transaction form validation
@@ -326,7 +332,17 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-11 — v0.1.1 (continued)
+### 2026-04-12 — v0.1.1 (continued)
+
+**Net Worth drill-down page**
+- Added `/dashboard/net-worth` drill-down page accessible by clicking the Net Worth KPI on the Summary page
+- New visuals: Waterfall Analysis (what changed net worth over a period), Net Worth Drivers table (per-category change and % impact), and Trend Decomposition chart (multi-series line chart by account type category or individual account, with toggleable views)
+- Reuses existing Net Worth headline and Net Worth over time line chart from the Summary page
+- Added `SummaryDrilldownTabs` sub-navigation component with "Overview" and "Net Worth" tabs, designed for future Summary drill-down pages (e.g. Assets, Liabilities)
+- New query functions in `lib/queries/net-worth-drilldown.ts`: `getNetWorthWaterfall()`, `getNetWorthDrivers()`, `getNetWorthTrendDecomposition()`
+- Integration tests for all three query functions; unit tests for the waterfall data transformation logic
+
+### 2026-04-11
 
 **Sync shared lookups and auto-seed Finances_Test mock data on first launch (PR #88)**
 - `init-db/01-create-databases.sh` now seeds the shared lookup tables (`account_type_categories`, `transaction_types`) into both `Finances` and `Finances_Test` on first launch, so the two databases start in sync. Existing `Finances` user data is protected by three independent safeguards: the init directory only runs on an empty data volume, a pre-flight row-count check skips the insert if `Finances.accounts`/`Finances.transactions` is non-empty, and the SQL itself uses `ON CONFLICT DO NOTHING`.

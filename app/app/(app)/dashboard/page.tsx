@@ -1,9 +1,11 @@
+import Link from "next/link";
 import {
   getCurrentNetWorth,
   getNetWorthTimeSeries,
 } from "@/lib/queries/dashboard";
 import { TimeSeriesChart } from "@/components/charts/net-worth-chart";
 import { GaugeBadge } from "@/components/charts/gauge-badge";
+import { SummaryDrilldownTabs } from "@/components/dashboard/summary-drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
 import {
   Card,
@@ -78,6 +80,8 @@ export default async function DashboardSummaryPage({
 
   return (
     <div className="space-y-6">
+      <SummaryDrilldownTabs />
+
       {/* ── Section 1: Key Performance Metrics ── */}
       <Card>
         <CardHeader>
@@ -86,15 +90,18 @@ export default async function DashboardSummaryPage({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-8 lg:flex-row lg:items-center">
-            {/* Net Worth headline */}
-            <div className="flex flex-col justify-center gap-1 shrink-0 lg:min-w-[280px]">
+            {/* Net Worth headline — links to drill-down */}
+            <Link
+              href="/dashboard/net-worth"
+              className="flex flex-col justify-center gap-1 shrink-0 lg:min-w-[280px] rounded-md transition-opacity hover:opacity-80"
+            >
               <span className="text-sm font-medium text-muted-foreground">
                 Net Worth
               </span>
               <span className="text-5xl font-bold tabular-nums tracking-tight">
                 {formatCurrency(summary.netWorth)}
               </span>
-            </div>
+            </Link>
 
             {/* Gauge badges row */}
             <div className="flex flex-1 items-center justify-evenly gap-4">

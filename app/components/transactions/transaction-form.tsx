@@ -171,6 +171,7 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const [state, formAction] = useActionState(submitTransaction, initialFormState);
   const formRef = useRef<HTMLFormElement>(null);
+  const handledStateRef = useRef(state);
 
   // Controlled state for custom components (not native inputs)
   const [transactionDate, setTransactionDate] = useState(() => {
@@ -187,6 +188,8 @@ export function TransactionForm({
   const [transactionCategoryId, setTransactionCategoryId] = useState("");
 
   useEffect(() => {
+    if (handledStateRef.current === state) return;
+    handledStateRef.current = state;
     if (state.message) {
       if (state.success) {
         toast.success(state.message);

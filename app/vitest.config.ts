@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     projects: [
       {
-        extends: true,
+        plugins: [tsconfigPaths()],
         test: {
           name: "unit",
           include: ["tests/unit/**/*.test.ts"],
@@ -14,7 +14,7 @@ export default defineConfig({
         },
       },
       {
-        extends: true,
+        plugins: [tsconfigPaths()],
         test: {
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
