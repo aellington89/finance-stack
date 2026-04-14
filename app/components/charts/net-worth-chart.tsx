@@ -65,7 +65,7 @@ export function TimeSeriesChart({
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="aspect-[4/3] w-full">
+        <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
           <LineChart data={data} margin={{ left: 8, right: 8 }}>
             <CartesianGrid vertical={false} />
             <XAxis
