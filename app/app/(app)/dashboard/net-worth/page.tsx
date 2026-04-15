@@ -81,16 +81,20 @@ export default async function NetWorthDrilldownPage({
         </CardContent>
       </Card>
 
-      {/* ── Main grid: Chart (left, spans 2 rows) + Waterfall & Drivers (right) ── */}
-      <div className="grid gap-6 lg:grid-cols-2 lg:grid-rows-[auto_auto]">
-        <div className="lg:row-span-2">
+      {/* ── Net Worth Drivers (full width) ── */}
+      <NetWorthDriversTable data={drivers} />
+
+      {/* ── Time Series + Waterfall (equal split, fixed height) ── */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="h-[500px]">
           <NetWorthTimeSeriesChart
             timeSeries={timeSeries}
             decomposition={decomposition}
           />
         </div>
-        <WaterfallChart data={waterfall} />
-        <NetWorthDriversTable data={drivers} />
+        <div className="h-[500px]">
+          <WaterfallChart data={waterfall} />
+        </div>
       </div>
     </div>
   );

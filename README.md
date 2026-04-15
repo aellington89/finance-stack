@@ -240,7 +240,7 @@ finance-stack/
 │   │   │   ├── accounting-filters.tsx    # Multi-select combobox filters for accounting page
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
 │   │   │   ├── date-range-filter.tsx     # URL-param-driven date range filter wrapper
-│   │   │   ├── net-worth-drivers-table.tsx # Net worth drivers table by account type category
+│   │   │   ├── net-worth-drivers-table.tsx # Expandable net worth drivers table (category → account type → account)
 │   │   │   └── summary-drilldown-tabs.tsx # Sub-navigation tabs for Summary drill-down pages
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
@@ -331,6 +331,17 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-04-14 — v0.1.1 (continued)
+
+**Net Worth drill-down: nested drivers and By Account Type decomposition**
+- Net Worth Drivers table is now a 3-level expandable hierarchy: account type category → account type → account. Rows expand in place with chevron toggles and preserve scroll position across expands/collapses
+- Replaced the single `% Impact` column with `% of Parent` and `% of Total` so users can see both the local contribution at each level and the share of total net worth change
+- `getNetWorthDrivers()` rewritten to aggregate directly from `account_balance_history` in a single query (previously derived from the waterfall result), returning the full nested `DriverCategory → DriverAccountType → DriverAccount` shape
+- `getNetWorthTrendDecomposition()` now returns `accountTypeId` and `accountTypeName` on each point so the chart can pivot at the account-type level
+- Time Series chart: added a "By Account Type" mode alongside Net Worth / By Category / By Account, and added Select All / Clear All shortcuts to the clickable legend
+- Drill-down page layout: Drivers table is now full-width; Time Series and Waterfall sit side-by-side at a fixed height. Waterfall tooltip no longer double-lists the value row
+- Integration tests updated to assert the nested drivers shape, that child changes sum to parent change at every level, that category `% of Total` sums to ~100, and that decomposition points expose the new account-type fields
 
 ### 2026-04-12 — v0.1.1 (continued)
 
