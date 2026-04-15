@@ -71,7 +71,7 @@ describe("getNetWorthWaterfall", () => {
 });
 
 describe("getNetWorthDrivers", () => {
-  it("returns total change and per-category percent impacts", async () => {
+  it("returns total change and nested category/type/account rows", async () => {
     const result = await getNetWorthDrivers(thirtyDaysAgo, today);
 
     expect(result).toHaveProperty("totalChange");
@@ -79,38 +79,59 @@ describe("getNetWorthDrivers", () => {
     expect(result.categories.length).toBeGreaterThan(0);
 
     for (const cat of result.categories) {
+      expect(cat).toHaveProperty("categoryId");
       expect(cat).toHaveProperty("categoryName");
       expect(cat).toHaveProperty("change");
-      expect(cat).toHaveProperty("percentImpact");
+      expect(cat).toHaveProperty("percentOfTotal");
+      expect(cat.accountTypes).toBeInstanceOf(Array);
+      expect(cat.accountTypes.length).toBeGreaterThan(0);
+
+      for (const t of cat.accountTypes) {
+        expect(t).toHaveProperty("accountTypeId");
+        expect(t).toHaveProperty("accountTypeName");
+        expect(t).toHaveProperty("percentOfParent");
+        expect(t).toHaveProperty("percentOfTotal");
+        expect(t.accounts).toBeInstanceOf(Array);
+        expect(t.accounts.length).toBeGreaterThan(0);
+
+        for (const a of t.accounts) {
+          expect(a).toHaveProperty("accountId");
+          expect(a).toHaveProperty("accountName");
+          expect(a).toHaveProperty("change");
+          expect(a).toHaveProperty("percentOfParent");
+          expect(a).toHaveProperty("percentOfTotal");
+        }
+      }
     }
   });
 
-  it("percent impacts sum to approximately 100 when total change is nonzero", async () => {
+  it("category percent-of-total sums to approximately 100 when total change is nonzero", async () => {
     const result = await getNetWorthDrivers(thirtyDaysAgo, today);
 
     if (result.totalChange !== 0) {
       const sumPercent = result.categories.reduce(
-        (sum, c) => sum + c.percentImpact,
+        (sum, c) => sum + c.percentOfTotal,
         0
       );
       expect(sumPercent).toBeCloseTo(100, 0);
     }
   });
 
-  it("signs of change and percent impact are consistent", async () => {
+  it("child changes sum to parent change at each level", async () => {
     const result = await getNetWorthDrivers(thirtyDaysAgo, today);
 
-    if (result.totalChange !== 0) {
-      for (const cat of result.categories) {
-        if (cat.change !== 0) {
-          // If total change is positive, positive categories have positive impact
-          // If total change is negative, positive categories have negative impact
-          const sameSign =
-            Math.sign(cat.change) * Math.sign(result.totalChange) > 0;
-          expect(cat.percentImpact > 0).toBe(sameSign);
-        }
+    for (const cat of result.categories) {
+      const typesSum = cat.accountTypes.reduce((s, t) => s + t.change, 0);
+      expect(typesSum).toBeCloseTo(cat.change, 2);
+
+      for (const t of cat.accountTypes) {
+        const accSum = t.accounts.reduce((s, a) => s + a.change, 0);
+        expect(accSum).toBeCloseTo(t.change, 2);
       }
     }
+
+    const catSum = result.categories.reduce((s, c) => s + c.change, 0);
+    expect(catSum).toBeCloseTo(result.totalChange, 2);
   });
 });
 
@@ -128,6 +149,8 @@ describe("getNetWorthTrendDecomposition", () => {
     expect(first).toHaveProperty("date");
     expect(first).toHaveProperty("categoryId");
     expect(first).toHaveProperty("categoryName");
+    expect(first).toHaveProperty("accountTypeId");
+    expect(first).toHaveProperty("accountTypeName");
     expect(first).toHaveProperty("accountId");
     expect(first).toHaveProperty("accountName");
     expect(first).toHaveProperty("cumulativeBalance");

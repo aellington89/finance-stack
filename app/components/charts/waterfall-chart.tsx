@@ -108,14 +108,14 @@ export function WaterfallChart({ data }: WaterfallChartProps) {
   const bars = buildWaterfallBars(data);
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader>
         <CardTitle className="text-sm font-medium">
           Net Worth Waterfall
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
+      <CardContent className="flex min-h-0 flex-1 flex-col">
+        <ChartContainer config={chartConfig} className="min-h-0 flex-1 w-full">
           <BarChart data={bars} margin={{ left: 8, right: 8 }}>
             <CartesianGrid vertical={false} />
             <XAxis
@@ -134,8 +134,11 @@ export function WaterfallChart({ data }: WaterfallChartProps) {
               width={60}
             />
             <ChartTooltip
-              content={
+              content={({ active, payload, label }) => (
                 <ChartTooltipContent
+                  active={active}
+                  label={label}
+                  payload={payload?.filter((p) => p.dataKey === "value")}
                   formatter={(_, __, item) => {
                     const bar = item?.payload as WaterfallBar | undefined;
                     if (!bar) return null;
@@ -154,7 +157,7 @@ export function WaterfallChart({ data }: WaterfallChartProps) {
                   }}
                   labelFormatter={(label) => String(label)}
                 />
-              }
+              )}
             />
             {/* Invisible base bar */}
             <Bar dataKey="base" stackId="waterfall" fill="transparent" />

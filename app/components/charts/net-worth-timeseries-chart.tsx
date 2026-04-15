@@ -47,7 +47,7 @@ const formatDate = (dateStr: string) => {
   return format(d, "MMM d");
 };
 
-type Mode = "net-worth" | "category" | "account";
+type Mode = "net-worth" | "category" | "account-type" | "account";
 
 interface SeriesInfo {
   key: string;
@@ -62,17 +62,23 @@ interface PivotedRow {
 
 function pivotDecomposition(
   points: DecompositionPoint[],
-  mode: "category" | "account"
+  mode: "category" | "account-type" | "account"
 ): { rows: PivotedRow[]; series: SeriesInfo[] } {
+  const keyFor = (p: DecompositionPoint) => {
+    if (mode === "category") return `cat_${p.categoryId}`;
+    if (mode === "account-type") return `type_${p.accountTypeId}`;
+    return `acct_${p.accountId}`;
+  };
+  const labelFor = (p: DecompositionPoint) => {
+    if (mode === "category") return p.categoryName;
+    if (mode === "account-type") return p.accountTypeName;
+    return p.accountName;
+  };
+
   const seriesMap = new Map<string, string>();
   for (const p of points) {
-    if (mode === "category") {
-      const key = `cat_${p.categoryId}`;
-      if (!seriesMap.has(key)) seriesMap.set(key, p.categoryName);
-    } else {
-      const key = `acct_${p.accountId}`;
-      if (!seriesMap.has(key)) seriesMap.set(key, p.accountName);
-    }
+    const key = keyFor(p);
+    if (!seriesMap.has(key)) seriesMap.set(key, labelFor(p));
   }
 
   const series: SeriesInfo[] = Array.from(seriesMap.entries()).map(
@@ -91,8 +97,7 @@ function pivotDecomposition(
       dateMap.set(p.date, row);
     }
     const row = dateMap.get(p.date)!;
-    const key =
-      mode === "category" ? `cat_${p.categoryId}` : `acct_${p.accountId}`;
+    const key = keyFor(p);
     row[key] = ((row[key] as number) || 0) + p.cumulativeBalance;
   }
 
@@ -165,6 +170,7 @@ export function NetWorthTimeSeriesChart({
             [
               { value: "net-worth", label: "Net Worth" },
               { value: "category", label: "By Category" },
+              { value: "account-type", label: "By Account Type" },
               { value: "account", label: "By Account" },
             ] as const
           ).map((opt) => (
@@ -262,6 +268,27 @@ export function NetWorthTimeSeriesChart({
         {/* Clickable legend for decomposition modes */}
         {mode !== "net-worth" && (
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-3 text-xs">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setHiddenSeries(new Set())}
+                className="hover:text-foreground hover:underline"
+              >
+                Select All
+              </button>
+              <span className="text-border">|</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setHiddenSeries(
+                    new Set(decomposed.series.map((s) => s.key))
+                  )
+                }
+                className="hover:text-foreground hover:underline"
+              >
+                Clear All
+              </button>
+            </div>
             {decomposed.series.map((s) => {
               const active = !hiddenSeries.has(s.key);
               return (
