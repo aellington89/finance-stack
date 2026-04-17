@@ -332,7 +332,15 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-14 — v0.1.1 (continued)
+### 2026-04-16 — v0.1.1 (continued)
+
+**Fix past-dated transactions breaking net worth balances (Issue #95)**
+- When a transaction was submitted for a past date, the net worth time series showed incorrect values for that date: Total Liabilities dropped to 0 and Total Assets reflected only the account that received the transaction
+- Root cause: `rebuildAccountBalance()` only rebuilds history for the affected account(s), and `ensureTodayBalances()` only carried forward balances for today — leaving other accounts with no balance rows for intermediate dates
+- Rewrote `ensureTodayBalances()` in `lib/queries/rebuild-balance.ts` to fill ALL missing gap dates (from each account's last balance row through today) using `CROSS JOIN LATERAL` + `generate_series`, instead of only filling today. Uses `ON CONFLICT DO NOTHING` so rows already created by `rebuildAccountBalance()` are never overwritten
+- Added integration tests for gap-filling behavior and non-overwrite of existing intermediate rows
+
+### 2026-04-14
 
 **Net Worth drill-down: nested drivers and By Account Type decomposition**
 - Net Worth Drivers table is now a 3-level expandable hierarchy: account type category → account type → account. Rows expand in place with chevron toggles and preserve scroll position across expands/collapses

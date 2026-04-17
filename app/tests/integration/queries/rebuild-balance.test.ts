@@ -6,6 +6,8 @@ import { ensureTodayBalances } from "@/lib/queries/rebuild-balance";
 
 const today = new Date().toISOString().slice(0, 10);
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
 
 // Track account IDs created during tests so we can clean them up
 const createdAccountIds: number[] = [];
@@ -145,6 +147,83 @@ describe("ensureTodayBalances", () => {
       );
 
     expect(rows).toHaveLength(0);
+  });
+
+  it("fills intermediate gap dates between last balance and today", async () => {
+    const [account] = await db
+      .insert(accounts)
+      .values({ accountName: "Gap Fill Test", accountTypeId: 1 })
+      .returning({ accountId: accounts.accountId });
+    createdAccountIds.push(account.accountId);
+
+    await db.insert(accountBalanceHistory).values({
+      accountId: account.accountId,
+      balanceDate: threeDaysAgo,
+      dailyBalance: "25.00",
+      cumulativeBalance: "750.00",
+    });
+
+    await ensureTodayBalances();
+
+    const rows = await db
+      .select()
+      .from(accountBalanceHistory)
+      .where(eq(accountBalanceHistory.accountId, account.accountId));
+
+    rows.sort((a, b) => a.balanceDate.localeCompare(b.balanceDate));
+
+    expect(rows).toHaveLength(4);
+    expect(rows[0].balanceDate).toBe(threeDaysAgo);
+    expect(rows[1].balanceDate).toBe(twoDaysAgo);
+    expect(rows[2].balanceDate).toBe(yesterday);
+    expect(rows[3].balanceDate).toBe(today);
+
+    for (const row of rows.slice(1)) {
+      expect(row.dailyBalance).toBe("0.00");
+      expect(row.cumulativeBalance).toBe("750.00");
+    }
+  });
+
+  it("does not overwrite rows created by rebuildAccountBalance for intermediate dates", async () => {
+    const [account] = await db
+      .insert(accounts)
+      .values({ accountName: "No Overwrite Test", accountTypeId: 1 })
+      .returning({ accountId: accounts.accountId });
+    createdAccountIds.push(account.accountId);
+
+    await db.insert(accountBalanceHistory).values([
+      {
+        accountId: account.accountId,
+        balanceDate: twoDaysAgo,
+        dailyBalance: "40.00",
+        cumulativeBalance: "400.00",
+      },
+      {
+        accountId: account.accountId,
+        balanceDate: yesterday,
+        dailyBalance: "60.00",
+        cumulativeBalance: "460.00",
+      },
+    ]);
+
+    await ensureTodayBalances();
+
+    const rows = await db
+      .select()
+      .from(accountBalanceHistory)
+      .where(eq(accountBalanceHistory.accountId, account.accountId));
+
+    rows.sort((a, b) => a.balanceDate.localeCompare(b.balanceDate));
+
+    expect(rows).toHaveLength(3);
+
+    expect(rows[1].balanceDate).toBe(yesterday);
+    expect(rows[1].dailyBalance).toBe("60.00");
+    expect(rows[1].cumulativeBalance).toBe("460.00");
+
+    expect(rows[2].balanceDate).toBe(today);
+    expect(rows[2].dailyBalance).toBe("0.00");
+    expect(rows[2].cumulativeBalance).toBe("460.00");
   });
 
   it("defaults to 0 cumulative balance for accounts with no history", async () => {
