@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { format } from "date-fns";
+import { ChevronRight } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { TimeSeriesPoint } from "@/lib/queries/dashboard";
 import {
@@ -21,6 +23,7 @@ interface TimeSeriesChartProps {
   data: TimeSeriesPoint[];
   dataKey: "netWorth" | "totalAssets" | "totalLiabilities";
   color: string;
+  href?: string;
 }
 
 // Compact format for Y-axis ticks (e.g. "$300K")
@@ -51,6 +54,7 @@ export function TimeSeriesChart({
   data,
   dataKey,
   color,
+  href,
 }: TimeSeriesChartProps) {
   const chartConfig: ChartConfig = {
     [dataKey]: {
@@ -59,10 +63,21 @@ export function TimeSeriesChart({
     },
   };
 
-  return (
-    <Card>
+  const card = (
+    <Card
+      className={
+        href
+          ? "h-full cursor-pointer transition-shadow hover:ring-2 hover:ring-primary/40 hover:shadow-md"
+          : undefined
+      }
+    >
       <CardHeader>
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="flex items-center justify-between text-sm font-medium">
+          <span>{title}</span>
+          {href ? (
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover/chart-link:translate-x-0.5" />
+          ) : null}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
@@ -108,4 +123,14 @@ export function TimeSeriesChart({
       </CardContent>
     </Card>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="group/chart-link block">
+        {card}
+      </Link>
+    );
+  }
+
+  return card;
 }

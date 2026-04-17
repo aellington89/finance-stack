@@ -332,7 +332,15 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-16 — v0.1.1 (continued)
+### 2026-04-16 — v0.1.2 (in progress)
+
+**Make Net Worth KPI and chart obviously clickable (Issue #97)**
+- Net Worth headline KPI on the Summary page already linked to the drill-down, but the only affordance was `hover:opacity-80` and most users didn't realise it was clickable. Replaced with a visible `hover:bg-accent` background and a `ChevronRight` icon next to the label that nudges right on hover
+- Net Worth time-series chart in "Historical Trends" is now clickable too — the entire card navigates to `/dashboard/net-worth`, with a hover ring + shadow and a chevron in the title
+- Added an optional `href` prop to the `TimeSeriesChart` component so future drill-downs (Total Assets, Total Liabilities, gauge KPIs) can be wired up the same way once those pages exist
+- Total Assets and Total Liabilities charts are unchanged — left non-clickable on purpose so the affordance stays meaningful (only clickable things look clickable)
+
+### 2026-04-16 — v0.1.1
 
 **Fix past-dated transactions breaking net worth balances (Issue #95)**
 - When a transaction was submitted for a past date, the net worth time series showed incorrect values for that date: Total Liabilities dropped to 0 and Total Assets reflected only the account that received the transaction
@@ -351,7 +359,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Drill-down page layout: Drivers table is now full-width; Time Series and Waterfall sit side-by-side at a fixed height. Waterfall tooltip no longer double-lists the value row
 - Integration tests updated to assert the nested drivers shape, that child changes sum to parent change at every level, that category `% of Total` sums to ~100, and that decomposition points expose the new account-type fields
 
-### 2026-04-12 — v0.1.1 (continued)
+### 2026-04-12
 
 **Net Worth drill-down page**
 - Added `/dashboard/net-worth` drill-down page accessible by clicking the Net Worth KPI on the Summary page
