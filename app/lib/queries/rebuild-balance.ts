@@ -87,17 +87,29 @@ export async function ensureTodayBalances(): Promise<void> {
       (account_id, balance_date, daily_balance, cumulative_balance)
     SELECT
       a.account_id,
-      CURRENT_DATE,
+      d.gap_date,
       0,
       COALESCE(abh.cumulative_balance, 0)
     FROM accounts a
-    LEFT JOIN account_balance_history abh
-      ON abh.account_id = a.account_id
-      AND abh.balance_date = (
-        SELECT MAX(balance_date)
-        FROM account_balance_history
-        WHERE account_id = a.account_id
-      )
+    CROSS JOIN LATERAL (
+      SELECT generate_series(
+        COALESCE(
+          (SELECT MAX(balance_date) + INTERVAL '1 day'
+           FROM account_balance_history
+           WHERE account_id = a.account_id),
+          CURRENT_DATE
+        )::date,
+        CURRENT_DATE,
+        INTERVAL '1 day'
+      )::date AS gap_date
+    ) d
+    LEFT JOIN LATERAL (
+      SELECT cumulative_balance
+      FROM account_balance_history
+      WHERE account_id = a.account_id
+      ORDER BY balance_date DESC
+      LIMIT 1
+    ) abh ON true
     WHERE a.closed_date IS NULL
     ON CONFLICT (account_id, balance_date) DO NOTHING
   `);
