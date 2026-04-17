@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import {
   getCurrentNetWorth,
   getNetWorthTimeSeries,
@@ -93,10 +94,11 @@ export default async function DashboardSummaryPage({
             {/* Net Worth headline — links to drill-down */}
             <Link
               href="/dashboard/net-worth"
-              className="flex flex-col justify-center gap-1 shrink-0 lg:min-w-[280px] rounded-md transition-opacity hover:opacity-80"
+              className="group flex flex-col justify-center gap-1 shrink-0 lg:min-w-[280px] -mx-3 px-3 py-2 rounded-md transition-colors hover:bg-accent"
             >
-              <span className="text-sm font-medium text-muted-foreground">
+              <span className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
                 Net Worth
+                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
               <span className="text-5xl font-bold tabular-nums tracking-tight">
                 {formatCurrency(summary.netWorth)}
@@ -165,6 +167,7 @@ export default async function DashboardSummaryPage({
               data={timeSeries}
               dataKey="netWorth"
               color={COLORS.netWorth}
+              href="/dashboard/net-worth"
             />
             <TimeSeriesChart
               title="Total Assets"
