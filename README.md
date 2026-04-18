@@ -11,6 +11,10 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 | importer | File ingestion (polls `imports/` subfolders) | — |
 | Metabase | BI dashboards and analytics (`--profile bi`) | 3000 |
 
+## Security
+
+This application has **no authentication**. Anyone who can reach the HTTP port (3001) can read, create, edit, and delete all financial data. Only expose it on a trusted network — localhost, a VPN, Tailscale, or similar — never on the public internet. A full security and integrity model (auth, authorization, audit logging, deployment hardening, backup policy) is tracked in [#100](https://github.com/aellington89/finance-stack/issues/100).
+
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
@@ -244,7 +248,9 @@ finance-stack/
 │   │   │   └── summary-drilldown-tabs.tsx # Sub-navigation tabs for Summary drill-down pages
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
-│   │       ├── transaction-list.tsx      # Sortable transaction table (client component)
+│   │       ├── transaction-list.tsx      # Sortable transaction table with inline edit + delete (client component)
+│   │       ├── transaction-edit-row.tsx  # Inline row-edit form (client component, uses updateTransaction action)
+│   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
 │   │       └── transaction-filters.tsx   # Filter bar with date range, multi-select, amount
 │   └── lib/                              # Shared libraries
 │       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
@@ -332,7 +338,17 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-16 — v0.1.2 (in progress)
+### 2026-04-18 — v0.1.2 (in progress)
+
+**Editable Transactions table — inline row edit and single-row delete (Issue #99)**
+- Each row in the Transactions table now exposes a Pencil and a Trash icon. Pencil flips the row into an inline edit form covering Date, Description, Amount, Account, Related Account, Type, and Category — Save / Cancel buttons commit or discard. Trash opens a confirmation dialog showing the row's date, description, and amount before deletion.
+- Added `updateTransaction` and `deleteTransaction` server actions in `lib/actions/transaction.ts`. Both wrap the data change and `rebuildAccountBalance()` calls in a single `db.transaction` for atomicity. Update rebuilds balance history for the union of the old and new `account_id` / `related_account_id`. Delete additionally clears `account_balance_history` for any account that ends up with zero transactions, since the rebuild CTE relies on `MIN(transaction_date)` and would otherwise leave stale rows.
+- Added `transaction-edit-row.tsx` and `transaction-delete-dialog.tsx`. Both reuse the `useActionState` + `useFormStatus` + Sonner toast pattern from `entity-dialog.tsx`. The edit row uses a `colSpan` form layout so all editable fields (including Related Account, which has no column) are always present regardless of which columns the user has hidden.
+- Validation: both new actions reuse `transactionFormSchema` for full server-side re-validation. Foreign-key violations roll back via the wrapping transaction and surface a generic "Failed to update / delete" message rather than driver text.
+- No authentication was added — see new `## Security` section. Tracking issue [#100](https://github.com/aellington89/finance-stack/issues/100) covers the broader security and integrity model design.
+- Added 12 new integration tests covering update happy path, account change, transfer reroute, validation rollback, FK rollback, "transaction not found", invalid `transactionId` rejection, delete + balance rebuild, last-transaction cleanup, and transfer delete.
+
+### 2026-04-16
 
 **Make Net Worth KPI and chart obviously clickable (Issue #97)**
 - Net Worth headline KPI on the Summary page already linked to the drill-down, but the only affordance was `hover:opacity-80` and most users didn't realise it was clickable. Replaced with a visible `hover:bg-accent` background and a `ChevronRight` icon next to the label that nudges right on hover

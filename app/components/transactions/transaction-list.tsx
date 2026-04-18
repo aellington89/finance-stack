@@ -6,7 +6,9 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   ArrowUpDownIcon,
+  PencilIcon,
   Settings2Icon,
+  Trash2Icon,
 } from "lucide-react";
 
 import {
@@ -25,6 +27,8 @@ import {
 } from "@/components/ui/popover";
 import { amountColorClass } from "@/components/accounts/accounts-table";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
+import { TransactionEditRow } from "@/components/transactions/transaction-edit-row";
+import { TransactionDeleteDialog } from "@/components/transactions/transaction-delete-dialog";
 
 // ── Types ──
 
@@ -33,11 +37,20 @@ interface TransactionRow {
   transactionDescription: string | null;
   transactionDate: string | null;
   amount: string | null;
+  accountId: number | null;
+  relatedAccountId: number | null;
   accountName: string | null;
   relatedAccountName: string | null;
   transactionType: string | null;
+  transactionTypeId: number | null;
   transactionCategory: string | null;
+  transactionCategoryId: number | null;
   accountTypeCategory: string | null;
+}
+
+interface LookupOption {
+  id: number;
+  name: string;
 }
 
 export type ColumnKey =
@@ -194,6 +207,9 @@ export function TransactionList({
   page,
   pageSize,
   totalCount,
+  accounts,
+  types,
+  categories,
 }: {
   transactions: TransactionRow[];
   hasFilters?: boolean;
@@ -202,10 +218,30 @@ export function TransactionList({
   page: number;
   pageSize: number;
   totalCount: number;
+  accounts: LookupOption[];
+  types: LookupOption[];
+  categories: LookupOption[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TransactionRow | null>(
+    null
+  );
+
+  const requestEdit = useCallback(
+    (id: number) => {
+      if (editingId !== null && editingId !== id) {
+        const ok = window.confirm(
+          "Discard the changes you're currently editing?"
+        );
+        if (!ok) return;
+      }
+      setEditingId(id);
+    },
+    [editingId]
+  );
 
   // Column visibility — initialize with all, then load from localStorage on mount.
   // Two-step init avoids hydration mismatch: SSR and initial client render both
@@ -322,21 +358,102 @@ export function TransactionList({
                   className={col.headClassName}
                 />
               ))}
+              <TableHead className="w-[88px] text-right">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transactions.map((txn) => (
-              <TableRow key={txn.transactionId}>
-                {filteredColumns.map((col) => (
-                  <TableCell key={col.key} className={col.cellClassName}>
-                    {col.render(txn)}
+            {transactions.map((txn) => {
+              const id = txn.transactionId;
+              const isEditing = id !== null && editingId === id;
+              const canEdit =
+                id !== null &&
+                txn.accountId !== null &&
+                txn.transactionDate !== null &&
+                txn.amount !== null &&
+                txn.transactionTypeId !== null &&
+                txn.transactionCategoryId !== null &&
+                txn.transactionDescription !== null;
+
+              if (isEditing && canEdit) {
+                return (
+                  <TransactionEditRow
+                    key={id}
+                    transactionId={id}
+                    defaultDate={txn.transactionDate as string}
+                    defaultDescription={txn.transactionDescription as string}
+                    defaultAmount={txn.amount as string}
+                    defaultAccountId={txn.accountId as number}
+                    defaultRelatedAccountId={txn.relatedAccountId}
+                    defaultTransactionTypeId={txn.transactionTypeId as number}
+                    defaultTransactionCategoryId={
+                      txn.transactionCategoryId as number
+                    }
+                    accounts={accounts}
+                    types={types}
+                    categories={categories}
+                    columnSpan={filteredColumns.length + 1}
+                    onCancel={() => setEditingId(null)}
+                    onSaved={() => setEditingId(null)}
+                  />
+                );
+              }
+
+              return (
+                <TableRow key={id}>
+                  {filteredColumns.map((col) => (
+                    <TableCell key={col.key} className={col.cellClassName}>
+                      {col.render(txn)}
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Edit transaction"
+                        disabled={!canEdit}
+                        onClick={() => id !== null && requestEdit(id)}
+                      >
+                        <PencilIcon className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Delete transaction"
+                        disabled={!canEdit}
+                        onClick={() => setPendingDelete(txn)}
+                      >
+                        <Trash2Icon className="size-4" />
+                      </Button>
+                    </div>
                   </TableCell>
-                ))}
-              </TableRow>
-            ))}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}
+
+      {pendingDelete &&
+        pendingDelete.transactionId !== null &&
+        pendingDelete.transactionDate !== null &&
+        pendingDelete.amount !== null &&
+        pendingDelete.transactionDescription !== null && (
+          <TransactionDeleteDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setPendingDelete(null);
+            }}
+            transactionId={pendingDelete.transactionId}
+            date={pendingDelete.transactionDate}
+            description={pendingDelete.transactionDescription}
+            amount={pendingDelete.amount}
+          />
+        )}
 
       {/* Pagination controls */}
       <div className="flex items-center justify-between pt-4">
