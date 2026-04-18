@@ -117,6 +117,9 @@ export default async function DashboardTransactionsPage({
             page={filters.page ?? 1}
             pageSize={filters.pageSize ?? 25}
             totalCount={totalCount}
+            accounts={accounts}
+            types={types}
+            categories={categories}
           />
         </CardContent>
       </Card>
