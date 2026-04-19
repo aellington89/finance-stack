@@ -205,6 +205,7 @@ finance-stack/
 │   │       │   ├── layout.tsx            #     Layout with tab navigation
 │   │       │   ├── page.tsx              #     Summary tab (/)
 │   │       │   ├── net-worth/            #     Net Worth drill-down (from Summary KPI click)
+│   │       │   ├── assets/               #     Assets drill-down (allocation, performance, liquidity, trend)
 │   │       │   ├── accounting/           #     Personal Accounting tab
 │   │       │   ├── transactions/         #     Transactions tab (form + list)
 │   │       │   ├── accounts/             #     Accounts tab (visual balance sheet)
@@ -229,6 +230,8 @@ finance-stack/
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   ├── waterfall-chart.tsx       # Net worth waterfall analysis chart (Recharts)
 │   │   │   ├── trend-decomposition-chart.tsx # Multi-series trend decomposition by category/account (Recharts)
+│   │   │   ├── asset-allocation-chart.tsx # Treemap of assets by category → account type (Recharts)
+│   │   │   ├── assets-timeseries-chart.tsx # Stacked area chart of asset balances by category (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
 │   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
@@ -245,6 +248,8 @@ finance-stack/
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
 │   │   │   ├── date-range-filter.tsx     # URL-param-driven date range filter wrapper
 │   │   │   ├── net-worth-drivers-table.tsx # Expandable net worth drivers table (category → account type → account)
+│   │   │   ├── asset-performance-table.tsx # Expandable assets performance table (category → account type → account)
+│   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
 │   │   │   └── summary-drilldown-tabs.tsx # Sub-navigation tabs for Summary drill-down pages
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
@@ -262,6 +267,7 @@ finance-stack/
 │       ├── queries/work-expenses.ts     # Work expense queries (period totals, time series, category breakdown)
 │       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │       ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
+│       ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
 │       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │       ├── validations/transaction.ts    # Zod schema for transaction form validation
@@ -338,7 +344,18 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-18 — v0.1.2 (in progress)
+### 2026-04-19 — v0.1.2 (in progress)
+
+**Assets drilldown page + liquidity classification (Issue #102)**
+- New page at `/dashboard/assets` surfaces asset allocation (treemap by category → account type), period-over-period performance (hierarchical category → type → account table), liquidity breakdown, and a stacked time-series decomposition. Triggered from the Total Assets chart and the Assets-per-$-of-Debt gauge on the Summary tab, or via a new Assets tab in `SummaryDrilldownTabs`.
+- New `liquidity_class` column on `account_types` (default, seeded for all asset types) and `accounts` (nullable per-account override). Queries resolve the effective liquidity via `COALESCE(a.liquidity_class, at.liquidity_class)`. Liabilities remain NULL.
+- Account creation / edit form gains a Liquidity dropdown with "Inherit from type" default; when a type is selected, the form shows that type's default liquidity as helper text.
+- New query module `app/lib/queries/assets-drilldown.ts` mirrors the net-worth drill-down pattern with `getAssetAllocation`, `getAssetPerformance`, `getLiquidityBreakdown`, and `getAssetTrendDecomposition`.
+- Performance "return" is proxied by `cumulative_balance` delta (consistent with the net-worth drivers table) — there is no cost-basis schema in v1.
+- Fresh installs get the new columns via `init-db/schema.sql`; the `vitest-setup.ts` `ALTER TABLE … ADD COLUMN IF NOT EXISTS` guard covers already-running test DBs so no manual rebuild is needed.
+- Added integration tests for all four new queries and three new account-action cases covering the `liquidity_class` override lifecycle; added unit tests for the liquidity-tile projector and the signed-currency/percent/color helpers.
+
+### 2026-04-18
 
 **Editable Transactions table — inline row edit and single-row delete (Issue #99)**
 - Each row in the Transactions table now exposes a Pencil and a Trash icon. Pencil flips the row into an inline edit form covering Date, Description, Amount, Account, Related Account, Type, and Category — Save / Cancel buttons commit or discard. Trash opens a confirmation dialog showing the row's date, description, and amount before deletion.

@@ -15,28 +15,29 @@
 
 -- --------------------------------------------
 -- 1. account_types (19 rows)
+--    liquidity_class is per-type default; liabilities intentionally NULL.
 -- --------------------------------------------
-INSERT INTO account_types (account_type_id, account_type, account_type_category_id)
+INSERT INTO account_types (account_type_id, account_type, account_type_category_id, liquidity_class)
 OVERRIDING SYSTEM VALUE VALUES
-    (1,  'Cash & Cash Equivalent',      1),
-    (2,  'Checking Account',            1),
-    (3,  'Savings Account',             1),
-    (4,  'Accounts Receivable',         1),
-    (5,  'Short-term Investment',       1),
-    (6,  'Escrow Account',              2),
-    (7,  'Security Deposit',            2),
-    (8,  'Earmarked',                   2),
-    (9,  'Certificate of Deposit',      4),
-    (10, 'Real Estate',                 3),
-    (11, 'Vehicle',                     3),
-    (12, 'Stock, Bond, or Mutual Fund', 4),
-    (13, 'Retirement Account',          4),
-    (14, 'Cryptocurrency',              4),
-    (15, 'Credit Card',                 5),
-    (16, 'Short-term Loan',             6),
-    (17, 'Mortgage',                    6),
-    (18, 'Student Loan',                6),
-    (19, 'Auto Loan',                   6)
+    (1,  'Cash & Cash Equivalent',      1, 'liquid'),
+    (2,  'Checking Account',            1, 'liquid'),
+    (3,  'Savings Account',             1, 'liquid'),
+    (4,  'Accounts Receivable',         1, 'liquid'),
+    (5,  'Short-term Investment',       1, 'semi_liquid'),
+    (6,  'Escrow Account',              2, 'restricted'),
+    (7,  'Security Deposit',            2, 'restricted'),
+    (8,  'Earmarked',                   2, 'restricted'),
+    (9,  'Certificate of Deposit',      4, 'semi_liquid'),
+    (10, 'Real Estate',                 3, 'illiquid'),
+    (11, 'Vehicle',                     3, 'illiquid'),
+    (12, 'Stock, Bond, or Mutual Fund', 4, 'semi_liquid'),
+    (13, 'Retirement Account',          4, 'illiquid'),
+    (14, 'Cryptocurrency',              4, 'semi_liquid'),
+    (15, 'Credit Card',                 5, NULL),
+    (16, 'Short-term Loan',             6, NULL),
+    (17, 'Mortgage',                    6, NULL),
+    (18, 'Student Loan',                6, NULL),
+    (19, 'Auto Loan',                   6, NULL)
 ON CONFLICT (account_type_id) DO NOTHING;
 
 -- --------------------------------------------

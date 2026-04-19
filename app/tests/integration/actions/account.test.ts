@@ -90,6 +90,47 @@ describe("createAccount", () => {
     expect(result.success).toBe(false);
     expect(result.errors).toHaveProperty("accountTypeId");
   });
+
+  it("persists liquidityClass when explicitly provided (override)", async () => {
+    const fd = makeFormData({
+      accountName: "Liq Override",
+      accountTypeId: "1",
+      liquidityClass: "illiquid",
+    });
+    const result = await createAccount(emptyState, fd);
+    expect(result.success).toBe(true);
+
+    const rows = await db
+      .select({
+        accountId: accounts.accountId,
+        liquidityClass: accounts.liquidityClass,
+      })
+      .from(accounts)
+      .where(eq(accounts.accountName, "Liq Override"));
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0].liquidityClass).toBe("illiquid");
+    createdAccountIds.push(...rows.map((r) => r.accountId));
+  });
+
+  it("stores null when liquidityClass is omitted (inherits from type)", async () => {
+    const fd = makeFormData({
+      accountName: "Liq Inherit",
+      accountTypeId: "1",
+    });
+    const result = await createAccount(emptyState, fd);
+    expect(result.success).toBe(true);
+
+    const rows = await db
+      .select({
+        accountId: accounts.accountId,
+        liquidityClass: accounts.liquidityClass,
+      })
+      .from(accounts)
+      .where(eq(accounts.accountName, "Liq Inherit"));
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0].liquidityClass).toBeNull();
+    createdAccountIds.push(...rows.map((r) => r.accountId));
+  });
 });
 
 // ─── updateAccount ────────────────────────────────────────────────────────────
@@ -145,6 +186,57 @@ describe("updateAccount", () => {
 
     expect(result.success).toBe(false);
     expect(result.errors).toHaveProperty("accountName");
+  });
+
+  it("round-trips liquidityClass (null → set → change → null)", async () => {
+    const readLiquidity = async () => {
+      const rows = await db
+        .select({ liquidityClass: accounts.liquidityClass })
+        .from(accounts)
+        .where(eq(accounts.accountId, testAccountId));
+      return rows[0]?.liquidityClass ?? null;
+    };
+
+    // Initial state: null (inherit)
+    expect(await readLiquidity()).toBeNull();
+
+    // Set to 'illiquid'
+    let result = await updateAccount(
+      emptyState,
+      makeFormData({
+        accountId: String(testAccountId),
+        accountName: "Update Test",
+        accountTypeId: "1",
+        liquidityClass: "illiquid",
+      })
+    );
+    expect(result.success).toBe(true);
+    expect(await readLiquidity()).toBe("illiquid");
+
+    // Change to 'semi_liquid'
+    result = await updateAccount(
+      emptyState,
+      makeFormData({
+        accountId: String(testAccountId),
+        accountName: "Update Test",
+        accountTypeId: "1",
+        liquidityClass: "semi_liquid",
+      })
+    );
+    expect(result.success).toBe(true);
+    expect(await readLiquidity()).toBe("semi_liquid");
+
+    // Clear back to null (omitted → coerced to null by action)
+    result = await updateAccount(
+      emptyState,
+      makeFormData({
+        accountId: String(testAccountId),
+        accountName: "Update Test",
+        accountTypeId: "1",
+      })
+    );
+    expect(result.success).toBe(true);
+    expect(await readLiquidity()).toBeNull();
   });
 });
 

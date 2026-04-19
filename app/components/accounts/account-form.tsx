@@ -19,6 +19,13 @@ import {
   ComboboxCollection,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { createAccount, updateAccount } from "@/lib/actions/account";
 
@@ -39,6 +46,10 @@ interface LookupOption {
   name: string;
 }
 
+interface AccountTypeOption extends LookupOption {
+  liquidityClass: string | null;
+}
+
 interface AccountData {
   accountId: number;
   accountName: string;
@@ -46,13 +57,30 @@ interface AccountData {
   accountIdentifier: string | null;
   openedDate: string | null;
   closedDate: string | null;
+  liquidityClass: string | null;
 }
 
 interface AccountFormProps {
-  accountTypes: LookupOption[];
+  accountTypes: AccountTypeOption[];
   account?: AccountData;
   defaultTypeId?: number;
 }
+
+const LIQUIDITY_LABELS: Record<string, string> = {
+  liquid: "Liquid",
+  semi_liquid: "Semi-liquid",
+  illiquid: "Illiquid",
+  restricted: "Restricted",
+};
+
+const LIQUIDITY_OPTIONS = [
+  { value: "liquid", label: "Liquid" },
+  { value: "semi_liquid", label: "Semi-liquid" },
+  { value: "illiquid", label: "Illiquid" },
+  { value: "restricted", label: "Restricted" },
+] as const;
+
+const INHERIT_SENTINEL = "inherit";
 
 function SubmitButton({ isEdit }: { isEdit: boolean }) {
   const { pending } = useFormStatus();
@@ -143,6 +171,14 @@ export function AccountForm({ accountTypes, account, defaultTypeId }: AccountFor
   const [openedDate, setOpenedDate] = useState(account?.openedDate ?? "");
   const [closedDate, setClosedDate] = useState(account?.closedDate ?? "");
   const [initialBalance, setInitialBalance] = useState("");
+  const [liquidityClass, setLiquidityClass] = useState<string>(
+    account?.liquidityClass ?? INHERIT_SENTINEL
+  );
+
+  const selectedType = accountTypes.find(
+    (t) => String(t.id) === accountTypeId
+  );
+  const typeDefaultLiquidity = selectedType?.liquidityClass ?? null;
 
   useEffect(() => {
     if (state.message) {
@@ -188,6 +224,41 @@ export function AccountForm({ accountTypes, account, defaultTypeId }: AccountFor
         required
         error={state.errors.accountTypeId}
       />
+
+      <div className="space-y-2">
+        <Label htmlFor="liquidityClass">Liquidity</Label>
+        <input
+          type="hidden"
+          name="liquidityClass"
+          value={liquidityClass === INHERIT_SENTINEL ? "" : liquidityClass}
+        />
+        <Select
+          value={liquidityClass}
+          onValueChange={(val) => setLiquidityClass(val ?? INHERIT_SENTINEL)}
+        >
+          <SelectTrigger id="liquidityClass" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={INHERIT_SENTINEL}>Inherit from type</SelectItem>
+            {LIQUIDITY_OPTIONS.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {typeDefaultLiquidity && (
+          <p className="text-xs text-muted-foreground">
+            Default for this type: {LIQUIDITY_LABELS[typeDefaultLiquidity] ?? typeDefaultLiquidity}
+          </p>
+        )}
+        {state.errors.liquidityClass && (
+          <p className="text-sm text-destructive">
+            {state.errors.liquidityClass[0]}
+          </p>
+        )}
+      </div>
 
       <div className="space-y-2">
         <Label htmlFor="accountIdentifier">Account Identifier</Label>

@@ -27,7 +27,10 @@ ALTER TABLE public.account_type_categories ALTER COLUMN account_type_category_id
 CREATE TABLE IF NOT EXISTS public.account_types (
     account_type_id integer NOT NULL,
     account_type text NOT NULL,
-    account_type_category_id integer NOT NULL
+    account_type_category_id integer NOT NULL,
+    liquidity_class text,
+    CONSTRAINT account_types_liquidity_class_check
+        CHECK (liquidity_class IN ('liquid','semi_liquid','illiquid','restricted'))
 );
 
 ALTER TABLE public.account_types ALTER COLUMN account_type_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -77,7 +80,10 @@ CREATE TABLE IF NOT EXISTS public.accounts (
     account_type_id integer NOT NULL,
     account_identifier text,
     closed_date date,
-    opened_date date
+    opened_date date,
+    liquidity_class text,
+    CONSTRAINT accounts_liquidity_class_check
+        CHECK (liquidity_class IN ('liquid','semi_liquid','illiquid','restricted'))
 );
 
 COMMENT ON TABLE public.accounts IS 'All accounts that contribute transactions.';

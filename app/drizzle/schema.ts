@@ -46,6 +46,7 @@ export const accounts = pgTable("accounts", {
 	accountIdentifier: text("account_identifier"),
 	closedDate: date("closed_date"),
 	openedDate: date("opened_date"),
+	liquidityClass: text("liquidity_class"),
 }, (table) => [
 	foreignKey({
 			columns: [table.accountTypeId],
@@ -58,6 +59,7 @@ export const accountTypes = pgTable("account_types", {
 	accountTypeId: integer("account_type_id").primaryKey().generatedAlwaysAsIdentity({ name: "account_types_account_type_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
 	accountType: text("account_type").notNull(),
 	accountTypeCategoryId: integer("account_type_category_id").notNull(),
+	liquidityClass: text("liquidity_class"),
 }, (table) => [
 	foreignKey({
 			columns: [table.accountTypeCategoryId],

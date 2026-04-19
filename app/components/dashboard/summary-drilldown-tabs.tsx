@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const drilldownTabs = [
   { value: "overview", label: "Overview", href: "/dashboard" },
   { value: "net-worth", label: "Net Worth", href: "/dashboard/net-worth" },
+  { value: "assets", label: "Assets", href: "/dashboard/assets" },
 ] as const;
 
 function getActiveDrilldown(pathname: string): string {

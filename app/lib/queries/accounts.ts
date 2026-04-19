@@ -55,14 +55,19 @@ export async function getAccountBalances(): Promise<AccountBalanceRow[]> {
   }));
 }
 
-export async function getAccountTypes(): Promise<
-  { id: number; name: string }[]
-> {
+export interface AccountTypeOption {
+  id: number;
+  name: string;
+  liquidityClass: string | null;
+}
+
+export async function getAccountTypes(): Promise<AccountTypeOption[]> {
   const rows = await db
     .select({
       id: accountTypes.accountTypeId,
       type: accountTypes.accountType,
       category: accountTypeCategories.accountTypeCategory,
+      liquidityClass: accountTypes.liquidityClass,
     })
     .from(accountTypes)
     .innerJoin(
@@ -77,7 +82,11 @@ export async function getAccountTypes(): Promise<
       accountTypes.accountType
     );
 
-  return rows.map((r) => ({ id: r.id, name: `${r.type} (${r.category})` }));
+  return rows.map((r) => ({
+    id: r.id,
+    name: `${r.type} (${r.category})`,
+    liquidityClass: r.liquidityClass,
+  }));
 }
 
 export interface AccountRow {
@@ -89,6 +98,7 @@ export interface AccountRow {
   accountIdentifier: string | null;
   openedDate: string | null;
   closedDate: string | null;
+  liquidityClass: string | null;
 }
 
 export async function getAccountById(
@@ -104,6 +114,7 @@ export async function getAccountById(
       accountIdentifier: accounts.accountIdentifier,
       openedDate: accounts.openedDate,
       closedDate: accounts.closedDate,
+      liquidityClass: accounts.liquidityClass,
     })
     .from(accounts)
     .innerJoin(accountTypes, eq(accounts.accountTypeId, accountTypes.accountTypeId))
