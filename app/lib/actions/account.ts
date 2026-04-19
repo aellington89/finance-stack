@@ -32,6 +32,8 @@ export async function createAccount(
     openedDate: (formData.get("openedDate") as string) || undefined,
     initialBalance:
       (formData.get("initialBalance") as string) || undefined,
+    liquidityClass:
+      (formData.get("liquidityClass") as string) || null,
   };
 
   const result = accountFormSchema.safeParse(raw);
@@ -51,6 +53,7 @@ export async function createAccount(
           accountTypeId: Number(data.accountTypeId),
           accountIdentifier: data.accountIdentifier || null,
           openedDate: data.openedDate || null,
+          liquidityClass: data.liquidityClass ?? null,
         })
         .returning({ accountId: accounts.accountId });
 
@@ -105,6 +108,8 @@ export async function updateAccount(
       (formData.get("accountIdentifier") as string) || undefined,
     openedDate: (formData.get("openedDate") as string) || undefined,
     closedDate: (formData.get("closedDate") as string) || undefined,
+    liquidityClass:
+      (formData.get("liquidityClass") as string) || null,
   };
 
   const result = accountFormSchema.safeParse(raw);
@@ -124,6 +129,7 @@ export async function updateAccount(
         accountIdentifier: data.accountIdentifier || null,
         openedDate: data.openedDate || null,
         closedDate: data.closedDate || null,
+        liquidityClass: data.liquidityClass ?? null,
       })
       .where(eq(accounts.accountId, accountId));
   } catch (error) {

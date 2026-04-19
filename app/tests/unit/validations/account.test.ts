@@ -116,4 +116,53 @@ describe("accountFormSchema", () => {
       expect(result.data.openedDate).toBeUndefined();
     }
   });
+
+  it("accepts each valid liquidity class", () => {
+    for (const klass of [
+      "liquid",
+      "semi_liquid",
+      "illiquid",
+      "restricted",
+    ] as const) {
+      const result = accountFormSchema.safeParse({
+        accountName: "Test",
+        accountTypeId: "1",
+        liquidityClass: klass,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("accepts null liquidityClass (inherit from type)", () => {
+    const result = accountFormSchema.safeParse({
+      accountName: "Test",
+      accountTypeId: "1",
+      liquidityClass: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts missing liquidityClass (undefined)", () => {
+    const result = accountFormSchema.safeParse({
+      accountName: "Test",
+      accountTypeId: "1",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.liquidityClass).toBeUndefined();
+    }
+  });
+
+  it("rejects arbitrary liquidityClass strings", () => {
+    const result = accountFormSchema.safeParse({
+      accountName: "Test",
+      accountTypeId: "1",
+      liquidityClass: "very_liquid",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fields = result.error.issues.map((i) => String(i.path[0]));
+      expect(fields).toContain("liquidityClass");
+    }
+  });
 });

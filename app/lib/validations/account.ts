@@ -1,5 +1,14 @@
 import { z } from "zod/v4";
 
+export const LIQUIDITY_CLASSES = [
+  "liquid",
+  "semi_liquid",
+  "illiquid",
+  "restricted",
+] as const;
+
+export type LiquidityClass = (typeof LIQUIDITY_CLASSES)[number];
+
 export const accountFormSchema = z.object({
   accountName: z
     .string()
@@ -30,6 +39,7 @@ export const accountFormSchema = z.object({
       "Enter a valid dollar amount (e.g. 123.45 or -50.00)"
     )
     .optional(),
+  liquidityClass: z.enum(LIQUIDITY_CLASSES).nullable().optional(),
 });
 
 export type AccountFormData = z.infer<typeof accountFormSchema>;

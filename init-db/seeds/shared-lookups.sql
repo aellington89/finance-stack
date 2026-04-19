@@ -51,3 +51,32 @@ SELECT setval(
     pg_get_serial_sequence('transaction_types', 'transaction_type_id'),
     GREATEST((SELECT MAX(transaction_type_id) FROM transaction_types), 1)
 );
+
+-- ==============================================
+-- account_types.liquidity_class defaults
+--
+-- This file does not seed account_types rows themselves (those are
+-- user-created in Finances and fixture-seeded in Finances_Test), but
+-- when rows with these known account_type names exist, fill in the
+-- liquidity_class default. Idempotent: WHERE liquidity_class IS NULL
+-- so user overrides are never clobbered. Liabilities intentionally
+-- remain NULL.
+-- ==============================================
+
+UPDATE account_types SET liquidity_class = 'liquid'
+    WHERE liquidity_class IS NULL AND account_type IN (
+        'Cash & Cash Equivalent','Accounts Receivable',
+        'Checking Account','Savings Account');
+
+UPDATE account_types SET liquidity_class = 'semi_liquid'
+    WHERE liquidity_class IS NULL AND account_type IN (
+        'Short-term Investment','Stock, Bond, or Mutual Fund',
+        'Cryptocurrency','Certificate of Deposit');
+
+UPDATE account_types SET liquidity_class = 'illiquid'
+    WHERE liquidity_class IS NULL AND account_type IN (
+        'Real Estate','Vehicle','Retirement Account');
+
+UPDATE account_types SET liquidity_class = 'restricted'
+    WHERE liquidity_class IS NULL AND account_type IN (
+        'Escrow Account','Security Deposit','Earmarked');
