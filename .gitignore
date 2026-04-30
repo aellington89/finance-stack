@@ -2,6 +2,15 @@
 /.vs
 /.claude
 
+# Root-level dependencies
+node_modules/
+
+# Python artifacts (importer service)
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
 # Credentials — never commit
 .env
 
