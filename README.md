@@ -153,7 +153,7 @@ After this completes, `Finances` contains only the shared lookups and is ready f
 |---|---|
 | `shared-lookups.sql` | 6 account type categories + 12 transaction types (runs against both DBs) |
 | `finances-test-mock-data.sql` | 19 account types, 27 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
-| `rebuild-balance-history.sql` | Mirrors `scripts/UpdateAccountBalanceHistory.sql`, runs against `Finances_Test` at seed time |
+| `rebuild-balance-history.sql` | Mirrors `scripts/update-account-balance-history.sql`, runs against `Finances_Test` at seed time |
 
 ### Refreshing Finances_Test (dates age out, or schema changed)
 
@@ -232,7 +232,7 @@ finance-stack/
 │   │   │   ├── work-expenses-chart.tsx   # Grouped bar chart for work expenses vs reimbursements over time
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   ├── waterfall-chart.tsx       # Net worth waterfall analysis chart (Recharts)
-│   │   │   ├── trend-decomposition-chart.tsx # Multi-series trend decomposition by category/account (Recharts)
+│   │   │   ├── net-worth-timeseries-chart.tsx # Multi-series decomposition chart for net-worth drill-down (Recharts)
 │   │   │   ├── asset-allocation-chart.tsx # Treemap of assets by category → account type (Recharts)
 │   │   │   ├── assets-timeseries-chart.tsx # Stacked area chart of asset balances by category (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
@@ -284,7 +284,8 @@ finance-stack/
 │   │   ├── unit/                         # Unit tests (no DB required)
 │   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
-│   │   │   └── lib/                      #   Library utility tests (cn, formatters)
+│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf)
+│   │   │   └── lib/                      #   Library utility tests (cn, formatters, forms)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown
@@ -304,7 +305,7 @@ finance-stack/
 │       ├── finances-test-mock-data.sql   # account_types, transaction_categories, accounts, ~400 txns (Finances_Test only)
 │       └── rebuild-balance-history.sql   # Balance history rebuild for Finances_Test post-seed
 └── scripts/
-    └── UpdateAccountBalanceHistory.sql   # Balance history rebuild script (manual / --profile init)
+    └── update-account-balance-history.sql   # Balance history rebuild script (manual / --profile init)
 ```
 
 ## Running Tests
