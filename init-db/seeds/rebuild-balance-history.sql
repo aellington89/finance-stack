@@ -2,10 +2,10 @@
 -- Rebuilds the account_balance_history table with daily cumulative
 -- balances for all open accounts through the current date.
 --
--- This is a verbatim copy of scripts/UpdateAccountBalanceHistory.sql,
+-- This is a verbatim copy of scripts/update-account-balance-history.sql,
 -- kept under init-db/seeds/ so init-db/01-create-databases.sh can invoke
 -- it without mounting a second volume. The canonical file at
--- scripts/UpdateAccountBalanceHistory.sql is still used by the
+-- scripts/update-account-balance-history.sql is still used by the
 -- `docker compose --profile init run --rm init-script` flow.
 -- ============================================
 

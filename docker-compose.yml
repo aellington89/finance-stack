@@ -50,7 +50,7 @@ services:
       com.finance-stack.component: "database"
       com.finance-stack.description: "Primary PostgreSQL database"
 
-  # One-shot job: runs UpdateAccountBalanceHistory.sql after postgres is healthy,
+  # One-shot job: runs update-account-balance-history.sql after postgres is healthy,
   # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
   # Behind the "init" profile — only runs when explicitly requested:
   #   docker compose --profile init run --rm init-script
@@ -78,8 +78,8 @@ services:
         echo 'Database not ready, retrying in 2s...';
         sleep 2;
       done;
-      echo 'Running UpdateAccountBalanceHistory.sql...';
-      psql -f /scripts/UpdateAccountBalanceHistory.sql;
+      echo 'Running update-account-balance-history.sql...';
+      psql -f /scripts/update-account-balance-history.sql;
       echo 'Done.';
       "
     deploy:

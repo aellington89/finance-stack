@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { db } from "@/lib/db";
 import { accounts, accountBalanceHistory } from "@/drizzle/schema";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import {
   getAssetAllocation,
   getAssetPerformance,

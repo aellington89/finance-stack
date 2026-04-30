@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 /**
  * Rebuilds account_balance_history rows for a single account.
  *
- * Scoped version of scripts/UpdateAccountBalanceHistory.sql.
+ * Scoped version of scripts/update-account-balance-history.sql.
  * Generates a date series from the account's earliest transaction
  * through today, aggregates daily balances, computes cumulative
  * totals, and upserts into account_balance_history.

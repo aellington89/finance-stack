@@ -1,6 +1,25 @@
 # Version control
 .git
 
+# Root-level dependencies
+node_modules/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Importer service — user-specific files
+imports/
+importer/parsers/
+
+# IDE
+.vscode/
+
+# TypeScript build artifacts
+app/tsconfig.tsbuildinfo
+app/next-env.d.ts
+
 # CI / GitHub
 .github
 
