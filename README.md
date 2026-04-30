@@ -193,10 +193,13 @@ finance-stack/
 │   ├── README.md                         # App-specific development notes and scripts reference
 │   ├── package.json                      # Node.js dependencies and scripts
 │   ├── next.config.ts                    # Next.js config (standalone output for Docker)
+│   ├── drizzle.config.ts                 # Drizzle ORM config (connection + schema path for db:pull / db:migrate)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
 │   ├── app/                              # App Router — pages and layouts
 │   │   ├── api/health/route.ts           # Health check endpoint for Docker
 │   │   ├── layout.tsx                    # Root layout (fonts, ThemeProvider, Toaster)
+│   │   ├── globals.css                   # Global styles and Tailwind CSS theme variables
+│   │   ├── favicon.ico
 │   │   ├── (landing)/                    # Route group — no sidebar
 │   │   │   └── page.tsx                  #   Landing page (/)
 │   │   └── (app)/                        # Route group — sidebar navigation shell
@@ -204,6 +207,7 @@ finance-stack/
 │   │       ├── error.tsx                 #   Error boundary — catches unhandled errors with retry UI
 │   │       ├── dashboard/                #   Tabbed dashboard with 5 tabs + drill-downs:
 │   │       │   ├── layout.tsx            #     Layout with tab navigation
+│   │       │   ├── dashboard-tabs.tsx    #     Tab navigation component
 │   │       │   ├── page.tsx              #     Summary tab (/)
 │   │       │   ├── net-worth/            #     Net Worth drill-down (from Summary KPI click)
 │   │       │   ├── assets/               #     Assets drill-down (allocation, performance, liquidity, trend)
@@ -224,8 +228,12 @@ finance-stack/
 │   │   └── use-mobile.ts                 # Mobile breakpoint detection hook (used by sidebar)
 │   ├── components/
 │   │   ├── app-sidebar.tsx               # Global sidebar navigation (Dashboard, Accounts, Settings)
-│   │   ├── ui/                           # shadcn/ui components (Button, Card, Table, Dialog, Sidebar, etc.)
-│   │   │   └── date-range-picker.tsx     # Date range picker with quick select + manual input
+│   │   ├── ui/                           # shadcn/ui primitives + custom wrappers
+│   │   │   ├── combobox.tsx              # Searchable select dropdown (custom)
+│   │   │   ├── currency-input.tsx        # Numeric currency entry with symbol prefix (custom)
+│   │   │   ├── date-picker.tsx           # Single-date calendar popover (custom)
+│   │   │   ├── date-range-picker.tsx     # Date range with quick-select presets + manual input (custom)
+│   │   │   └── input-group.tsx           # Input with inline prefix/suffix slot (custom)
 │   │   ├── charts/                       # Chart components (client components)
 │   │   │   ├── accounting-chart.tsx      # Time-series area chart for income/expenses/investments (Chart.js)
 │   │   │   ├── expenses-category-chart.tsx # Donut chart for expense category breakdown (Chart.js)
@@ -260,26 +268,26 @@ finance-stack/
 │   │       ├── transaction-edit-row.tsx  # Inline row-edit form (client component, uses updateTransaction action)
 │   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
 │   │       └── transaction-filters.tsx   # Filter bar with date range, multi-select, amount
-│   └── lib/                              # Shared libraries
-│       ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
-│       ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
-│       ├── actions/transaction.ts        # Server action for transaction submission
-│       ├── actions/account.ts           # Server actions for account create, update, delete
-│       ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
-│       ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
-│       ├── queries/work-expenses.ts     # Work expense queries (period totals, time series, category breakdown)
-│       ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
-│       ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
-│       ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
-│       ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
-│       ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
-│       ├── validations/transaction.ts    # Zod schema for transaction form validation
-│       ├── validations/account.ts       # Zod schema for account form validation
-│       ├── actions/categories.ts        # Server actions for category/type create, update, delete
-│       ├── queries/categories.ts        # Queries for all four reference-data tables
-│       ├── forms/transaction.ts          # Post-submit state helper (persists Date, Account, Type across submits)
-│       ├── validations/categories.ts    # Zod schemas for category/type forms
-│       └── utils.ts                      # Utility helpers (cn() class merge)
+│   ├── lib/                              # Shared libraries
+│   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
+│   │   ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
+│   │   ├── actions/transaction.ts        # Server action for transaction submission
+│   │   ├── actions/account.ts            # Server actions for account create, update, delete
+│   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
+│   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
+│   │   ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
+│   │   ├── queries/work-expenses.ts      # Work expense queries (period totals, time series, category breakdown)
+│   │   ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
+│   │   ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
+│   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
+│   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
+│   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
+│   │   ├── queries/categories.ts         # Queries for all four reference-data tables
+│   │   ├── forms/transaction.ts          # Post-submit state helper (persists Date, Account, Type across submits)
+│   │   ├── validations/account.ts        # Zod schema for account form validation
+│   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
+│   │   ├── validations/categories.ts     # Zod schemas for category/type forms
+│   │   └── utils.ts                      # Utility helpers (cn() class merge)
 │   ├── tests/                            # Vitest test suite
 │   │   ├── unit/                         # Unit tests (no DB required)
 │   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
