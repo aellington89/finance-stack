@@ -361,7 +361,14 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-04-19 — v0.1.2 (in progress)
+### 2026-05-01 — v0.1.2 (in progress)
+
+**Related Account column on the Transactions table (Issue #105)**
+- Added a "Related Account" column to the Transactions list at `/dashboard/transactions`, rendering `related_account_name` from `v_transactions_full`. Most rows are blank — the field is only populated for transfers between accounts.
+- Column is sortable (registered in `SORTABLE_COLUMNS` in `lib/queries/transactions.ts` as `relatedAccountName`) and respects the existing localStorage-backed column visibility toggle. Existing users with a saved column preference will need to enable it once via the Columns popover; new users see it by default.
+- No schema, migration, query, validation, or form changes — the data was already exposed in the view, the Drizzle schema, and the inline edit row; only the table UI was missing the column.
+
+### 2026-04-19
 
 **Assets drilldown page + liquidity classification (Issue #102)**
 - New page at `/dashboard/assets` surfaces asset allocation (treemap by category → account type), period-over-period performance (hierarchical category → type → account table), liquidity breakdown, and a stacked time-series decomposition. Triggered from the Total Assets chart and the Assets-per-$-of-Debt gauge on the Summary tab, or via a new Assets tab in `SummaryDrilldownTabs`.

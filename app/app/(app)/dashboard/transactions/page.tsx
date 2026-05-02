@@ -44,7 +44,7 @@ function parseSearchParams(
 
   const VALID_SORT_COLUMNS: SortableColumn[] = [
     "transactionDate", "transactionDescription", "amount",
-    "accountName", "transactionType", "transactionCategory",
+    "accountName", "relatedAccountName", "transactionType", "transactionCategory",
   ];
   const VALID_SORT_DIRS: SortDirection[] = ["asc", "desc"];
 
