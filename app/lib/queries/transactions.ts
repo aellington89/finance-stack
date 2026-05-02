@@ -7,6 +7,7 @@ export type SortableColumn =
   | "transactionDescription"
   | "amount"
   | "accountName"
+  | "relatedAccountName"
   | "transactionType"
   | "transactionCategory";
 
@@ -17,6 +18,7 @@ const SORTABLE_COLUMNS: Record<SortableColumn, Column> = {
   transactionDescription: vTransactionsFull.transactionDescription,
   amount: vTransactionsFull.amount,
   accountName: vTransactionsFull.accountName,
+  relatedAccountName: vTransactionsFull.relatedAccountName,
   transactionType: vTransactionsFull.transactionType,
   transactionCategory: vTransactionsFull.transactionCategory,
 };

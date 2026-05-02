@@ -58,6 +58,7 @@ export type ColumnKey =
   | "description"
   | "amount"
   | "account"
+  | "relatedAccount"
   | "type"
   | "category";
 
@@ -118,6 +119,12 @@ const COLUMNS: ColumnDef[] = [
     label: "Account",
     sortColumn: "accountName",
     render: (txn) => txn.accountName,
+  },
+  {
+    key: "relatedAccount",
+    label: "Related Account",
+    sortColumn: "relatedAccountName",
+    render: (txn) => txn.relatedAccountName,
   },
   {
     key: "type",
