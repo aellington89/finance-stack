@@ -27,6 +27,9 @@ const formatCurrency = (n: number) =>
     maximumFractionDigits: 2,
   }).format(n);
 
+const formatPctOfPayment = (numerator: number, payments: number) =>
+  payments === 0 ? "—" : `${((numerator / payments) * 100).toFixed(1)}%`;
+
 interface DebtServiceSummaryProps {
   data: DebtServiceData;
 }
@@ -128,7 +131,9 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                     <TableHead>Name</TableHead>
                     <TableHead className="text-right">Payments</TableHead>
                     <TableHead className="text-right">Interest</TableHead>
+                    <TableHead className="text-right">% of Payment</TableHead>
                     <TableHead className="text-right">Principal</TableHead>
+                    <TableHead className="text-right">% of Payment</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -156,8 +161,20 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                           <TableCell className="text-right tabular-nums">
                             {formatCurrency(Math.abs(cat.interestAccrued))}
                           </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {formatPctOfPayment(
+                              Math.abs(cat.interestAccrued),
+                              cat.totalPayments
+                            )}
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {formatCurrency(cat.principalPaid)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {formatPctOfPayment(
+                              cat.principalPaid,
+                              cat.totalPayments
+                            )}
                           </TableCell>
                         </TableRow>
                         {catOpen &&
@@ -189,8 +206,20 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                                       Math.abs(type.interestAccrued)
                                     )}
                                   </TableCell>
+                                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                                    {formatPctOfPayment(
+                                      Math.abs(type.interestAccrued),
+                                      type.totalPayments
+                                    )}
+                                  </TableCell>
                                   <TableCell className="text-right tabular-nums">
                                     {formatCurrency(type.principalPaid)}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                                    {formatPctOfPayment(
+                                      type.principalPaid,
+                                      type.totalPayments
+                                    )}
                                   </TableCell>
                                 </TableRow>
                                 {typeOpen &&
@@ -210,8 +239,20 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                                           Math.abs(acc.interestAccrued)
                                         )}
                                       </TableCell>
+                                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                                        {formatPctOfPayment(
+                                          Math.abs(acc.interestAccrued),
+                                          acc.totalPayments
+                                        )}
+                                      </TableCell>
                                       <TableCell className="text-right tabular-nums">
                                         {formatCurrency(acc.principalPaid)}
+                                      </TableCell>
+                                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                                        {formatPctOfPayment(
+                                          acc.principalPaid,
+                                          acc.totalPayments
+                                        )}
                                       </TableCell>
                                     </TableRow>
                                   ))}
@@ -231,8 +272,17 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                     <TableCell className="text-right font-bold tabular-nums">
                       {formatCurrency(interestCost)}
                     </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums text-muted-foreground">
+                      {formatPctOfPayment(interestCost, data.totalPayments)}
+                    </TableCell>
                     <TableCell className="text-right font-bold tabular-nums">
                       {formatCurrency(data.principalPaid)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums text-muted-foreground">
+                      {formatPctOfPayment(
+                        data.principalPaid,
+                        data.totalPayments
+                      )}
                     </TableCell>
                   </TableRow>
                 </TableFooter>

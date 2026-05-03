@@ -7,14 +7,18 @@
 // rows must not be deleted via /settings/categories.
 //
 // Categorization scheme (see docs/Liability Tracking.md):
-//   • DEBT_INTEREST_CATEGORY_IDS — "Accrued *" categories. Posted on the
-//     liability side as a NEGATIVE amount (added debt).
+//   • DEBT_INTEREST_CATEGORY_IDS — interest charges that ADD to the
+//     liability balance. Posted on the liability side as a NEGATIVE amount
+//     (added debt). Includes the "Accrued *" categories for loans and
+//     "Credit Card Interest" finance charges (credit cards don't split into
+//     accrued/paid the way installment loans do — the finance charge is the
+//     accrual).
 //   • DEBT_PAYMENT_CATEGORY_IDS — paid principal/interest expenses on the
-//     liability side, plus "Applied Credit" for credit-card paydowns and
-//     "Credit Card Interest" finance charges. Posted as POSITIVE on the
-//     liability side (paydown). Cash-side "*Payment" categories (1/2/3/4/
-//     54/58/79) are intentionally excluded — they only appear on the
-//     checking leg and would never match the liability-side WHERE filter.
+//     liability side, plus "Applied Credit" for credit-card paydowns. Posted
+//     as POSITIVE on the liability side (paydown). Cash-side "*Payment"
+//     categories (1/2/3/4/54/58/79) are intentionally excluded — they only
+//     appear on the checking leg and would never match the liability-side
+//     WHERE filter.
 //
 // SCHEMA LIMITATION: these IDs are hard-coded against the seeded
 // transaction_categories rows. If a user adds a custom category for a new
@@ -46,13 +50,13 @@ export const DEBT_PAYMENT_CATEGORY_IDS = [
   70, // Auto Loan Principle
   75, // Student Loan Principle
   76, // Student Loan Interest
-  80, // Credit Card Interest
 ] as const;
 
-// Accrued interest that adds to the liability balance (posted negative).
+// Interest charges that add to the liability balance (posted negative).
 export const DEBT_INTEREST_CATEGORY_IDS = [
   9, // Accrued HELOC Interest
   14, // Accrued Mortgage Interest
   69, // Accrued Auto Loan Interest
   74, // Accrued Student Loan Interest
+  80, // Credit Card Interest
 ] as const;
