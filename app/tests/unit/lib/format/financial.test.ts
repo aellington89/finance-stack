@@ -3,7 +3,7 @@ import {
   signedCurrency,
   signedPercent,
   changeColor,
-} from "@/components/dashboard/asset-performance-table";
+} from "@/lib/format/financial";
 
 describe("signedCurrency", () => {
   it("prefixes positive values with '+'", () => {

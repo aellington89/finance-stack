@@ -2,7 +2,7 @@
 
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
-import type { PerformanceData } from "@/lib/queries/assets-drilldown";
+import type { LiabilityPerformanceData } from "@/lib/queries/liabilities-drilldown";
 import {
   signedCurrency,
   signedPercent,
@@ -32,11 +32,18 @@ const formatCurrency = (n: number) =>
     maximumFractionDigits: 2,
   }).format(n);
 
-interface AssetPerformanceTableProps {
-  data: PerformanceData;
+// `% Change` is undefined for accounts opened mid-period (start_balance = 0).
+// Render an em-dash so the column reads cleanly without claiming 0% or ∞%.
+export const formatPercentChange = (n: number | null): string =>
+  n === null ? "—" : signedPercent(n);
+
+interface LiabilityPerformanceTableProps {
+  data: LiabilityPerformanceData;
 }
 
-export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
+export function LiabilityPerformanceTable({
+  data,
+}: LiabilityPerformanceTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const rowRefs = useRef<Map<string, HTMLTableRowElement | null>>(new Map());
   const pendingScroll = useRef<{ key: string; top: number } | null>(null);
@@ -73,17 +80,23 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
     else rowRefs.current.delete(key);
   };
 
+  // `% of Total` divides current value by total current value. Both are
+  // negative, so the ratio is positive — display as a normal percent.
+  const totalIsNonZero = data.totalCurrentValue !== 0;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Asset Performance</CardTitle>
+        <CardTitle className="text-sm font-medium">
+          Liability Performance
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead className="text-right">Value</TableHead>
+              <TableHead className="text-right">Balance</TableHead>
               <TableHead className="text-right">Change</TableHead>
               <TableHead className="text-right">% Change</TableHead>
               <TableHead className="text-right">% of Total</TableHead>
@@ -117,9 +130,13 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                       {signedCurrency(cat.change)}
                     </TableCell>
                     <TableCell
-                      className={`text-right tabular-nums ${changeColor(cat.percentChange)}`}
+                      className={`text-right tabular-nums ${
+                        cat.percentChange !== null
+                          ? changeColor(cat.percentChange)
+                          : ""
+                      }`}
                     >
-                      {signedPercent(cat.percentChange)}
+                      {formatPercentChange(cat.percentChange)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {cat.percentOfTotal.toFixed(2)}%
@@ -155,9 +172,13 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                               {signedCurrency(type.change)}
                             </TableCell>
                             <TableCell
-                              className={`text-right tabular-nums ${changeColor(type.percentChange)}`}
+                              className={`text-right tabular-nums ${
+                                type.percentChange !== null
+                                  ? changeColor(type.percentChange)
+                                  : ""
+                              }`}
                             >
-                              {signedPercent(type.percentChange)}
+                              {formatPercentChange(type.percentChange)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {type.percentOfTotal.toFixed(2)}%
@@ -181,9 +202,13 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                                   {signedCurrency(acc.change)}
                                 </TableCell>
                                 <TableCell
-                                  className={`text-right tabular-nums ${changeColor(acc.percentChange)}`}
+                                  className={`text-right tabular-nums ${
+                                    acc.percentChange !== null
+                                      ? changeColor(acc.percentChange)
+                                      : ""
+                                  }`}
                                 >
-                                  {signedPercent(acc.percentChange)}
+                                  {formatPercentChange(acc.percentChange)}
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   {acc.percentOfTotal.toFixed(2)}%
@@ -209,12 +234,16 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                 {signedCurrency(data.totalChange)}
               </TableCell>
               <TableCell
-                className={`text-right font-bold tabular-nums ${changeColor(data.totalPercentChange)}`}
+                className={`text-right font-bold tabular-nums ${
+                  data.totalPercentChange !== null
+                    ? changeColor(data.totalPercentChange)
+                    : ""
+                }`}
               >
-                {signedPercent(data.totalPercentChange)}
+                {formatPercentChange(data.totalPercentChange)}
               </TableCell>
               <TableCell className="text-right font-bold tabular-nums">
-                {data.totalCurrentValue > 0 ? "100.00%" : "0.00%"}
+                {totalIsNonZero ? "100.00%" : "0.00%"}
               </TableCell>
             </TableRow>
           </TableFooter>

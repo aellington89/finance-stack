@@ -41,7 +41,13 @@ OVERRIDING SYSTEM VALUE VALUES
 ON CONFLICT (account_type_id) DO NOTHING;
 
 -- --------------------------------------------
--- 2. transaction_categories (27 rows; IDs match production seed)
+-- 2. transaction_categories (IDs match production seed)
+--
+-- Liabilities-drilldown queries pin specific category IDs for payments and
+-- interest expense (see app/lib/queries/liability-categories.ts). All of
+-- the relevant rows must be present here so integration tests exercise the
+-- full set; the production seed contains additional categories not used by
+-- this test fixture.
 -- --------------------------------------------
 INSERT INTO transaction_categories (transaction_category_id, transaction_category)
 OVERRIDING SYSTEM VALUE VALUES
@@ -51,7 +57,11 @@ OVERRIDING SYSTEM VALUE VALUES
     (4,  'Student Loan Payment'),
     (5,  'Cash / Crypto Deposit'),
     (6,  'Other'),
+    (9,  'Accrued HELOC Interest'),
     (10, 'Cash / Crypto Withdrawal'),
+    (12, 'Mortgage Principle'),
+    (13, 'Mortgage Interest'),
+    (14, 'Accrued Mortgage Interest'),
     (15, 'Labor Earnings'),
     (21, 'Withdrawal to Savings'),
     (22, 'Medicare Tax'),
@@ -59,6 +69,7 @@ OVERRIDING SYSTEM VALUE VALUES
     (24, 'Food / Grocery'),
     (25, 'Social Security Tax'),
     (26, 'State Income Tax'),
+    (29, 'Applied Credit'),
     (33, 'Restaurant'),
     (34, 'Entertainment'),
     (36, 'Subscription'),
@@ -68,10 +79,18 @@ OVERRIDING SYSTEM VALUE VALUES
     (51, 'Interest Earned'),
     (54, 'Car Loan Payment'),
     (55, 'Water Utility'),
+    (57, 'Epic Loan Interest'),
+    (58, 'Epic Loan Payment'),
     (60, 'Gas & Electric Utility'),
     (62, 'Car & Personal Articles Insurance'),
     (63, 'Internet Service Provider'),
-    (64, 'Mobile Service Provider')
+    (64, 'Mobile Service Provider'),
+    (68, 'Auto Loan Interest'),
+    (69, 'Accrued Auto Loan Interest'),
+    (70, 'Auto Loan Principle'),
+    (74, 'Accrued Student Loan Interest'),
+    (79, 'Balance Transfer Payment Expense'),
+    (80, 'Credit Card Interest')
 ON CONFLICT (transaction_category_id) DO NOTHING;
 
 -- --------------------------------------------
@@ -134,7 +153,11 @@ BEGIN
     FROM generate_series(0, 25) n
     WHERE (opening_date + INTERVAL '1 day' + (n * INTERVAL '14 days'))::date <= CURRENT_DATE;
 
-    -- ---- Monthly mortgage payments (12 pairs = 24 rows) ----
+    -- ---- Monthly mortgage payments ----
+    -- Cash side: one debit on checking, category 3 (Mortgage Payment).
+    -- Liability side: split into principal (cat 12) + interest (cat 13)
+    -- so the totals match production conventions where each loan payment
+    -- posts to the liability account as two legs.
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
     SELECT 'Mortgage Payment', (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date,
            1, -2100.00, 4, 1, 3
@@ -142,15 +165,23 @@ BEGIN
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date <= CURRENT_DATE;
 
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
-    SELECT 'Mortgage Payment', (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date,
-           4, 2100.00, 1, 1, 3
+    SELECT 'Mortgage Principle', (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date,
+           4, 900.00, 1, 1, 12
+    FROM generate_series(0, 11) n
+    WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date <= CURRENT_DATE;
+
+    INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
+    SELECT 'Mortgage Interest', (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date,
+           4, 1200.00, 1, 1, 13
     FROM generate_series(0, 11) n
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '9 days')::date <= CURRENT_DATE;
 
     -- ---- Monthly mortgage interest accruals (12) ----
+    -- Category 14 (Accrued Mortgage Interest) is one of the IDs the
+    -- Liabilities-drilldown debt-service queries pin. Keep this row aligned.
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
     SELECT 'Mortgage Interest Accrual', (month0 + (n * INTERVAL '1 month') + INTERVAL '14 days')::date,
-           4, -1200.00, NULL, 9, 6
+           4, -1200.00, NULL, 9, 14
     FROM generate_series(0, 11) n
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '14 days')::date <= CURRENT_DATE;
 
@@ -187,6 +218,8 @@ BEGIN
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '21 days')::date <= CURRENT_DATE;
 
     -- ---- Monthly credit card payment (12 pairs = 24 rows) ----
+    -- Cash side: cat 1 (Credit Card Payment). Liability side: cat 29
+    -- (Applied Credit) — production convention for credit-card paydowns.
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
     SELECT 'Payment to Visa', (month0 + (n * INTERVAL '1 month') + INTERVAL '5 days')::date,
            1, -450.00, 3, 1, 1
@@ -195,11 +228,13 @@ BEGIN
 
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
     SELECT 'Payment from Checking', (month0 + (n * INTERVAL '1 month') + INTERVAL '5 days')::date,
-           3, 450.00, 1, 1, 1
+           3, 450.00, 1, 1, 29
     FROM generate_series(0, 11) n
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '5 days')::date <= CURRENT_DATE;
 
-    -- ---- Monthly auto loan payment (12 pairs = 24 rows) ----
+    -- ---- Monthly auto loan payment ----
+    -- Cash side: cat 54 (Car Loan Payment). Liability side splits into
+    -- principal (cat 70) + interest (cat 68).
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
     SELECT 'Auto Loan Payment', (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date,
            1, -385.00, 5, 1, 54
@@ -207,15 +242,23 @@ BEGIN
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date <= CURRENT_DATE;
 
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
-    SELECT 'Auto Loan Payment', (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date,
-           5, 385.00, 1, 1, 54
+    SELECT 'Auto Loan Principle', (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date,
+           5, 265.00, 1, 1, 70
+    FROM generate_series(0, 11) n
+    WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date <= CURRENT_DATE;
+
+    INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
+    SELECT 'Auto Loan Interest', (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date,
+           5, 120.00, 1, 1, 68
     FROM generate_series(0, 11) n
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '7 days')::date <= CURRENT_DATE;
 
     -- ---- Monthly auto loan interest accrual (12) ----
+    -- Category 69 (Accrued Auto Loan Interest) is one of the IDs the
+    -- Liabilities-drilldown debt-service queries pin. Keep this row aligned.
     INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
     SELECT 'Auto Loan Interest Accrual', (month0 + (n * INTERVAL '1 month') + INTERVAL '14 days')::date,
-           5, -120.00, NULL, 9, 6
+           5, -120.00, NULL, 9, 69
     FROM generate_series(0, 11) n
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '14 days')::date <= CURRENT_DATE;
 
