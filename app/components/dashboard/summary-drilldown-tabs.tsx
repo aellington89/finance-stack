@@ -7,6 +7,7 @@ const drilldownTabs = [
   { value: "overview", label: "Overview", href: "/dashboard" },
   { value: "net-worth", label: "Net Worth", href: "/dashboard/net-worth" },
   { value: "assets", label: "Assets", href: "/dashboard/assets" },
+  { value: "liabilities", label: "Liabilities", href: "/dashboard/liabilities" },
 ] as const;
 
 function getActiveDrilldown(pathname: string): string {

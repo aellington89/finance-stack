@@ -84,8 +84,30 @@ beforeAll(async () => {
   await db.execute(sql`
     INSERT INTO transaction_categories (transaction_category_id, transaction_category)
     OVERRIDING SYSTEM VALUE VALUES
-      (1, 'Credit Card Payment'),
-      (6, 'Other')
+      (1,  'Credit Card Payment'),
+      (2,  'HELOC Payment'),
+      (3,  'Mortgage Payment'),
+      (4,  'Student Loan Payment'),
+      (6,  'Other'),
+      (7,  'HELOC Principle'),
+      (8,  'HELOC Interest'),
+      (9,  'Accrued HELOC Interest'),
+      (12, 'Mortgage Principle'),
+      (13, 'Mortgage Interest'),
+      (14, 'Accrued Mortgage Interest'),
+      (29, 'Applied Credit'),
+      (51, 'Interest Earned'),
+      (54, 'Car Loan Payment'),
+      (57, 'Epic Loan Interest'),
+      (58, 'Epic Loan Payment'),
+      (68, 'Auto Loan Interest'),
+      (69, 'Accrued Auto Loan Interest'),
+      (70, 'Auto Loan Principle'),
+      (74, 'Accrued Student Loan Interest'),
+      (75, 'Student Loan Principle'),
+      (76, 'Student Loan Interest'),
+      (79, 'Balance Transfer Payment Expense'),
+      (80, 'Credit Card Interest')
     ON CONFLICT (transaction_category_id) DO UPDATE
       SET transaction_category = EXCLUDED.transaction_category
   `);

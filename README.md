@@ -214,6 +214,7 @@ finance-stack/
 │   │       │   ├── page.tsx              #     Summary tab (/)
 │   │       │   ├── net-worth/            #     Net Worth drill-down (from Summary KPI click)
 │   │       │   ├── assets/               #     Assets drill-down (allocation, performance, liquidity, trend)
+│   │       │   ├── liabilities/          #     Liabilities drill-down (allocation, debt-mix, waterfall, debt service, performance)
 │   │       │   ├── accounting/           #     Personal Accounting tab
 │   │       │   ├── transactions/         #     Transactions tab (form + list)
 │   │       │   ├── accounts/             #     Accounts tab (visual balance sheet)
@@ -246,6 +247,9 @@ finance-stack/
 │   │   │   ├── net-worth-timeseries-chart.tsx # Multi-series decomposition chart for net-worth drill-down (Recharts)
 │   │   │   ├── asset-allocation-chart.tsx # Treemap of assets by category → account type (Recharts)
 │   │   │   ├── assets-timeseries-chart.tsx # Stacked area chart of asset balances by category (Recharts)
+│   │   │   ├── liability-allocation-chart.tsx # Treemap of liabilities by category → account type (Recharts)
+│   │   │   ├── liabilities-timeseries-chart.tsx # Stacked area chart of liability balances by category (Recharts)
+│   │   │   ├── debt-waterfall-chart.tsx  # Debt waterfall (Start → Payments → Interest → Other → End) (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
 │   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
@@ -264,6 +268,9 @@ finance-stack/
 │   │   │   ├── net-worth-drivers-table.tsx # Expandable net worth drivers table (category → account type → account)
 │   │   │   ├── asset-performance-table.tsx # Expandable assets performance table (category → account type → account)
 │   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
+│   │   │   ├── liability-performance-table.tsx # Expandable liability performance table (category → account type → account)
+│   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type (current vs. long-term)
+│   │   │   ├── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
 │   │   │   └── summary-drilldown-tabs.tsx # Sub-navigation tabs for Summary drill-down pages
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
@@ -283,9 +290,12 @@ finance-stack/
 │   │   ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │   │   ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
 │   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
+│   │   ├── queries/liabilities-drilldown.ts # Liabilities drill-down queries (allocation, performance, decomposition, debt service, waterfall)
+│   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │   │   ├── queries/categories.ts         # Queries for all four reference-data tables
+│   │   ├── format/financial.ts           # Shared signed-currency, change-color, percent helpers (used by asset + liability tables)
 │   │   ├── forms/transaction.ts          # Post-submit state helper (persists Date, Account, Type across submits)
 │   │   ├── validations/account.ts        # Zod schema for account form validation
 │   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
@@ -295,13 +305,17 @@ finance-stack/
 │   │   ├── unit/                         # Unit tests (no DB required)
 │   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
-│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf)
-│   │   │   └── lib/                      #   Library utility tests (cn, formatters, forms)
+│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf)
+│   │   │   └── lib/                      #   Library utility tests
+│   │   │       ├── utils.test.ts         #     cn() class-merge helper
+│   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
+│   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
+│   │   │       └── queries/              #     Query module constants (liability-categories pinned IDs)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown
 │   │       ├── actions/                  #   Server action tests (account, transaction)
-│   │       └── queries/                  #   Query function tests (rebuild-balance)
+│   │       └── queries/                  #   Query function tests (rebuild-balance, liabilities-drilldown)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed)
@@ -360,6 +374,17 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-05-02 — v0.1.2 (in progress)
+
+**Liabilities drilldown page (Issue #112)**
+- New page at `/dashboard/liabilities` mirrors the Assets drilldown structure with sections specific to debt: a 4-card KPI strip (Total / Current / Long-term liabilities, Period Change), liability allocation treemap (category → account type), stacked time-series decomposition by category, dynamic per-account-type Debt Mix tile breakdown, Debt Waterfall (Start → Payments → Interest → Other → End), Debt Service summary (period payments, interest accrued, estimated principal paid + per-account sub-table), and a 3-level expandable Liability Performance table.
+- Sign convention: liability balances are kept negative throughout. Display uses the same `signedCurrency` / `changeColor` helpers as the Assets table — `change > 0` (paydown) renders green, `change < 0` (added debt) renders red. The asset-table helpers were extracted to a new shared module `app/lib/format/financial.ts` so both tables stay in lock-step.
+- Lookup-driven design: only `account_type_category_id` (5 = Current Liability, 6 = Non-current Liability) is hard-coded in queries. `account_types` are queried dynamically per deployment. The Debt Service queries pin specific `transaction_category_id`s for payments and interest expense in `app/lib/queries/liability-categories.ts` (no name pattern matching, no `transaction_type_id` reference). Test seed and `vitest-setup.ts` extended to include all pinned categories so integration tests cover the full ID set.
+- Tests: added `tests/integration/queries/liabilities-drilldown.test.ts` with 13 cases covering all five queries (allocation, performance, decomposition, debt service, waterfall — including pinned-ID coverage and the bridge-reconciliation invariant), plus unit tests for the constants module, debt-mix tile projection, debt-waterfall bar transform, and the performance-table `% Change = "—"` empty-state.
+- Sub-nav updated: `SummaryDrilldownTabs` now has Overview / Net Worth / Assets / Liabilities. The new tab uses the existing `DashboardDateRangeFilter` with `basePath="/dashboard/liabilities"`.
+- Schema additions deferred to follow-up issue [#110](https://github.com/aellington89/finance-stack/issues/110): APR, credit limit, minimum payment, due date, original principal, term length. Each unlocks specific metrics (weighted APR, credit utilization, payoff timeline, exact principal split, upcoming-payments widget) but none are blocking for v1.
+- Lookup-row protection tracked separately as [#109](https://github.com/aellington89/finance-stack/issues/109): the pinned payment/interest `transaction_category_id` rows are user-editable today; deleting one would silently under-report debt-service totals. Closely related to [#87](https://github.com/aellington89/finance-stack/issues/87).
 
 ### 2026-05-01 — v0.1.2 (in progress)
 

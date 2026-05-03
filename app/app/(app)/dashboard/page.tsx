@@ -107,24 +107,19 @@ export default async function DashboardSummaryPage({
 
             {/* Gauge badges row */}
             <div className="flex flex-1 items-center justify-evenly gap-4">
-              <Link
-                href="/dashboard/assets"
-                className="group rounded-md p-2 transition-colors hover:bg-accent"
-              >
-                <GaugeBadge
-                  title="Assets per $ of Debt"
-                  label={`$${assetToLiability.toFixed(2)}`}
-                  value={assetToLiability}
-                  min={0}
-                  max={3}
-                  segments={[
-                    { max: 1, color: RANGE_COLORS.red },
-                    { max: 1.5, color: RANGE_COLORS.yellow },
-                    { max: 2, color: RANGE_COLORS.green },
-                    { max: 3, color: RANGE_COLORS.blue },
-                  ]}
-                />
-              </Link>
+              <GaugeBadge
+                title="Assets per $ of Debt"
+                label={`$${assetToLiability.toFixed(2)}`}
+                value={assetToLiability}
+                min={0}
+                max={3}
+                segments={[
+                  { max: 1, color: RANGE_COLORS.red },
+                  { max: 1.5, color: RANGE_COLORS.yellow },
+                  { max: 2, color: RANGE_COLORS.green },
+                  { max: 3, color: RANGE_COLORS.blue },
+                ]}
+              />
               <GaugeBadge
                 title="% Owned Assets"
                 label={`${nwToAsset.toFixed(2)}%`}
@@ -186,6 +181,7 @@ export default async function DashboardSummaryPage({
               data={timeSeries}
               dataKey="totalLiabilities"
               color={COLORS.liabilities}
+              href="/dashboard/liabilities"
             />
           </div>
         </CardContent>
