@@ -5,6 +5,7 @@ import {
 } from "@/lib/queries/work-expenses";
 import { AccountingKpiCard } from "@/components/dashboard/accounting-kpi-card";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { WorkExpensesChart } from "@/components/charts/work-expenses-chart";
 import { ExpensesCategoryChart } from "@/components/charts/expenses-category-chart";
 
@@ -23,20 +24,7 @@ export default async function WorkExpensesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = await searchParams;
-
-  const get = (key: string): string | undefined => {
-    const val = resolvedParams[key];
-    if (Array.isArray(val)) return val[0];
-    return val || undefined;
-  };
-
-  // Default to last 30 days
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 30);
-  const dateFrom = get("dateFrom") || defaultFrom.toISOString().slice(0, 10);
-  const dateTo = get("dateTo") || undefined;
-
-  const filters = { dateFrom, dateTo };
+  const filters = getDateRangeFromParams(resolvedParams);
 
   const [totals, timeSeries, categoryBreakdown] = await Promise.all([
     getWorkExpenseTotals(filters),

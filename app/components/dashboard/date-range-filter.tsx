@@ -1,19 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 export function DashboardDateRangeFilter({ basePath = "/dashboard" }: { basePath?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  // Default to last 30 days when no URL param is set
-  const defaultFrom = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
-  }, []);
 
   const handleChange = (from: string | undefined, to: string | undefined) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -27,9 +19,10 @@ export function DashboardDateRangeFilter({ basePath = "/dashboard" }: { basePath
 
   return (
     <DateRangePicker
-      dateFrom={searchParams.get("dateFrom") ?? defaultFrom}
+      dateFrom={searchParams.get("dateFrom") ?? undefined}
       dateTo={searchParams.get("dateTo") ?? undefined}
       onChange={handleChange}
+      placeholder="Last 30 days (default)"
       className="w-[280px]"
     />
   );
