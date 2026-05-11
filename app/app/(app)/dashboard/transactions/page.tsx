@@ -7,6 +7,7 @@ import {
   type SortableColumn,
   type SortDirection,
 } from "@/lib/queries/transactions";
+import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { TransactionFilters as TransactionFiltersUI } from "@/components/transactions/transaction-filters";
 import { TransactionList } from "@/components/transactions/transaction-list";
@@ -54,9 +55,13 @@ function parseSearchParams(
   const rawPage = get("page");
   const rawPageSize = get("pageSize");
 
+  const { dateFrom, dateTo } = getDateRangeFromParams(searchParams, {
+    applyDefault: false,
+  });
+
   return {
-    dateFrom: get("dateFrom"),
-    dateTo: get("dateTo"),
+    dateFrom,
+    dateTo,
     descriptions: getStringArray("descriptions"),
     amount: get("amount"),
     accountIds: getNumberArray("accountIds"),

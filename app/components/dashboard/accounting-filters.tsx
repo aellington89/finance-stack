@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -210,12 +210,6 @@ export function AccountingFilters({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const defaultFrom = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
   const updateParams = useCallback(
     (updates: Record<string, string | undefined>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -274,9 +268,10 @@ export function AccountingFilters({
     <div className="flex flex-wrap items-end gap-2">
       <FilterSlot label="Date" className="w-56">
         <DateRangePicker
-          dateFrom={filters.dateFrom ?? defaultFrom}
+          dateFrom={filters.dateFrom ?? undefined}
           dateTo={filters.dateTo ?? undefined}
           onChange={handleDateRange}
+          placeholder="Last 30 days (default)"
           className="h-8 text-xs"
         />
       </FilterSlot>

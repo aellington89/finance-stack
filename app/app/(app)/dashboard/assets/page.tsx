@@ -10,6 +10,7 @@ import { AssetPerformanceTable } from "@/components/dashboard/asset-performance-
 import { LiquidityBreakdown } from "@/components/dashboard/liquidity-breakdown";
 import { SummaryDrilldownTabs } from "@/components/dashboard/summary-drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import {
   Card,
   CardContent,
@@ -32,17 +33,7 @@ export default async function AssetsDrilldownPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 30);
-  const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
-
-  const dateFrom =
-    (Array.isArray(params.dateFrom) ? params.dateFrom[0] : params.dateFrom) ||
-    defaultFromStr;
-  const dateTo =
-    (Array.isArray(params.dateTo) ? params.dateTo[0] : params.dateTo) ||
-    undefined;
+  const { dateFrom, dateTo } = getDateRangeFromParams(params);
 
   const [allocation, performance, liquidity, decomposition] = await Promise.all(
     [

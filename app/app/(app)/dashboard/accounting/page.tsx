@@ -16,6 +16,7 @@ import { AccountingChart } from "@/components/charts/accounting-chart";
 import { ExpensesCategoryChart } from "@/components/charts/expenses-category-chart";
 import { AccountingKpiCard } from "@/components/dashboard/accounting-kpi-card";
 import { AccountingFilters as AccountingFiltersUI } from "@/components/dashboard/accounting-filters";
+import { getDateRangeFromParams } from "@/lib/queries/date-range";
 
 export const dynamic = "force-dynamic";
 
@@ -161,13 +162,7 @@ function parseSearchParams(
     return items.length > 0 ? items : undefined;
   };
 
-  // Default to last 30 days
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 30);
-  const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
-
-  const dateFrom = get("dateFrom") || defaultFromStr;
-  const dateTo = get("dateTo") || undefined;
+  const { dateFrom, dateTo } = getDateRangeFromParams(params);
   const descriptions = getStringArray("descriptions");
   const accountIds = getNumberArray("accountIds");
   const categoryIds = getNumberArray("categoryIds");

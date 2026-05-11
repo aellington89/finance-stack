@@ -294,6 +294,7 @@ finance-stack/
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
+│   │   ├── queries/date-range.ts         # Shared dateFrom/dateTo URL-param parsing + 30-day default
 │   │   ├── queries/categories.ts         # Queries for all four reference-data tables
 │   │   ├── format/financial.ts           # Shared signed-currency, change-color, percent helpers (used by asset + liability tables)
 │   │   ├── forms/transaction.ts          # Post-submit state helper (persists Date, Account, Type across submits)
@@ -375,7 +376,16 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-05-02 — v0.1.2 (in progress)
+### 2026-05-10 — v0.1.3 (in progress)
+
+**Date Range filter UX fixes (related to Issue #61)**
+- Picker now uses a draft-and-commit pattern: calendar clicks and typed input update local state inside the popover, and the URL is only updated when the user clicks **Apply** (or selects a Quick Select preset). Fixes the "popover closes after one click" and "phantom from-date already selected" bugs caused by passing the 30-day default through to the picker as a real selection.
+- Manual date input fields are now plain text inputs (`YYYY-MM-DD`) bound to local draft string state, instead of native `<input type="date">` controlled inputs. Typing now works as expected (e.g. `12` in the month no longer snaps to `02`), and clicking the field no longer pops the browser's native date picker on top of the custom calendar.
+- Added explicit **Apply** and **Clear** buttons in the popover footer; cancellation (click-outside / Esc) discards the draft.
+- Extracted the duplicated `defaultFrom = today − 30 days` block from 8 files into a single shared helper `app/lib/queries/date-range.ts` (`getDateRangeFromParams`). The 30-day default now lives only in the data-fetching layer; the picker UI shows `Last 30 days (default)` as placeholder text in the trigger when no URL params are set.
+- No change to Quick Select macros, calendar styling, or the URL-param contract (`?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`). [Issue #61](https://github.com/aellington89/finance-stack/issues/61) (saveable Quick Select presets) remains a follow-up.
+
+### 2026-05-02 — v0.1.2
 
 **Liabilities drilldown page (Issue #112)**
 - New page at `/dashboard/liabilities` mirrors the Assets drilldown structure with sections specific to debt: a 4-card KPI strip (Total / Current / Long-term liabilities, Period Change), liability allocation treemap (category → account type), stacked time-series decomposition by category, dynamic per-account-type Debt Mix tile breakdown, Debt Waterfall (Start → Payments → Interest → Other → End), Debt Service summary (period payments, interest accrued, estimated principal paid + per-account sub-table), and a 3-level expandable Liability Performance table.

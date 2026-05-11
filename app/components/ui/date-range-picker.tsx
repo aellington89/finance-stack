@@ -32,6 +32,7 @@ interface DateRangePickerProps {
   dateTo?: string
   onChange: (from: string | undefined, to: string | undefined) => void
   className?: string
+  placeholder?: string
 }
 
 type Scope = "last" | "this"
@@ -86,9 +87,12 @@ function formatDateStr(d: Date): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 function parseDate(s?: string): Date | undefined {
-  if (!s) return undefined
-  return new Date(s + "T00:00:00")
+  if (!s || !ISO_DATE_RE.test(s)) return undefined
+  const d = new Date(s + "T00:00:00")
+  return isNaN(d.getTime()) ? undefined : d
 }
 
 const SCOPES: { value: Scope; label: string }[] = [
@@ -171,70 +175,143 @@ function QuickSelect({
   )
 }
 
+interface Draft {
+  from: Date | undefined
+  to: Date | undefined
+  fromStr: string
+  toStr: string
+}
+
+function buildDraft(dateFrom?: string, dateTo?: string): Draft {
+  return {
+    from: parseDate(dateFrom),
+    to: parseDate(dateTo),
+    fromStr: dateFrom ?? "",
+    toStr: dateTo ?? "",
+  }
+}
+
 function DateRangePicker({
   dateFrom,
   dateTo,
   onChange,
   className,
+  placeholder = "Select dates...",
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false)
+  const [draft, setDraft] = React.useState<Draft>(() =>
+    buildDraft(dateFrom, dateTo)
+  )
 
-  const from = parseDate(dateFrom)
-  const to = parseDate(dateTo)
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      // Re-sync from props each time the popover opens; discards any
+      // uncommitted draft from a previously cancelled session.
+      setDraft(buildDraft(dateFrom, dateTo))
+    }
+    setOpen(next)
+  }
 
   const selected: DateRange | undefined =
-    from || to ? { from, to } : undefined
+    draft.from || draft.to ? { from: draft.from, to: draft.to } : undefined
 
   const handleQuickApply = (rangeFrom: Date, rangeTo: Date) => {
     onChange(formatDateStr(rangeFrom), formatDateStr(rangeTo))
     setOpen(false)
   }
 
-  const handleRangeSelect = (range: DateRange | undefined) => {
-    if (!range) {
-      onChange(undefined, undefined)
-      return
-    }
-    onChange(
-      range.from ? formatDateStr(range.from) : undefined,
-      range.to ? formatDateStr(range.to) : undefined
-    )
-    if (range.from && range.to) {
-      setOpen(false)
-    }
+  const handleRangeSelect = (
+    _range: DateRange | undefined,
+    triggerDate: Date
+  ) => {
+    // Track clicks manually using `triggerDate`. react-day-picker's own range
+    // computation has two annoying behaviors we override here:
+    //   1. Clicking inside a complete range shrinks it to the closer endpoint
+    //      instead of starting a fresh selection.
+    //   2. Clicking before an in-progress `from` swaps so the new click becomes
+    //      `from` — fine for that case, but combined with (1) it makes editing
+    //      an existing range feel unpredictable.
+    // Two-click model: 1st click sets `from`, 2nd click sets `to` (sorted for
+    // display). A 3rd click while complete restarts from that date.
+    setDraft((d) => {
+      if (!d.from || d.to) {
+        // No selection yet, or range already complete → start fresh
+        return {
+          from: triggerDate,
+          to: undefined,
+          fromStr: formatDateStr(triggerDate),
+          toStr: "",
+        }
+      }
+      // Only `from` is set → complete the range with this click
+      let from = d.from
+      let to = triggerDate
+      if (to < from) {
+        [from, to] = [to, from]
+      }
+      return {
+        from,
+        to,
+        fromStr: formatDateStr(from),
+        toStr: formatDateStr(to),
+      }
+    })
   }
 
   const handleManualDate = (which: "from" | "to", value: string) => {
-    if (!value) {
-      if (which === "from") onChange(undefined, dateTo)
-      else onChange(dateFrom, undefined)
-      return
+    const parsed = parseDate(value)
+    if (which === "from") {
+      setDraft((d) => ({ ...d, fromStr: value, from: parsed ?? d.from }))
+    } else {
+      setDraft((d) => ({ ...d, toStr: value, to: parsed ?? d.to }))
     }
-    // Validate YYYY-MM-DD format
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return
-    const d = new Date(value + "T00:00:00")
-    if (isNaN(d.getTime())) return
-    if (which === "from") onChange(value, dateTo)
-    else onChange(dateFrom, value)
   }
 
-  // Build display text
-  let displayText = "Select dates..."
-  if (from && to) {
-    displayText = `${format(from, "MMM d")} – ${format(to, "MMM d, yyyy")}`
-  } else if (from) {
-    displayText = `${format(from, "MMM d, yyyy")} – ...`
+  const handleApply = () => {
+    let fromStr = draft.fromStr.trim() || undefined
+    let toStr = draft.toStr.trim() || undefined
+
+    // Drop strings that don't parse — never silently commit garbage.
+    if (fromStr && !parseDate(fromStr)) fromStr = undefined
+    if (toStr && !parseDate(toStr)) toStr = undefined
+
+    if (fromStr && toStr && fromStr > toStr) {
+      [fromStr, toStr] = [toStr, fromStr]
+    }
+
+    onChange(fromStr, toStr)
+    setOpen(false)
   }
+
+  const handleClear = () => {
+    onChange(undefined, undefined)
+    setDraft({ from: undefined, to: undefined, fromStr: "", toStr: "" })
+    setOpen(false)
+  }
+
+  // Build trigger display text from committed props (not draft).
+  const triggerFrom = parseDate(dateFrom)
+  const triggerTo = parseDate(dateTo)
+  let displayText = placeholder
+  if (triggerFrom && triggerTo) {
+    displayText = `${format(triggerFrom, "MMM d")} – ${format(triggerTo, "MMM d, yyyy")}`
+  } else if (triggerFrom) {
+    displayText = `${format(triggerFrom, "MMM d, yyyy")} – ...`
+  } else if (triggerTo) {
+    displayText = `... – ${format(triggerTo, "MMM d, yyyy")}`
+  }
+
+  const isEmpty = !dateFrom && !dateTo
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={
           <Button
             variant="outline"
             className={cn(
               "w-full justify-start text-left font-normal",
-              !dateFrom && !dateTo && "text-muted-foreground",
+              isEmpty && "text-muted-foreground",
               className
             )}
           />
@@ -253,23 +330,45 @@ function DateRangePicker({
               mode="range"
               selected={selected}
               onSelect={handleRangeSelect}
-              defaultMonth={from || to}
+              defaultMonth={draft.from || draft.to}
               numberOfMonths={2}
             />
             <div className="flex items-center gap-2 border-t px-2 py-2">
               <Input
-                type="date"
-                value={dateFrom ?? ""}
+                type="text"
+                inputMode="numeric"
+                placeholder="YYYY-MM-DD"
+                value={draft.fromStr}
                 onChange={(e) => handleManualDate("from", e.target.value)}
                 className="h-7 flex-1 text-xs"
               />
               <ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
               <Input
-                type="date"
-                value={dateTo ?? ""}
+                type="text"
+                inputMode="numeric"
+                placeholder="YYYY-MM-DD"
+                value={draft.toStr}
                 onChange={(e) => handleManualDate("to", e.target.value)}
                 className="h-7 flex-1 text-xs"
               />
+            </div>
+            <div className="flex items-center justify-end gap-2 px-2 pb-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={handleClear}
+              >
+                Clear
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="default"
+                onClick={handleApply}
+              >
+                Apply
+              </Button>
             </div>
           </div>
         </div>
