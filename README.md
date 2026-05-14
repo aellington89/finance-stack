@@ -376,6 +376,17 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
+### 2026-05-13 — v0.1.3 (in progress)
+
+**Sortable columns: single source of truth (Issue #107)**
+- Made `SORTABLE_COLUMNS` in `lib/queries/transactions.ts` the single source of truth for the sortable-column whitelist. Added a derived `SORTABLE_COLUMN_KEYS = Object.keys(SORTABLE_COLUMNS) as SortableColumn[]` export and removed the duplicated `VALID_SORT_COLUMNS` array from `dashboard/transactions/page.tsx`.
+- Eliminates the silent-bug class where adding a column to `SORTABLE_COLUMNS` but forgetting to update the page's whitelist caused the `?sortBy=` URL param to be dropped on the server with no error — the bug originally hit when adding the Related Account column in #105. Adding a new entry to `SORTABLE_COLUMNS` now makes that column sortable end-to-end with no other file changes; the `SortableColumn` union keeps the runtime whitelist in lockstep automatically.
+
+**Transactions table: stable column widths across sorts**
+- Sorting a column previously shifted every column's width because the default `table-layout: auto` re-derives widths from cell content. After a sort the longest visible value in each column changed, so the sort button you'd just clicked physically moved — requiring a mouse reposition to click again for the reverse sort.
+- Switched the Transactions table to `table-fixed` and assigned explicit Tailwind width tokens per column (`w-28` for date/type, `w-32` for amount, `w-40` for category, `w-44` for account/related account, `w-80` for description). Added `truncate` on text cells so long values get an ellipsis instead of expanding the column.
+- Sort button positions now stay put across sorts and other data changes (pagination, filtering).
+
 ### 2026-05-10 — v0.1.3 (in progress)
 
 **Date Range filter UX fixes (related to Issue #61)**

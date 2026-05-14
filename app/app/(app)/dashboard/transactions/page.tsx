@@ -3,6 +3,7 @@ import {
   getFilteredTransactions,
   getFilteredTransactionsCount,
   getUniqueDescriptions,
+  SORTABLE_COLUMN_KEYS,
   type TransactionFilters,
   type SortableColumn,
   type SortDirection,
@@ -43,10 +44,6 @@ function parseSearchParams(
     return items.length > 0 ? items : undefined;
   };
 
-  const VALID_SORT_COLUMNS: SortableColumn[] = [
-    "transactionDate", "transactionDescription", "amount",
-    "accountName", "relatedAccountName", "transactionType", "transactionCategory",
-  ];
   const VALID_SORT_DIRS: SortDirection[] = ["asc", "desc"];
 
   const rawSortBy = get("sortBy");
@@ -67,7 +64,7 @@ function parseSearchParams(
     accountIds: getNumberArray("accountIds"),
     typeIds: getNumberArray("typeIds"),
     categoryIds: getNumberArray("categoryIds"),
-    sortBy: VALID_SORT_COLUMNS.includes(rawSortBy as SortableColumn)
+    sortBy: SORTABLE_COLUMN_KEYS.includes(rawSortBy as SortableColumn)
       ? (rawSortBy as SortableColumn)
       : undefined,
     sortDir: VALID_SORT_DIRS.includes(rawSortDir as SortDirection)
