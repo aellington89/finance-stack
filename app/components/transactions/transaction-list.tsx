@@ -91,19 +91,22 @@ const COLUMNS: ColumnDef[] = [
     key: "date",
     label: "Date",
     sortColumn: "transactionDate",
+    headClassName: "w-28",
     render: (txn) => formatDate(txn.transactionDate),
   },
   {
     key: "description",
     label: "Description",
     sortColumn: "transactionDescription",
+    headClassName: "w-80",
+    cellClassName: "truncate",
     render: (txn) => txn.transactionDescription,
   },
   {
     key: "amount",
     label: "Amount",
     sortColumn: "amount",
-    headClassName: "text-right",
+    headClassName: "w-32 text-right",
     cellClassName: "text-right",
     render: (txn) => {
       const amount = Number(txn.amount ?? 0);
@@ -118,24 +121,32 @@ const COLUMNS: ColumnDef[] = [
     key: "account",
     label: "Account",
     sortColumn: "accountName",
+    headClassName: "w-44",
+    cellClassName: "truncate",
     render: (txn) => txn.accountName,
   },
   {
     key: "relatedAccount",
     label: "Related Account",
     sortColumn: "relatedAccountName",
+    headClassName: "w-44",
+    cellClassName: "truncate",
     render: (txn) => txn.relatedAccountName,
   },
   {
     key: "type",
     label: "Type",
     sortColumn: "transactionType",
+    headClassName: "w-28",
+    cellClassName: "truncate",
     render: (txn) => txn.transactionType,
   },
   {
     key: "category",
     label: "Category",
     sortColumn: "transactionCategory",
+    headClassName: "w-40",
+    cellClassName: "truncate",
     render: (txn) => txn.transactionCategory,
   },
 ];
@@ -351,7 +362,7 @@ export function TransactionList({
             : "No transactions yet."}
         </p>
       ) : (
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
               {filteredColumns.map((col) => (

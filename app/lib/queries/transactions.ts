@@ -23,6 +23,8 @@ const SORTABLE_COLUMNS: Record<SortableColumn, Column> = {
   transactionCategory: vTransactionsFull.transactionCategory,
 };
 
+export const SORTABLE_COLUMN_KEYS = Object.keys(SORTABLE_COLUMNS) as SortableColumn[];
+
 export interface TransactionFilters {
   dateFrom?: string;
   dateTo?: string;
