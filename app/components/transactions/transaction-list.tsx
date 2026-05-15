@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ArrowUpIcon,
   ArrowDownIcon,
@@ -29,6 +29,11 @@ import { amountColorClass } from "@/components/accounts/accounts-table";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
 import { TransactionEditRow } from "@/components/transactions/transaction-edit-row";
 import { TransactionDeleteDialog } from "@/components/transactions/transaction-delete-dialog";
+import {
+  VISIBLE_COLUMNS_COOKIE,
+  VISIBLE_COLUMNS_COOKIE_MAX_AGE,
+  type ColumnKey,
+} from "@/components/transactions/transaction-columns";
 
 // ── Types ──
 
@@ -52,15 +57,6 @@ interface LookupOption {
   id: number;
   name: string;
 }
-
-export type ColumnKey =
-  | "date"
-  | "description"
-  | "amount"
-  | "account"
-  | "relatedAccount"
-  | "type"
-  | "category";
 
 interface ColumnDef {
   key: ColumnKey;
@@ -151,29 +147,6 @@ const COLUMNS: ColumnDef[] = [
   },
 ];
 
-const ALL_COLUMN_KEYS: ColumnKey[] = COLUMNS.map((c) => c.key);
-
-// ── Column visibility (localStorage) ──
-
-const STORAGE_KEY = "txn-visible-columns";
-
-function loadVisibleColumns(): Set<ColumnKey> {
-  if (typeof window === "undefined") return new Set(ALL_COLUMN_KEYS);
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as string[];
-      const valid = parsed.filter((k): k is ColumnKey =>
-        ALL_COLUMN_KEYS.includes(k as ColumnKey)
-      );
-      if (valid.length > 0) return new Set(valid);
-    }
-  } catch {
-    // ignore
-  }
-  return new Set(ALL_COLUMN_KEYS);
-}
-
 // ── Sub-components ──
 
 function SortableHead({
@@ -228,6 +201,7 @@ export function TransactionList({
   accounts,
   types,
   categories,
+  visibleColumns: initialVisibleColumns,
 }: {
   transactions: TransactionRow[];
   hasFilters?: boolean;
@@ -239,6 +213,7 @@ export function TransactionList({
   accounts: LookupOption[];
   types: LookupOption[];
   categories: LookupOption[];
+  visibleColumns: ColumnKey[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -261,17 +236,9 @@ export function TransactionList({
     [editingId]
   );
 
-  // Column visibility — initialize with all, then load from localStorage on mount.
-  // Two-step init avoids hydration mismatch: SSR and initial client render both
-  // use ALL_COLUMN_KEYS; localStorage preference is applied after mount.
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
-    () => new Set(ALL_COLUMN_KEYS)
+    () => new Set(initialVisibleColumns)
   );
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: post-mount hydration step to load persisted column preference from localStorage
-    setVisibleColumns(loadVisibleColumns());
-  }, []);
 
   const toggleColumn = useCallback((key: ColumnKey) => {
     setVisibleColumns((prev) => {
@@ -281,7 +248,8 @@ export function TransactionList({
       } else {
         next.add(key);
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      const encoded = encodeURIComponent(JSON.stringify([...next]));
+      document.cookie = `${VISIBLE_COLUMNS_COOKIE}=${encoded}; path=/; max-age=${VISIBLE_COLUMNS_COOKIE_MAX_AGE}; samesite=lax`;
       return next;
     });
   }, []);

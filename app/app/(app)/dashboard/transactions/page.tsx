@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import {
   getTransactionFormOptions,
   getFilteredTransactions,
@@ -12,6 +13,10 @@ import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { TransactionFilters as TransactionFiltersUI } from "@/components/transactions/transaction-filters";
 import { TransactionList } from "@/components/transactions/transaction-list";
+import {
+  VISIBLE_COLUMNS_COOKIE,
+  parseVisibleColumnsCookie,
+} from "@/components/transactions/transaction-columns";
 import {
   Card,
   CardContent,
@@ -83,6 +88,11 @@ export default async function DashboardTransactionsPage({
   const resolvedParams = await searchParams;
   const filters = parseSearchParams(resolvedParams);
 
+  const cookieStore = await cookies();
+  const visibleColumns = parseVisibleColumnsCookie(
+    cookieStore.get(VISIBLE_COLUMNS_COOKIE)?.value
+  );
+
   const [{ accounts, types, categories }, transactions, descriptions, totalCount] =
     await Promise.all([
       getTransactionFormOptions(),
@@ -122,6 +132,7 @@ export default async function DashboardTransactionsPage({
             accounts={accounts}
             types={types}
             categories={categories}
+            visibleColumns={visibleColumns}
           />
         </CardContent>
       </Card>
