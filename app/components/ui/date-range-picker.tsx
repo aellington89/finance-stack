@@ -14,7 +14,7 @@ import {
   endOfYear,
   format,
 } from "date-fns"
-import { CalendarIcon, ArrowRightIcon } from "lucide-react"
+import { CalendarIcon, ArrowRightIcon, XIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
@@ -26,6 +26,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  BUILT_IN_MACROS,
+  MACRO_LIMIT,
+  MACRO_NAME_MAX_LENGTH,
+  addMacro,
+  deleteMacro,
+  loadMacros,
+  saveMacros,
+  type Macro,
+  type Scope,
+  type Unit,
+} from "@/components/ui/date-range-macros"
 
 interface DateRangePickerProps {
   dateFrom?: string
@@ -34,9 +46,6 @@ interface DateRangePickerProps {
   className?: string
   placeholder?: string
 }
-
-type Scope = "last" | "this"
-type Unit = "days" | "weeks" | "months" | "years"
 
 function computeQuickRange(
   scope: Scope,
@@ -116,61 +125,226 @@ function QuickSelect({
   const [count, setCount] = React.useState(30)
   const [unit, setUnit] = React.useState<Unit>("days")
 
-  const handleApply = () => {
-    const range = computeQuickRange(scope, count, unit)
+  const [userMacros, setUserMacros] = React.useState<Macro[]>([])
+  const [hydrated, setHydrated] = React.useState(false)
+  const [isSaving, setIsSaving] = React.useState(false)
+  const [saveName, setSaveName] = React.useState("")
+  const [saveError, setSaveError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    setUserMacros(loadMacros())
+    setHydrated(true)
+  }, [])
+
+  const applyConfig = (config: { scope: Scope; count: number; unit: Unit }) => {
+    const range = computeQuickRange(config.scope, config.count, config.unit)
     onApply(range.from, range.to)
   }
 
+  const handleApply = () => {
+    applyConfig({ scope, count, unit })
+  }
+
+  const handleStartSave = () => {
+    setIsSaving(true)
+    setSaveName("")
+    setSaveError(null)
+  }
+
+  const handleCancelSave = () => {
+    setIsSaving(false)
+    setSaveName("")
+    setSaveError(null)
+  }
+
+  const handleConfirmSave = () => {
+    const result = addMacro(userMacros, { name: saveName, scope, count, unit })
+    if (!result.ok) {
+      setSaveError(result.error)
+      return
+    }
+    setUserMacros(result.macros)
+    saveMacros(result.macros)
+    setIsSaving(false)
+    setSaveName("")
+    setSaveError(null)
+  }
+
+  const handleDeleteMacro = (id: string) => {
+    const next = deleteMacro(userMacros, id)
+    setUserMacros(next)
+    saveMacros(next)
+  }
+
+  const atLimit = userMacros.length >= MACRO_LIMIT
+
   return (
-    <div className="space-y-2 p-2">
+    <div className="w-52 space-y-2 p-2">
       <p className="px-1 text-xs font-medium text-muted-foreground">
         Quick select
       </p>
-      <div className="flex items-center gap-1.5">
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value as Scope)}
-          className="h-7 rounded-md border border-input bg-popover text-popover-foreground px-1.5 text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
-        >
-          {SCOPES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        {scope === "last" && (
-          <Input
-            type="number"
-            min={1}
-            max={999}
-            value={count}
-            onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
-            className="h-7 w-14 px-1.5 text-xs"
-          />
-        )}
-        <select
-          value={unit}
-          onChange={(e) => setUnit(e.target.value as Unit)}
-          className="h-7 rounded-md border border-input bg-popover text-popover-foreground px-1.5 text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
-        >
-          {UNITS.map((u) => (
-            <option key={u.value} value={u.value}>
-              {scope === "this" && u.value !== "days"
-                ? u.label.replace(/s$/, "")
-                : u.label}
-            </option>
-          ))}
-        </select>
+
+      <div className="space-y-0.5">
+        {BUILT_IN_MACROS.map((m) => (
+          <Button
+            key={m.id}
+            type="button"
+            size="xs"
+            variant="ghost"
+            className="w-full justify-start px-2 text-xs font-normal"
+            onClick={() => applyConfig(m)}
+          >
+            {m.name}
+          </Button>
+        ))}
       </div>
-      <Button
-        type="button"
-        size="xs"
-        variant="secondary"
-        onClick={handleApply}
-        className="w-full"
-      >
-        Apply
-      </Button>
+
+      {hydrated && userMacros.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="px-1 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Saved
+          </p>
+          {userMacros.map((m) => (
+            <div key={m.id} className="group flex items-center gap-0.5">
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                className="flex-1 justify-start px-2 text-xs font-normal"
+                onClick={() => applyConfig(m)}
+              >
+                <span className="truncate">{m.name}</span>
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                aria-label={`Delete ${m.name}`}
+                className="size-6 shrink-0 px-0 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                onClick={() => handleDeleteMacro(m.id)}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2 border-t pt-2">
+        <div className="flex items-center gap-1.5">
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value as Scope)}
+            className="h-7 rounded-md border border-input bg-popover text-popover-foreground px-1.5 text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+          >
+            {SCOPES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          {scope === "last" && (
+            <Input
+              type="number"
+              min={1}
+              max={999}
+              value={count}
+              onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+              className="h-7 w-14 px-1.5 text-xs"
+            />
+          )}
+          <select
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as Unit)}
+            className="h-7 rounded-md border border-input bg-popover text-popover-foreground px-1.5 text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+          >
+            {UNITS.map((u) => (
+              <option key={u.value} value={u.value}>
+                {scope === "this" && u.value !== "days"
+                  ? u.label.replace(/s$/, "")
+                  : u.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {!isSaving ? (
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="xs"
+              variant="secondary"
+              onClick={handleApply}
+              className="flex-1"
+            >
+              Apply
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              onClick={handleStartSave}
+              disabled={atLimit}
+              title={
+                atLimit
+                  ? "Macro limit reached — delete one to add another"
+                  : undefined
+              }
+              className="flex-1"
+            >
+              Save as…
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Input
+              type="text"
+              autoFocus
+              maxLength={MACRO_NAME_MAX_LENGTH}
+              value={saveName}
+              onChange={(e) => {
+                setSaveName(e.target.value)
+                setSaveError(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  handleConfirmSave()
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  handleCancelSave()
+                }
+              }}
+              placeholder="Macro name"
+              className="h-7 text-xs"
+            />
+            <div className="flex gap-1">
+              <Button
+                type="button"
+                size="xs"
+                variant="default"
+                onClick={handleConfirmSave}
+                disabled={!saveName.trim()}
+                className="flex-1"
+              >
+                Save
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={handleCancelSave}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+            {saveError && (
+              <p className="text-[10px] text-destructive">{saveError}</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

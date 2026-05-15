@@ -237,6 +237,7 @@ finance-stack/
 │   │   │   ├── currency-input.tsx        # Numeric currency entry with symbol prefix (custom)
 │   │   │   ├── date-picker.tsx           # Single-date calendar popover (custom)
 │   │   │   ├── date-range-picker.tsx     # Date range with quick-select presets + manual input (custom)
+│   │   │   ├── date-range-macros.ts      # Saved Quick Select macros: types, built-in defaults, localStorage helpers
 │   │   │   └── input-group.tsx           # Input with inline prefix/suffix slot (custom)
 │   │   ├── charts/                       # Chart components (client components)
 │   │   │   ├── accounting-chart.tsx      # Time-series area chart for income/expenses/investments (Chart.js)
@@ -307,7 +308,7 @@ finance-stack/
 │   │   ├── unit/                         # Unit tests (no DB required)
 │   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
-│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf)
+│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
 │   │   │   └── lib/                      #   Library utility tests
 │   │   │       ├── utils.test.ts         #     cn() class-merge helper
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
@@ -376,6 +377,16 @@ docker compose down
 Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
+
+### 2026-05-14 — v0.1.3 (in progress)
+
+**Quick Select macros for the Date Range Picker ([Issue #61](https://github.com/aellington89/finance-stack/issues/61))**
+- The Date Range Picker's Quick Select panel now lists four built-in one-click presets (Last 7 days, Last 30 days, This month, This year) above the existing `Last/This + count + Days/Weeks/Months/Years` builder. Built-ins are non-deletable and never stored — they always reflect today's date, so "Last 30 days" stays a rolling window.
+- Users can save the current builder configuration as a named macro via a new **Save as…** button next to Apply. Saved macros appear under a "Saved" header between the built-ins and the builder. Hover a saved macro to reveal a delete affordance. Clicking any macro (built-in or saved) applies the range and closes the popover — same path as Apply.
+- Macros are persisted in `localStorage` under the key `dateRangeMacros` as `{ version: 1, macros: [...] }`. This diverges from the cookie-based persistence used elsewhere in the repo (`txn-visible-columns`, `sidebar_state`) because macros are pure client-side UI state — never read server-side, never affect initial HTML, never participate in auth — which is the standard industry choice for this class of preference (see [Issue #118](https://github.com/aellington89/finance-stack/issues/118) for evaluating whether the existing cookie usages should also move). All localStorage access is wrapped so private-mode browsers degrade gracefully: built-ins still work, saves no-op silently.
+- Names are trimmed, capped at 50 characters, deduplicated case-insensitively (including against built-in names), and limited to a hard cap of **10 user macros**. The Save as… button is disabled at the cap; the in-input save attempt surfaces a `"Macro limit reached — delete one to add another"` error inline.
+- Both consumers — the Transactions filter ([transaction-filters.tsx](app/components/transactions/transaction-filters.tsx)) and the Dashboard date filter ([date-range-filter.tsx](app/components/dashboard/date-range-filter.tsx)) — pick up macros automatically with no code changes; the picker's `onChange(from, to)` contract is unchanged.
+- New module `app/components/ui/date-range-macros.ts` is the schema source of truth for the `Scope` and `Unit` types (previously inlined in `date-range-picker.tsx`) and exports defensive `parseStoredMacros`, `loadMacros`, `saveMacros`, `addMacro`, and `deleteMacro` helpers. Unit tests in `tests/unit/components/date-range-macros.test.ts` cover parse defensiveness (malformed JSON, invalid scope/unit, name length, missing fields), dedupe rules, the cap, delete semantics, and the localStorage-unavailable path via stubbed globals.
 
 ### 2026-05-13 — v0.1.3 (in progress)
 
