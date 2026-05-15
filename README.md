@@ -277,7 +277,8 @@ finance-stack/
 │   │       ├── transaction-list.tsx      # Sortable transaction table with inline edit + delete (client component)
 │   │       ├── transaction-edit-row.tsx  # Inline row-edit form (client component, uses updateTransaction action)
 │   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
-│   │       └── transaction-filters.tsx   # Filter bar with date range, multi-select, amount
+│   │       ├── transaction-filters.tsx   # Filter bar with date range, multi-select, amount
+│   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
@@ -377,6 +378,11 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-05-13 — v0.1.3 (in progress)
+
+**Transactions column visibility: cookie-backed persistence (Issue #106)**
+- Moved Transactions table column-visibility persistence from `localStorage` to a `txn-visible-columns` cookie (`Path=/; SameSite=Lax; Max-Age=1 year`, URL-encoded JSON array of column keys). The dashboard page now reads the cookie server-side via `next/headers` `cookies()` and passes the validated list as a prop, so SSR and the initial client render emit the user's preferred columns directly. Eliminates the visible flash on every reload where hidden columns briefly appeared before disappearing.
+- Hard cutover: existing users' `localStorage` preference is ignored. Anyone who had previously hidden columns will see all columns once on first load, then re-hide via the Columns popover (which now writes the cookie).
+- Sidebar `defaultOpen` has the same SSR-read gap and is intentionally deferred to a follow-up — this change is scoped to the Transactions table.
 
 **Sortable columns: single source of truth (Issue #107)**
 - Made `SORTABLE_COLUMNS` in `lib/queries/transactions.ts` the single source of truth for the sortable-column whitelist. Added a derived `SORTABLE_COLUMN_KEYS = Object.keys(SORTABLE_COLUMNS) as SortableColumn[]` export and removed the duplicated `VALID_SORT_COLUMNS` array from `dashboard/transactions/page.tsx`.
