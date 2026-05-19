@@ -13,6 +13,8 @@ import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { TransactionFilters as TransactionFiltersUI } from "@/components/transactions/transaction-filters";
 import { TransactionList } from "@/components/transactions/transaction-list";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import {
   VISIBLE_COLUMNS_COOKIE,
   parseVisibleColumnsCookie,
@@ -108,10 +110,11 @@ export default async function DashboardTransactionsPage({
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_minmax(320px,380px)]">
-      <Card className="min-w-0">
-        <CardHeader>
-          <CardTitle>Transactions</CardTitle>
+    <div className="space-y-6">
+      <DashboardPageHeader
+        title="Transactions"
+        subnav={<DrilldownTabs section="transactions" />}
+        filters={
           <TransactionFiltersUI
             descriptions={descriptions}
             accounts={accounts}
@@ -119,36 +122,41 @@ export default async function DashboardTransactionsPage({
             categories={categories}
             filters={filters}
           />
-        </CardHeader>
-        <CardContent>
-          <TransactionList
-            transactions={transactions}
-            hasFilters={hasFilters}
-            sortBy={filters.sortBy}
-            sortDir={filters.sortDir}
-            page={filters.page ?? 1}
-            pageSize={filters.pageSize ?? 25}
-            totalCount={totalCount}
-            accounts={accounts}
-            types={types}
-            categories={categories}
-            visibleColumns={visibleColumns}
-          />
-        </CardContent>
-      </Card>
+        }
+      />
 
-      <Card className="self-start">
-        <CardHeader>
-          <CardTitle>New Transaction</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TransactionForm
-            accounts={accounts}
-            types={types}
-            categories={categories}
-          />
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-[1fr_minmax(320px,380px)]">
+        <Card className="min-w-0">
+          <CardContent>
+            <TransactionList
+              transactions={transactions}
+              hasFilters={hasFilters}
+              sortBy={filters.sortBy}
+              sortDir={filters.sortDir}
+              page={filters.page ?? 1}
+              pageSize={filters.pageSize ?? 25}
+              totalCount={totalCount}
+              accounts={accounts}
+              types={types}
+              categories={categories}
+              visibleColumns={visibleColumns}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="self-start">
+          <CardHeader>
+            <CardTitle>New Transaction</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TransactionForm
+              accounts={accounts}
+              types={types}
+              categories={categories}
+            />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

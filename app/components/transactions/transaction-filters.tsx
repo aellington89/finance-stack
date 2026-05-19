@@ -6,7 +6,6 @@ import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   Combobox,
@@ -43,20 +42,13 @@ interface TransactionFiltersProps {
 }
 
 function FilterSlot({
-  label,
   className,
   children,
 }: {
-  label: string;
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <Label className="text-xs">{label}</Label>
-      {children}
-    </div>
-  );
+  return <div className={cn("flex flex-col", className)}>{children}</div>;
 }
 
 function MultiSelectFilter({
@@ -84,15 +76,14 @@ function MultiSelectFilter({
       }
       multiple
     >
-      <ComboboxChips ref={anchor} className="h-8 text-xs">
+      <ComboboxChips ref={anchor}>
         {selectedIds.map((chipId) => (
-          <ComboboxChip key={chipId} className="text-xs">
+          <ComboboxChip key={chipId}>
             {options.find((o) => o.id === chipId)?.name}
           </ComboboxChip>
         ))}
         <ComboboxChipsInput
           placeholder={selectedIds.length === 0 ? `All ${label.toLowerCase()}s...` : ""}
-          className="text-xs"
         />
       </ComboboxChips>
       <ComboboxContent anchor={anchor}>
@@ -130,15 +121,14 @@ function DescriptionFilter({
       itemToStringLabel={(item: string) => item}
       multiple
     >
-      <ComboboxChips ref={anchor} className="h-8 text-xs">
+      <ComboboxChips ref={anchor}>
         {selectedDescriptions.map((chipValue) => (
-          <ComboboxChip key={chipValue} className="text-xs">
+          <ComboboxChip key={chipValue}>
             {chipValue}
           </ComboboxChip>
         ))}
         <ComboboxChipsInput
           placeholder={selectedDescriptions.length === 0 ? "All descriptions..." : ""}
-          className="text-xs"
         />
       </ComboboxChips>
       <ComboboxContent anchor={anchor}>
@@ -218,17 +208,16 @@ export function TransactionFilters({
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <FilterSlot label="Date Range" className="w-56">
+    <div className="flex flex-wrap items-center gap-2">
+      <FilterSlot className="w-56">
         <DateRangePicker
           dateFrom={filters.dateFrom}
           dateTo={filters.dateTo}
           onChange={handleDateRange}
-          className="h-8 text-xs"
         />
       </FilterSlot>
 
-      <FilterSlot label="Description" className="min-w-40 flex-1">
+      <FilterSlot className="min-w-40 flex-1">
         <DescriptionFilter
           descriptions={descriptions}
           selectedDescriptions={filters.descriptions ?? []}
@@ -236,10 +225,10 @@ export function TransactionFilters({
         />
       </FilterSlot>
 
-      <FilterSlot label="Amount" className="w-28">
+      <FilterSlot className="w-28">
         <Input
           type="text"
-          placeholder="e.g. 50.00"
+          placeholder="Amount, e.g. 50.00"
           defaultValue={filters.amount ?? ""}
           onBlur={handleAmount}
           onKeyDown={(e) => {
@@ -247,11 +236,10 @@ export function TransactionFilters({
               handleAmount(e as unknown as React.ChangeEvent<HTMLInputElement>);
             }
           }}
-          className="h-8 text-xs"
         />
       </FilterSlot>
 
-      <FilterSlot label="Account" className="min-w-36 flex-1">
+      <FilterSlot className="min-w-36 flex-1">
         <MultiSelectFilter
           label="Account"
           param="accountIds"
@@ -261,7 +249,7 @@ export function TransactionFilters({
         />
       </FilterSlot>
 
-      <FilterSlot label="Type" className="min-w-32 flex-1">
+      <FilterSlot className="min-w-32 flex-1">
         <MultiSelectFilter
           label="Type"
           param="typeIds"
@@ -271,7 +259,7 @@ export function TransactionFilters({
         />
       </FilterSlot>
 
-      <FilterSlot label="Category" className="min-w-32 flex-1">
+      <FilterSlot className="min-w-32 flex-1">
         <MultiSelectFilter
           label="Category"
           param="categoryIds"
@@ -282,7 +270,7 @@ export function TransactionFilters({
       </FilterSlot>
 
       {hasAnyFilter && (
-        <Button variant="ghost" size="xs" onClick={clearAll} className="mb-0.5">
+        <Button variant="ghost" size="xs" onClick={clearAll}>
           Clear All
         </Button>
       )}

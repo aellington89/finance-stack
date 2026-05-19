@@ -10,8 +10,9 @@ import {
 import { NetWorthTimeSeriesChart } from "@/components/charts/net-worth-timeseries-chart";
 import { WaterfallChart } from "@/components/charts/waterfall-chart";
 import { NetWorthDriversTable } from "@/components/dashboard/net-worth-drivers-table";
-import { SummaryDrilldownTabs } from "@/components/dashboard/summary-drilldown-tabs";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import {
   Card,
@@ -48,16 +49,11 @@ export default async function NetWorthDrilldownPage({
 
   return (
     <div className="space-y-6">
-      {/* ── Sub-navigation + Header ── */}
-      <div>
-        <SummaryDrilldownTabs />
-        <div className="mt-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">
-            Net Worth Analysis
-          </h1>
-          <DashboardDateRangeFilter basePath="/dashboard/net-worth" />
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Net Worth"
+        subnav={<DrilldownTabs section="summary" />}
+        filters={<DashboardDateRangeFilter basePath="/dashboard/net-worth" />}
+      />
 
       {/* ── Net Worth Headline ── */}
       <Card>

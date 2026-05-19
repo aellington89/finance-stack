@@ -16,89 +16,11 @@ import { AccountingChart } from "@/components/charts/accounting-chart";
 import { ExpensesCategoryChart } from "@/components/charts/expenses-category-chart";
 import { AccountingKpiCard } from "@/components/dashboard/accounting-kpi-card";
 import { AccountingFilters as AccountingFiltersUI } from "@/components/dashboard/accounting-filters";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 
 export const dynamic = "force-dynamic";
-
-const TIME_GROUPING_LABELS: Record<string, string> = {
-  day: "Daily",
-  week: "Weekly",
-  month: "Monthly",
-  quarter: "Quarterly",
-  year: "Yearly",
-  day_of_week: "By Day of Week",
-  day_of_month: "By Day of Month",
-  day_of_year: "By Day of Year",
-  week_of_year: "By Week of Year",
-  month_of_year: "By Month of Year",
-  quarter_of_year: "By Quarter of Year",
-};
-
-function FilterSegment({ label, values, maxVisible = 2 }: { label: string; values: string[]; maxVisible?: number }) {
-  if (values.length === 0) return null;
-  const visible = values.slice(0, maxVisible);
-  const overflow = values.length - visible.length;
-  return (
-    <span className="shrink-0">
-      <span className="font-medium text-foreground/70">{label}:</span>{" "}
-      {visible.join(", ")}
-      {overflow > 0 && (
-        <span
-          className="cursor-default underline decoration-dotted"
-          title={values.join("\n")}
-        >
-          {" "}+{overflow} more
-        </span>
-      )}
-    </span>
-  );
-}
-
-function FilterIndicator({
-  filters,
-  accounts,
-  categories,
-  includeGrouping,
-}: {
-  filters: AccountingFilters;
-  accounts: { id: number; name: string }[];
-  categories: { id: number; name: string }[];
-  includeGrouping?: boolean;
-}) {
-  const fromDate = filters.dateFrom ? new Date(filters.dateFrom + "T00:00:00") : undefined;
-  const toDate = filters.dateTo ? new Date(filters.dateTo + "T00:00:00") : undefined;
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const dateLabel = fromDate
-    ? toDate ? `${fmt(fromDate)} – ${fmt(toDate)}` : `${fmt(fromDate)} – Present`
-    : undefined;
-
-  const descNames = filters.descriptions ?? [];
-  const accountNames = (filters.accountIds ?? []).map(id => accounts.find(a => a.id === id)?.name ?? String(id));
-  const categoryNames = (filters.categoryIds ?? []).map(id => categories.find(c => c.id === id)?.name ?? String(id));
-
-  const hasFilters = includeGrouping || dateLabel || descNames.length || accountNames.length || categoryNames.length;
-  if (!hasFilters) return null;
-
-  return (
-    <div className="flex min-w-0 max-w-full items-center gap-x-3 overflow-hidden text-[11px] text-muted-foreground whitespace-nowrap">
-      {includeGrouping && filters.timeGrouping && (
-        <span className="shrink-0">
-          <span className="font-medium text-foreground/70">Grouped:</span>{" "}
-          {TIME_GROUPING_LABELS[filters.timeGrouping] ?? filters.timeGrouping}
-        </span>
-      )}
-      {dateLabel && (
-        <span className="shrink-0">
-          <span className="font-medium text-foreground/70">Period:</span>{" "}
-          {dateLabel}
-        </span>
-      )}
-      <FilterSegment label="Descriptions" values={descNames} />
-      <FilterSegment label="Accounts" values={accountNames} maxVisible={3} />
-      <FilterSegment label="Categories" values={categoryNames} />
-    </div>
-  );
-}
 
 const VALID_GROUPINGS: TimeGrouping[] = [
   "day", "week", "month", "quarter", "year",
@@ -233,15 +155,12 @@ export default async function AccountingPage({
     toDate.previousMonthLabel
   ) : undefined;
 
-  const chartIndicator = <FilterIndicator filters={filters} accounts={accounts} categories={categories} includeGrouping />;
-  const kpiIndicator = <FilterIndicator filters={filters} accounts={accounts} categories={categories} />;
-
   return (
     <div className="space-y-6">
-      {/* ── Page Title & Filters ── */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Personal Accounting Overview</h1>
-        <div className="mt-3">
+      <DashboardPageHeader
+        title="Personal Accounting"
+        subnav={<DrilldownTabs section="accounting" />}
+        filters={
           <AccountingFiltersUI
             descriptions={descriptions}
             accounts={accounts}
@@ -255,23 +174,20 @@ export default async function AccountingPage({
               timeGrouping?: string;
             }}
           />
-        </div>
-      </div>
+        }
+      />
 
       {/* ── Charts Row ── */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <AccountingChart data={timeSeries} timeGrouping={filters.timeGrouping} description={chartIndicator} />
-        <ExpensesCategoryChart data={categoryBreakdown} description={kpiIndicator} />
+        <AccountingChart data={timeSeries} timeGrouping={filters.timeGrouping} />
+        <ExpensesCategoryChart data={categoryBreakdown} />
       </div>
 
       {/* ── KPI Cards: Income / Expenses / Investments ── */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Income column */}
         <div className="min-w-0 space-y-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold">Income</h2>
-            {kpiIndicator}
-          </div>
+          <h2 className="text-lg font-semibold">Income</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {toDate && (
               <AccountingKpiCard
@@ -295,10 +211,7 @@ export default async function AccountingPage({
 
         {/* Expenses column */}
         <div className="min-w-0 space-y-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold">Expenses</h2>
-            {kpiIndicator}
-          </div>
+          <h2 className="text-lg font-semibold">Expenses</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {toDate && (
               <AccountingKpiCard
@@ -322,10 +235,7 @@ export default async function AccountingPage({
 
         {/* Investments column */}
         <div className="min-w-0 space-y-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold">Investments</h2>
-            {kpiIndicator}
-          </div>
+          <h2 className="text-lg font-semibold">Investments</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {toDate && (
               <AccountingKpiCard
