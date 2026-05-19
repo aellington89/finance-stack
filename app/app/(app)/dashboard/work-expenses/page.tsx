@@ -5,6 +5,8 @@ import {
 } from "@/lib/queries/work-expenses";
 import { AccountingKpiCard } from "@/components/dashboard/accounting-kpi-card";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { WorkExpensesChart } from "@/components/charts/work-expenses-chart";
 import { ExpensesCategoryChart } from "@/components/charts/expenses-category-chart";
@@ -39,12 +41,11 @@ export default async function WorkExpensesPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Work Expenses</h1>
-        <div className="mt-3">
-          <DashboardDateRangeFilter basePath="/dashboard/work-expenses" />
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Work Expenses"
+        subnav={<DrilldownTabs section="work-expenses" />}
+        filters={<DashboardDateRangeFilter basePath="/dashboard/work-expenses" />}
+      />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <AccountingKpiCard

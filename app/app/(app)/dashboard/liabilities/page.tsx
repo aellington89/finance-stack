@@ -11,8 +11,9 @@ import { DebtWaterfallChart } from "@/components/charts/debt-waterfall-chart";
 import { DebtMixBreakdown } from "@/components/dashboard/debt-mix-breakdown";
 import { DebtServiceSummary } from "@/components/dashboard/debt-service-summary";
 import { LiabilityPerformanceTable } from "@/components/dashboard/liability-performance-table";
-import { SummaryDrilldownTabs } from "@/components/dashboard/summary-drilldown-tabs";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import {
   Card,
@@ -50,15 +51,11 @@ export default async function LiabilitiesDrilldownPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <SummaryDrilldownTabs />
-        <div className="mt-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">
-            Liability Analysis
-          </h1>
-          <DashboardDateRangeFilter basePath="/dashboard/liabilities" />
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Liabilities"
+        subnav={<DrilldownTabs section="summary" />}
+        filters={<DashboardDateRangeFilter basePath="/dashboard/liabilities" />}
+      />
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <Card>

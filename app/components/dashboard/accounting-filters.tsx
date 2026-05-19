@@ -5,7 +5,6 @@ import { useCallback } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   Select,
@@ -64,20 +63,13 @@ interface AccountingFiltersProps {
 }
 
 function FilterSlot({
-  label,
   className,
   children,
 }: {
-  label: string;
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <Label className="text-xs">{label}</Label>
-      {children}
-    </div>
-  );
+  return <div className={cn("flex flex-col", className)}>{children}</div>;
 }
 
 function MultiSelectFilter({
@@ -105,15 +97,15 @@ function MultiSelectFilter({
       }
       multiple
     >
-      <ComboboxChips ref={anchor} className="h-8 overflow-hidden flex-nowrap text-xs">
+      <ComboboxChips ref={anchor} className="overflow-hidden flex-nowrap">
         {selectedIds.slice(0, 2).map((chipId) => (
-          <ComboboxChip key={chipId} className="text-xs shrink-0">
+          <ComboboxChip key={chipId} className="shrink-0">
             {options.find((o) => o.id === chipId)?.name}
           </ComboboxChip>
         ))}
         {selectedIds.length > 2 && (
           <span
-            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-xs font-medium text-muted-foreground"
+            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-sm font-medium text-muted-foreground"
             title={selectedIds
               .slice(2)
               .map((id) => options.find((o) => o.id === id)?.name)
@@ -126,7 +118,6 @@ function MultiSelectFilter({
           placeholder={
             selectedIds.length === 0 ? `All ${label.toLowerCase()}s...` : ""
           }
-          className="text-xs"
         />
       </ComboboxChips>
       <ComboboxContent anchor={anchor}>
@@ -164,15 +155,15 @@ function DescriptionFilter({
       itemToStringLabel={(item: string) => item}
       multiple
     >
-      <ComboboxChips ref={anchor} className="h-8 overflow-hidden flex-nowrap text-xs">
+      <ComboboxChips ref={anchor} className="overflow-hidden flex-nowrap">
         {selectedDescriptions.slice(0, 2).map((chipValue) => (
-          <ComboboxChip key={chipValue} className="text-xs shrink-0">
+          <ComboboxChip key={chipValue} className="shrink-0">
             {chipValue}
           </ComboboxChip>
         ))}
         {selectedDescriptions.length > 2 && (
           <span
-            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-xs font-medium text-muted-foreground"
+            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-sm font-medium text-muted-foreground"
             title={selectedDescriptions.slice(2).join(", ")}
           >
             +{selectedDescriptions.length - 2}
@@ -182,7 +173,6 @@ function DescriptionFilter({
           placeholder={
             selectedDescriptions.length === 0 ? "All descriptions..." : ""
           }
-          className="text-xs"
         />
       </ComboboxChips>
       <ComboboxContent anchor={anchor}>
@@ -265,18 +255,17 @@ export function AccountingFilters({
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <FilterSlot label="Date" className="w-56">
+    <div className="flex flex-wrap items-center gap-2">
+      <FilterSlot className="w-56">
         <DateRangePicker
           dateFrom={filters.dateFrom ?? undefined}
           dateTo={filters.dateTo ?? undefined}
           onChange={handleDateRange}
           placeholder="Last 30 days (default)"
-          className="h-8 text-xs"
         />
       </FilterSlot>
 
-      <FilterSlot label="Description" className="min-w-40 flex-1">
+      <FilterSlot className="min-w-40 flex-1">
         <DescriptionFilter
           descriptions={descriptions}
           selectedDescriptions={filters.descriptions ?? []}
@@ -284,7 +273,7 @@ export function AccountingFilters({
         />
       </FilterSlot>
 
-      <FilterSlot label="Account" className="min-w-36 flex-1">
+      <FilterSlot className="min-w-36 flex-1">
         <MultiSelectFilter
           label="Account"
           param="accountIds"
@@ -294,7 +283,7 @@ export function AccountingFilters({
         />
       </FilterSlot>
 
-      <FilterSlot label="Transaction Category" className="min-w-36 flex-1">
+      <FilterSlot className="min-w-36 flex-1">
         <MultiSelectFilter
           label="Category"
           param="categoryIds"
@@ -304,12 +293,12 @@ export function AccountingFilters({
         />
       </FilterSlot>
 
-      <FilterSlot label="Time grouping" className="w-36">
+      <FilterSlot className="w-36">
         <Select
           value={filters.timeGrouping ?? "month"}
           onValueChange={handleTimeGrouping}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger>
             <span>{TIME_GROUPING_LABELS[filters.timeGrouping ?? "month"]}</span>
           </SelectTrigger>
           <SelectContent>
@@ -323,7 +312,7 @@ export function AccountingFilters({
       </FilterSlot>
 
       {hasAnyFilter && (
-        <Button variant="ghost" size="xs" onClick={clearAll} className="mb-0.5">
+        <Button variant="ghost" size="xs" onClick={clearAll}>
           Clear All
         </Button>
       )}

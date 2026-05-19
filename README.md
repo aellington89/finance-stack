@@ -208,17 +208,32 @@ finance-stack/
 │   │   └── (app)/                        # Route group — sidebar navigation shell
 │   │       ├── layout.tsx                #   App shell (SidebarProvider + AppSidebar + SidebarInset)
 │   │       ├── error.tsx                 #   Error boundary — catches unhandled errors with retry UI
-│   │       ├── dashboard/                #   Tabbed dashboard with 5 tabs + drill-downs:
-│   │       │   ├── layout.tsx            #     Layout with tab navigation
-│   │       │   ├── dashboard-tabs.tsx    #     Tab navigation component
-│   │       │   ├── page.tsx              #     Summary tab (/)
-│   │       │   ├── net-worth/            #     Net Worth drill-down (from Summary KPI click)
-│   │       │   ├── assets/               #     Assets drill-down (allocation, performance, liquidity, trend)
-│   │       │   ├── liabilities/          #     Liabilities drill-down (allocation, debt-mix, waterfall, debt service, performance)
-│   │       │   ├── accounting/           #     Personal Accounting tab
-│   │       │   ├── transactions/         #     Transactions tab (form + list)
-│   │       │   ├── accounts/             #     Accounts tab (visual balance sheet)
-│   │       │   └── work-expenses/        #     Work Expenses tab
+│   │       ├── dashboard/                #   Tabbed dashboard — 5 sections, each with drill-down sub-tabs:
+│   │       │   ├── layout.tsx            #     Layout: top-level section tabs + ensureTodayBalances()
+│   │       │   ├── dashboard-tabs.tsx    #     Top-level tabs (Summary / Accounting / Transactions / Accounts / Work Expenses)
+│   │       │   ├── page.tsx              #     Summary overview (/) — page-level date filter, date-aware KPI snapshot + trends
+│   │       │   ├── net-worth/            #     Summary › Net Worth drill-down (allocation, drivers, decomposition, waterfall)
+│   │       │   ├── assets/               #     Summary › Assets drill-down (allocation, performance, liquidity, trend)
+│   │       │   ├── liabilities/          #     Summary › Liabilities drill-down (allocation, debt-mix, waterfall, debt service, performance)
+│   │       │   ├── accounting/           #     Personal Accounting:
+│   │       │   │   ├── page.tsx              #       Overview — charts + Income/Expenses/Investments KPI columns
+│   │       │   │   ├── income/page.tsx       #       Income drill-down (stub)
+│   │       │   │   ├── expenses/page.tsx     #       Expenses drill-down (stub)
+│   │       │   │   ├── investments/page.tsx  #       Investments drill-down (stub)
+│   │       │   │   ├── cash-flow/page.tsx    #       Cash Flow drill-down (stub)
+│   │       │   │   └── budget/page.tsx       #       Budget drill-down (stub)
+│   │       │   ├── transactions/         #     Transactions:
+│   │       │   │   ├── page.tsx              #       Overview — filter bar + list + new-transaction form
+│   │       │   │   ├── categories/page.tsx   #       Categories drill-down (stub)
+│   │       │   │   ├── merchants/page.tsx    #       Merchants drill-down (stub)
+│   │       │   │   └── recurring/page.tsx    #       Recurring drill-down (stub)
+│   │       │   ├── accounts/             #     Accounts:
+│   │       │   │   ├── page.tsx              #       Overview — visual balance sheet
+│   │       │   │   ├── activity/page.tsx     #       Activity drill-down (stub)
+│   │       │   │   └── reconciliation/page.tsx #     Reconciliation drill-down (stub)
+│   │       │   └── work-expenses/        #     Work Expenses:
+│   │       │       ├── page.tsx              #       Overview — KPIs + charts
+│   │       │       └── reimbursements/page.tsx #     Reimbursements drill-down (stub)
 │   │       ├── accounts/                 #   /accounts, /accounts/new, /accounts/[id]/edit
 │   │       ├── settings/categories/      #   /settings/categories — CRUD for all reference-data tables
 │   │       └── test-ui/                  #   /test-ui — UI component verification page
@@ -263,7 +278,10 @@ finance-stack/
 │   │   │   ├── entity-dialog.tsx         # Add/edit modal dialog (name + optional category combobox)
 │   │   │   └── delete-entity-dialog.tsx  # Delete confirmation dialog with in-use guard
 │   │   ├── dashboard/                    # Dashboard-specific components
-│   │   │   ├── accounting-filters.tsx    # Multi-select combobox filters for accounting page
+│   │   │   ├── page-header.tsx           # Standard page header — optional sub-nav + h1 title + filter bar below (shared by all dashboard pages)
+│   │   │   ├── drilldown-tabs.tsx        # Config-driven drill-down sub-tabs for every section (DRILLDOWN_SECTIONS source of truth)
+│   │   │   ├── coming-soon.tsx           # Placeholder body for scaffolded drill-down pages not yet built out
+│   │   │   ├── accounting-filters.tsx    # Label-less multi-select combobox filter bar for accounting page
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
 │   │   │   ├── date-range-filter.tsx     # URL-param-driven date range filter wrapper
 │   │   │   ├── net-worth-drivers-table.tsx # Expandable net worth drivers table (category → account type → account)
@@ -271,14 +289,13 @@ finance-stack/
 │   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
 │   │   │   ├── liability-performance-table.tsx # Expandable liability performance table (category → account type → account)
 │   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type (current vs. long-term)
-│   │   │   ├── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
-│   │   │   └── summary-drilldown-tabs.tsx # Sub-navigation tabs for Summary drill-down pages
+│   │   │   └── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
 │   │       ├── transaction-list.tsx      # Sortable transaction table with inline edit + delete (client component)
 │   │       ├── transaction-edit-row.tsx  # Inline row-edit form (client component, uses updateTransaction action)
 │   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
-│   │       ├── transaction-filters.tsx   # Filter bar with date range, multi-select, amount
+│   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
@@ -378,7 +395,23 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-05-14 — v0.1.3 (in progress)
+### 2026-05-17 — v0.1.3 (in progress)
+
+**Dashboard layout standardization**
+- Every dashboard page now shares one layout contract via the new [page-header.tsx](app/components/dashboard/page-header.tsx) (`DashboardPageHeader`): optional sub-nav tabs, an `<h1>` page title, then an optional filter bar on its own row directly below the title. Replaces the previous mix of in-card titles, title-less pages, and filters living variously inside card headers or beside the title.
+- Titles normalized to short names — `Summary`, `Net Worth`, `Assets`, `Liabilities`, `Personal Accounting`, `Transactions`, `Accounts`, `Work Expenses` — dropping the inconsistent "Analysis"/"Overview" suffixes and adding titles to the previously title-less Summary/Transactions/Accounts pages.
+- Summary's date filter is now page-level instead of scoped to the "Historical Trends" card. The Key Performance Metrics snapshot is taken as of the latest balance point within the selected range (card description reads "As of <date>"); with the default range (no end date) the last point is today, so the default view is unchanged. `dashboard/page.tsx` derives the headline from the time series rather than the always-current `getCurrentNetWorth()`.
+- Removed the redundant inline `FilterIndicator` text from the Personal Accounting page — active filters are already visible in the header filter bar (`FilterIndicator`, `FilterSegment`, and `TIME_GROUPING_LABELS` deleted; ≈−190/+115 lines on that page).
+- Filter bars no longer render per-control `<Label>`s: `FilterSlot` in [transaction-filters.tsx](app/components/transactions/transaction-filters.tsx) and [accounting-filters.tsx](app/components/dashboard/accounting-filters.tsx) is now a plain sizing wrapper, matching the label-less date-range pages. Container alignment changed `items-end` → `items-center`; the Amount field's placeholder became `"Amount, e.g. 50.00"` so it stays self-explanatory without a label.
+- Filter controls on the Personal Accounting and Transactions pages no longer force `text-xs` (and redundant `h-8`) on their date-range pickers, comboboxes, chips, inputs, and selects. They now render at the default control size (`h-8` / `text-sm`), matching `DashboardDateRangeFilter` on the other pages — the two filter bars previously looked noticeably smaller than the rest of the dashboard.
+
+**Config-driven drill-down sub-tabs for every section**
+- `summary-drilldown-tabs.tsx` (Summary-only) replaced by the generic [drilldown-tabs.tsx](app/components/dashboard/drilldown-tabs.tsx). `DRILLDOWN_SECTIONS` is the single source of truth for every section's sub-tabs; the active tab is the one whose `href` is the longest prefix of the current path, so "Overview" (the section root) never shadows its own drill-downs and no section needs bespoke matching logic. Adding a real drill-down later is one config line plus the page.
+- All five sections now carry a drill-down sub-tab bar (rendered through `DashboardPageHeader`'s `subnav` slot): Summary (Overview · Net Worth · Assets · Liabilities — existing), Personal Accounting (Overview · Income · Expenses · Investments · Cash Flow · Budget), Transactions (Overview · Categories · Merchants · Recurring), Accounts (Overview · Activity · Reconciliation), Work Expenses (Overview · Reimbursements).
+- Scaffolded the 11 new drill-down routes as stubs so the tab bars are fully clickable now; each uses the standard header plus a shared [coming-soon.tsx](app/components/dashboard/coming-soon.tsx) placeholder and is trivial to replace when built out.
+- Verified with `npm run typecheck` and `npm run lint`. No data-layer or URL-param contract changes.
+
+### 2026-05-14 — v0.1.3
 
 **Quick Select macros for the Date Range Picker ([Issue #61](https://github.com/aellington89/finance-stack/issues/61))**
 - The Date Range Picker's Quick Select panel now lists four built-in one-click presets (Last 7 days, Last 30 days, This month, This year) above the existing `Last/This + count + Days/Weeks/Months/Years` builder. Built-ins are non-deletable and never stored — they always reflect today's date, so "Last 30 days" stays a rolling window.

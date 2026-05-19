@@ -8,8 +8,9 @@ import { AssetAllocationChart } from "@/components/charts/asset-allocation-chart
 import { AssetsTimeSeriesChart } from "@/components/charts/assets-timeseries-chart";
 import { AssetPerformanceTable } from "@/components/dashboard/asset-performance-table";
 import { LiquidityBreakdown } from "@/components/dashboard/liquidity-breakdown";
-import { SummaryDrilldownTabs } from "@/components/dashboard/summary-drilldown-tabs";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import {
   Card,
@@ -46,13 +47,11 @@ export default async function AssetsDrilldownPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <SummaryDrilldownTabs />
-        <div className="mt-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Asset Analysis</h1>
-          <DashboardDateRangeFilter basePath="/dashboard/assets" />
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Assets"
+        subnav={<DrilldownTabs section="summary" />}
+        filters={<DashboardDateRangeFilter basePath="/dashboard/assets" />}
+      />
 
       <Card>
         <CardHeader>

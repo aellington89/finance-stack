@@ -6,8 +6,9 @@ import {
 } from "@/lib/queries/dashboard";
 import { TimeSeriesChart } from "@/components/charts/net-worth-chart";
 import { GaugeBadge } from "@/components/charts/gauge-badge";
-import { SummaryDrilldownTabs } from "@/components/dashboard/summary-drilldown-tabs";
+import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import {
   Card,
@@ -49,10 +50,23 @@ export default async function DashboardSummaryPage({
   const params = await searchParams;
   const { dateFrom, dateTo } = getDateRangeFromParams(params);
 
-  const [summary, timeSeries] = await Promise.all([
+  const [currentNetWorth, timeSeries] = await Promise.all([
     getCurrentNetWorth(),
     getNetWorthTimeSeries(dateFrom, dateTo),
   ]);
+
+  // Page-level date filter drives the whole page: the headline snapshot is
+  // taken as of the latest balance within the selected range. With the default
+  // range (no end date) the last point is today, matching the live snapshot.
+  const lastPoint = timeSeries.at(-1);
+  const summary = lastPoint ?? currentNetWorth;
+  const asOfLabel = lastPoint
+    ? new Date(lastPoint.date + "T00:00:00").toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "Current snapshot";
 
   // KPI ratios — rounded to nearest hundredth
   const absLiabilities = Math.abs(summary.totalLiabilities);
@@ -71,13 +85,17 @@ export default async function DashboardSummaryPage({
 
   return (
     <div className="space-y-6">
-      <SummaryDrilldownTabs />
+      <DashboardPageHeader
+        title="Summary"
+        subnav={<DrilldownTabs section="summary" />}
+        filters={<DashboardDateRangeFilter />}
+      />
 
       {/* ── Section 1: Key Performance Metrics ── */}
       <Card>
         <CardHeader>
           <CardTitle>Key Performance Metrics</CardTitle>
-          <CardDescription>Current snapshot</CardDescription>
+          <CardDescription>As of {asOfLabel}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-8 lg:flex-row lg:items-center">
@@ -143,12 +161,9 @@ export default async function DashboardSummaryPage({
 
       {/* ── Section 2: Historical Trends ── */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <div>
-            <CardTitle>Historical Trends</CardTitle>
-            <CardDescription>Balance over time</CardDescription>
-          </div>
-          <DashboardDateRangeFilter />
+        <CardHeader>
+          <CardTitle>Historical Trends</CardTitle>
+          <CardDescription>Balance over time</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
