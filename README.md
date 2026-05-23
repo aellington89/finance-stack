@@ -185,7 +185,7 @@ For schema changes, see [Making schema changes](#making-schema-changes) below �
 
 `npm run db:pull` is now **inspection only** — it overwrites `schema.ts` from the live DB, which is useful for verifying a migration applied as expected but should never be committed as the source of truth.
 
-CI runs a drift gate that `drizzle-kit pull`s from the migrated test database and diffs the result against the committed `schema.ts`. Any diff fails the build with a message pointing at `npm run db:generate`.
+CI runs a drift gate that invokes `drizzle-kit generate` after applying migrations. If `schema.ts` diverges from the latest meta snapshot, generate produces a new migration SQL file under `drizzle/migrations/`; CI then fails the build with a message pointing at `npm run db:generate`. This catches the common case of editing `schema.ts` without running `db:generate` — without depending on `drizzle-kit pull`'s catalog introspection, which has known cosmetic non-determinism (e.g. composite-index op classes, PK column order).
 
 ### Adopting migrations on an existing database
 
@@ -224,7 +224,7 @@ finance-stack/
 ├── app/                                  # Next.js 16 application (App Router)
 │   ├── Dockerfile                        # Multi-stage Docker build (deps → build → runner)
 │   ├── .dockerignore                     # Excludes node_modules, .next, etc. from build context
-│   ├── .gitignore                        # Excludes node_modules, .next, .env*, coverage, drift gate temp dir
+│   ├── .gitignore                        # Excludes node_modules, .next, .env*, coverage
 │   ├── README.md                         # App-specific development notes and scripts reference
 │   ├── package.json                      # Node.js dependencies and scripts
 │   ├── tsconfig.json                     # TypeScript compiler config
@@ -441,7 +441,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - New baseline migration at `app/drizzle/migrations/0000_baseline.sql` reproduces the full current prod schema (7 tables, 5 indexes, 7 FKs, 3 views, 2 `liquidity_class` CHECK constraints, 2 table COMMENTs). Future schema changes are authored via `npm run db:generate -- --name <desc>` and committed as versioned migration files.
 - New `migrate` Compose service (built from `app/Dockerfile` `target: migrate`, with `postgresql-client` for psql + `drizzle-kit` from devDeps) runs once per `docker compose up` after postgres is healthy: applies `drizzle-kit migrate` to both `Finances` and `Finances_Test`, then runs the three existing seed files (the row-count guard that protects existing Finances data moved into [`app/scripts/migrate-and-seed.sh`](app/scripts/migrate-and-seed.sh)). `finance-app` and `importer` now `depends_on: migrate.service_completed_successfully`.
 - [`init-db/01-create-databases.sh`](init-db/01-create-databases.sh) is slimmed down to DB + Metabase role creation only — no more schema or seed application from the postgres init container, which avoided the chicken-and-egg of needing tables before migrations could create them.
-- CI workflow updated: postgres bumped to 18 for compose parity, `psql -f schema.sql` replaced with `npm run db:migrate`, and a new "Schema drift gate" step `drizzle-kit pull`s from the migrated DB and fails the build on any diff against committed `schema.ts` — pointing the contributor at `npm run db:generate`.
+- CI workflow updated: postgres bumped to 18 for compose parity, `psql -f schema.sql` replaced with `npm run db:migrate`, and a new "Schema drift gate" step runs `drizzle-kit generate` after migration and fails the build if a new migration SQL file appears under `drizzle/migrations/` — pointing the contributor at `npm run db:generate`. (An earlier draft used `drizzle-kit pull` + diff, but pull's catalog introspection has cosmetic non-determinism that produced false positives.)
 - [`app/tests/integration/vitest-setup.ts`](app/tests/integration/vitest-setup.ts) lost its hand-rolled `ADD COLUMN IF NOT EXISTS liquidity_class` block (dead code once migrations own that column). Lookup upserts below remain as test-state self-healing.
 - Existing local `Finances` DBs with real data adopt the baseline via a one-time `INSERT INTO drizzle.__drizzle_migrations` documented in the [Making schema changes](#making-schema-changes) section. No data loss.
 
