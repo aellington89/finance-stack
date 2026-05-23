@@ -28,8 +28,9 @@ The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` sh
 | `npm run test:unit` | Unit tests only (no DB required) |
 | `npm run test:integration` | Integration tests (requires `Finances_Test` DB) |
 | `npm run test:coverage` | Generate coverage report in `coverage/` |
-| `npm run db:pull` | Sync Drizzle schema from DB |
+| `npm run db:generate` | Generate a migration file from a `schema.ts` change |
 | `npm run db:migrate` | Apply pending migrations |
+| `npm run db:pull` | Introspect DB into `schema.ts` (inspection only — `schema.ts` is the source of truth) |
 
 ## Testing
 
@@ -41,5 +42,9 @@ Tests use Vitest with two separate projects:
 The integration test global setup (`tests/integration/setup.ts`) asserts that `DATABASE_URL` contains `Finances_Test` before any test runs, preventing accidental execution against production.
 
 To seed the test database with sample data, see the [root README](../README.md#test-database).
+
+## Schema changes
+
+`drizzle/schema.ts` is the source of truth. Edit it, then run `npm run db:generate -- --name <desc>` to produce a versioned migration in `drizzle/migrations/`. See [Making schema changes](../README.md#making-schema-changes) in the root README for the full workflow.
 
 See the [root README](../README.md) for full project documentation.

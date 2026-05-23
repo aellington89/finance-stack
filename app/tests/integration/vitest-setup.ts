@@ -26,19 +26,6 @@ vi.mock("next/navigation", () => ({
 // CASCADE would wipe seeded accounts/transactions/account_balance_history
 // that other tests rely on.
 beforeAll(async () => {
-  // Ensure liquidity_class column exists before any upsert references it.
-  // Safe for test DBs that predate the liquidity_class migration.
-  await db.execute(sql`
-    ALTER TABLE account_types
-      ADD COLUMN IF NOT EXISTS liquidity_class text
-      CHECK (liquidity_class IN ('liquid','semi_liquid','illiquid','restricted'))
-  `);
-  await db.execute(sql`
-    ALTER TABLE accounts
-      ADD COLUMN IF NOT EXISTS liquidity_class text
-      CHECK (liquidity_class IN ('liquid','semi_liquid','illiquid','restricted'))
-  `);
-
   await db.execute(sql`
     INSERT INTO account_type_categories (account_type_category_id, account_type_category)
     OVERRIDING SYSTEM VALUE VALUES

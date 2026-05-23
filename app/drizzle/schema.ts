@@ -1,4 +1,4 @@
-import { pgTable, index, foreignKey, serial, text, date, integer, numeric, primaryKey, pgView } from "drizzle-orm/pg-core"
+import { pgTable, index, foreignKey, serial, text, date, integer, numeric, check, primaryKey, pgView } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -13,7 +13,7 @@ export const transactions = pgTable("transactions", {
 	transactionTypeId: integer("transaction_type_id").notNull(),
 	transactionCategoryId: integer("transaction_category_id").notNull(),
 }, (table) => [
-	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("int4_ops")),
+	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_category").using("btree", table.transactionCategoryId.asc().nullsLast().op("int4_ops")),
 	index("idx_transactions_date").using("btree", table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_type").using("btree", table.transactionTypeId.asc().nullsLast().op("int4_ops")),
@@ -39,6 +39,20 @@ export const transactions = pgTable("transactions", {
 		}),
 ]);
 
+export const accountTypes = pgTable("account_types", {
+	accountTypeId: integer("account_type_id").primaryKey().generatedAlwaysAsIdentity({ name: "account_types_account_type_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
+	accountType: text("account_type").notNull(),
+	accountTypeCategoryId: integer("account_type_category_id").notNull(),
+	liquidityClass: text("liquidity_class"),
+}, (table) => [
+	foreignKey({
+			columns: [table.accountTypeCategoryId],
+			foreignColumns: [accountTypeCategories.accountTypeCategoryId],
+			name: "account_types_account_type_category_id_fkey"
+		}),
+	check("account_types_liquidity_class_check", sql`liquidity_class = ANY (ARRAY['liquid'::text, 'semi_liquid'::text, 'illiquid'::text, 'restricted'::text])`),
+]);
+
 export const accounts = pgTable("accounts", {
 	accountId: serial("account_id").primaryKey().notNull(),
 	accountName: text("account_name").notNull(),
@@ -53,19 +67,7 @@ export const accounts = pgTable("accounts", {
 			foreignColumns: [accountTypes.accountTypeId],
 			name: "accounts_account_type_id_fkey"
 		}),
-]);
-
-export const accountTypes = pgTable("account_types", {
-	accountTypeId: integer("account_type_id").primaryKey().generatedAlwaysAsIdentity({ name: "account_types_account_type_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
-	accountType: text("account_type").notNull(),
-	accountTypeCategoryId: integer("account_type_category_id").notNull(),
-	liquidityClass: text("liquidity_class"),
-}, (table) => [
-	foreignKey({
-			columns: [table.accountTypeCategoryId],
-			foreignColumns: [accountTypeCategories.accountTypeCategoryId],
-			name: "account_types_account_type_category_id_fkey"
-		}),
+	check("accounts_liquidity_class_check", sql`liquidity_class = ANY (ARRAY['liquid'::text, 'semi_liquid'::text, 'illiquid'::text, 'restricted'::text])`),
 ]);
 
 export const accountTypeCategories = pgTable("account_type_categories", {
@@ -95,7 +97,7 @@ export const accountBalanceHistory = pgTable("account_balance_history", {
 			foreignColumns: [accounts.accountId],
 			name: "account_balance_history_account_id_fkey"
 		}),
-	primaryKey({ columns: [table.balanceDate, table.accountId], name: "account_balance_history_pkey"}),
+	primaryKey({ columns: [table.accountId, table.balanceDate], name: "account_balance_history_pkey"}),
 ]);
 export const vTransactionsFull = pgView("v_transactions_full", {	transactionId: integer("transaction_id"),
 	transactionDescription: text("transaction_description"),

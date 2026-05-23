@@ -14,6 +14,17 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN mkdir -p public && npm run build
 
+# --- Stage 2b: Migration runner ---
+# Used by the `migrate` Compose service: drizzle-kit + psql, no Next.js build.
+FROM node:22-alpine AS migrate
+WORKDIR /app
+RUN apk add --no-cache postgresql-client bash
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json drizzle.config.ts ./
+COPY drizzle ./drizzle
+COPY scripts ./scripts
+ENTRYPOINT ["bash", "/app/scripts/migrate-and-seed.sh"]
+
 # --- Stage 3: Production runner ---
 FROM node:22-alpine AS runner
 WORKDIR /app
