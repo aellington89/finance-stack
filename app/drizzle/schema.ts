@@ -13,7 +13,7 @@ export const transactions = pgTable("transactions", {
 	transactionTypeId: integer("transaction_type_id").notNull(),
 	transactionCategoryId: integer("transaction_category_id").notNull(),
 }, (table) => [
-	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("int4_ops")),
+	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_category").using("btree", table.transactionCategoryId.asc().nullsLast().op("int4_ops")),
 	index("idx_transactions_date").using("btree", table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_type").using("btree", table.transactionTypeId.asc().nullsLast().op("int4_ops")),

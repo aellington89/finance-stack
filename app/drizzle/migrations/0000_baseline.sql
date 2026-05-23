@@ -59,7 +59,7 @@ ALTER TABLE "transactions" ADD CONSTRAINT "transactions_related_account_id_fkey"
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_transaction_category_id_fkey" FOREIGN KEY ("transaction_category_id") REFERENCES "public"."transaction_categories"("transaction_category_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_transaction_type_id_fkey" FOREIGN KEY ("transaction_type_id") REFERENCES "public"."transaction_types"("transaction_type_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_balance_history_date" ON "account_balance_history" USING btree ("balance_date" date_ops);--> statement-breakpoint
-CREATE INDEX "idx_transactions_account_date" ON "transactions" USING btree ("account_id" int4_ops,"transaction_date" int4_ops);--> statement-breakpoint
+CREATE INDEX "idx_transactions_account_date" ON "transactions" USING btree ("account_id" int4_ops,"transaction_date" date_ops);--> statement-breakpoint
 CREATE INDEX "idx_transactions_category" ON "transactions" USING btree ("transaction_category_id" int4_ops);--> statement-breakpoint
 CREATE INDEX "idx_transactions_date" ON "transactions" USING btree ("transaction_date" date_ops);--> statement-breakpoint
 CREATE INDEX "idx_transactions_type" ON "transactions" USING btree ("transaction_type_id" int4_ops);--> statement-breakpoint

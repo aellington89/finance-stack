@@ -400,7 +400,7 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last",
-              "opclass": "int4_ops"
+              "opclass": "date_ops"
             }
           ],
           "isUnique": false,
