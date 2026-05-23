@@ -11,7 +11,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
@@ -40,15 +40,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Initialize test database
+      - name: Create test database
+        env:
+          PGPASSWORD: changeme
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE "Finances_Test";'
+
+      - name: Apply Drizzle migrations
+        env:
+          DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+        run: npm run db:migrate
+
+      - name: Seed test database
         env:
           PGPASSWORD: changeme
         run: |
-          psql -h localhost -U postgres -c 'CREATE DATABASE "Finances_Test";'
-          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/schema.sql
           psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/shared-lookups.sql
           psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/finances-test-mock-data.sql
           psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/rebuild-balance-history.sql
+
+      - name: Schema drift gate
+        env:
+          DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+        run: |
+          # Introspect the migrated DB into a temp directory and diff its schema.ts
+          # against the committed one. Any diff means either schema.ts was edited
+          # without a matching migration, or a migration drifts from schema.ts.
+          # The temp config must live inside app/ so node_modules resolution finds drizzle-kit.
+          mkdir -p .drift-tmp
+          cat > .drift-tmp/drizzle.config.ts <<'EOF'
+          import { defineConfig } from "drizzle-kit";
+          export default defineConfig({
+            dialect: "postgresql",
+            schema: "./.drift-tmp/schema.ts",
+            out: "./.drift-tmp",
+            dbCredentials: { url: process.env.DATABASE_URL! },
+          });
+          EOF
+          npx drizzle-kit pull --config=.drift-tmp/drizzle.config.ts
+          if ! diff -u drizzle/schema.ts .drift-tmp/schema.ts; then
+            echo ""
+            echo "::error::Schema drift detected: drizzle/schema.ts does not match the migrated database."
+            echo "Run 'npm run db:generate -- --name <description>' and commit the new migration."
+            exit 1
+          fi
 
       - name: Lint
         run: npm run lint

@@ -38,8 +38,9 @@ docker compose up
 
 This will:
 1. Start PostgreSQL and wait until it is healthy
-2. Build and start the Next.js finance application
-3. Start the importer service
+2. Run the `migrate` service: applies pending Drizzle migrations to `Finances` and `Finances_Test`, then seeds lookup data
+3. Build and start the Next.js finance application
+4. Start the importer service
 
 ### Importer (`importer`)
 
@@ -135,19 +136,20 @@ The `Finances_Test` database has its balance history built automatically as part
 
 ## First-launch database initialization
 
-On the first `docker compose up` (empty Postgres data volume), [`init-db/01-create-databases.sh`](init-db/01-create-databases.sh) runs automatically and:
+On the first `docker compose up` (empty Postgres data volume), [`init-db/01-create-databases.sh`](init-db/01-create-databases.sh) runs once inside the postgres container and creates the `Finances` and `Finances_Test` databases plus the Metabase role + database. It does not apply any schema or seed data.
 
-1. Creates both the `Finances` and `Finances_Test` databases (plus the Metabase database).
-2. Applies [`init-db/schema.sql`](init-db/schema.sql) to each.
-3. Seeds the two **shared lookup tables** (`account_type_categories`, `transaction_types`) into both databases so they start in sync. The Finances side uses `ON CONFLICT DO NOTHING` and is additionally guarded by a pre-flight row-count check — **existing Finances user data is never overwritten**, even on a manual re-run.
-4. Seeds `Finances_Test` with mock data: all 19 `account_types`, all 27 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
-5. Rebuilds `Finances_Test.account_balance_history` so balances are up-to-date as of today.
+Schema and seeding then come from the `migrate` Compose service, which runs after postgres is healthy. The migrate service:
 
-After this completes, `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
+1. Applies pending Drizzle migrations from [`app/drizzle/migrations/`](app/drizzle/migrations/) to both `Finances` and `Finances_Test`.
+2. Seeds the two **shared lookup tables** (`account_type_categories`, `transaction_types`) into both databases so they start in sync. The Finances side uses `ON CONFLICT DO NOTHING` and is additionally guarded by a pre-flight row-count check — **existing Finances user data is never overwritten**, even on a manual re-run.
+3. Seeds `Finances_Test` with mock data: all 19 `account_types`, all 27 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
+4. Rebuilds `Finances_Test.account_balance_history` so balances are up-to-date as of today.
+
+`finance-app` and `importer` wait on `migrate: service_completed_successfully` before starting. After the migrate service exits, `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
 
 ## Test Database
 
-`Finances_Test` is populated automatically on first launch — no manual seeding is required. The seed artifacts live in [`init-db/seeds/`](init-db/seeds/):
+`Finances_Test` is populated automatically on first launch — no manual seeding is required. The seed artifacts live in [`init-db/seeds/`](init-db/seeds/) and are applied by the `migrate` Compose service:
 
 | File | Purpose |
 |---|---|
@@ -155,26 +157,58 @@ After this completes, `Finances` contains only the shared lookups and is ready f
 | `finances-test-mock-data.sql` | 19 account types, 27 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
 | `rebuild-balance-history.sql` | Mirrors `scripts/update-account-balance-history.sql`, runs against `Finances_Test` at seed time |
 
-### Refreshing Finances_Test (dates age out, or schema changed)
+### Refreshing Finances_Test (dates age out)
 
-The mock transaction dates are evaluated once, at seed time. If they drift out of the "past 12 months" window, or the schema changes, drop and re-seed the test database:
+The mock transaction dates are evaluated once, at seed time. If they drift out of the "past 12 months" window, drop and re-seed the test database:
 
 ```bash
-# 1. (Only if schema changed) re-extract it from the Finances DB
-docker exec postgres pg_dump -U postgres -d Finances --schema-only --no-owner --no-privileges > init-db/schema.sql
-
-# 2. Drop and recreate Finances_Test
+# 1. Drop and recreate Finances_Test
 docker exec postgres psql -U postgres -c 'DROP DATABASE IF EXISTS "Finances_Test";'
 docker exec postgres psql -U postgres -c 'CREATE DATABASE "Finances_Test";'
 
-# 3. Re-apply schema and seeds
-docker exec -i postgres psql -U postgres -d Finances_Test < init-db/schema.sql
-docker exec -i postgres psql -U postgres -d Finances_Test < init-db/seeds/shared-lookups.sql
-docker exec -i postgres psql -U postgres -d Finances_Test < init-db/seeds/finances-test-mock-data.sql
-docker exec -i postgres psql -U postgres -d Finances_Test < init-db/seeds/rebuild-balance-history.sql
+# 2. Re-run the migrate service (applies migrations + reseeds Finances_Test)
+docker compose run --rm migrate
 ```
 
-Commit `init-db/schema.sql` after any schema change so fresh installs get the latest version.
+For schema changes, see [Making schema changes](#making-schema-changes) below — never edit the database by hand.
+
+## Making schema changes
+
+`app/drizzle/schema.ts` is the single source of truth for the database schema. The flow for any schema change is:
+
+1. **Edit `app/drizzle/schema.ts`** — add a column, table, index, or view.
+2. **If your change adds, removes, or renames a foreign key,** also hand-update [`app/drizzle/relations.ts`](app/drizzle/relations.ts) to keep the relational query API (`db.query.*`) in sync. Drizzle's generator does not touch this file — only `drizzle-kit pull` regenerates it, and pull is inspection-only. Stale relations fail silently (relational queries return `undefined` for the missing relation with no error).
+3. **Generate a migration:** `cd app && npm run db:generate -- --name <short-description>` produces a new `app/drizzle/migrations/NNNN_<description>.sql` file plus an updated snapshot under `meta/`.
+4. **Review the generated SQL** — confirm it does what you expected; edit by hand if needed for things Drizzle doesn't model (e.g., `COMMENT ON TABLE`, advanced index types).
+5. **Commit both the schema change and the migration** in the same PR.
+6. **Migrations apply automatically** on the next `docker compose up` via the `migrate` service. To apply manually against a running stack: `docker compose run --rm migrate`.
+
+`npm run db:pull` is now **inspection only** — it overwrites `schema.ts` from the live DB, which is useful for verifying a migration applied as expected but should never be committed as the source of truth.
+
+CI runs a drift gate that `drizzle-kit pull`s from the migrated test database and diffs the result against the committed `schema.ts`. Any diff fails the build with a message pointing at `npm run db:generate`.
+
+### Adopting migrations on an existing database
+
+If you've been running this stack before migrations existed, your `Finances` (and any pre-existing `Finances_Test`) have the tables but no `__drizzle_migrations` history. The first `migrate` run will try to re-apply `0000_baseline.sql` and fail on `CREATE TABLE` conflicts. To mark the baseline as already-applied without losing data, run this once before the first migrate:
+
+```bash
+# Compute the baseline hash, then insert it into every DB that already has the tables
+HASH=$(node -e "console.log(require('crypto').createHash('sha256').update(require('fs').readFileSync('app/drizzle/migrations/0000_baseline.sql', 'utf8')).digest('hex'))")
+for DB in Finances Finances_Test; do
+  docker exec -i postgres psql -U postgres -d "$DB" <<EOF
+CREATE SCHEMA IF NOT EXISTS drizzle;
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+  id serial PRIMARY KEY,
+  hash text NOT NULL,
+  created_at bigint
+);
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+VALUES ('$HASH', (extract(epoch from now()) * 1000)::bigint);
+EOF
+done
+```
+
+After this, `docker compose run --rm migrate` is a no-op on existing DBs (baseline already applied) and future migrations apply normally. Drop the `Finances_Test` half of the loop if that DB doesn't exist yet.
 
 ### Static lookup tables in integration tests
 
@@ -190,11 +224,12 @@ finance-stack/
 ├── app/                                  # Next.js 16 application (App Router)
 │   ├── Dockerfile                        # Multi-stage Docker build (deps → build → runner)
 │   ├── .dockerignore                     # Excludes node_modules, .next, etc. from build context
+│   ├── .gitignore                        # Excludes node_modules, .next, .env*, coverage, drift gate temp dir
 │   ├── README.md                         # App-specific development notes and scripts reference
 │   ├── package.json                      # Node.js dependencies and scripts
 │   ├── tsconfig.json                     # TypeScript compiler config
 │   ├── next.config.ts                    # Next.js config (standalone output for Docker)
-│   ├── drizzle.config.ts                 # Drizzle ORM config (connection + schema path for db:pull / db:migrate)
+│   ├── drizzle.config.ts                 # Drizzle ORM config (schema path + migrations output dir)
 │   ├── eslint.config.mjs                 # ESLint flat-config (Next.js + TypeScript rules)
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
@@ -239,10 +274,15 @@ finance-stack/
 │   │       └── test-ui/                  #   /test-ui — UI component verification page
 │   ├── components.json                   # shadcn/ui configuration
 │   ├── drizzle/                          # Drizzle ORM schema + migrations
-│   │   ├── schema.ts                     # Table definitions (generated by drizzle-kit pull)
-│   │   ├── relations.ts                  # Table relations (generated by drizzle-kit pull)
-│   │   ├── 0000_initial_schema.sql       # Initial migration (introspected schema)
-│   │   └── meta/                         # Drizzle migration journal and snapshots
+│   │   ├── schema.ts                     # Source of truth for schema — edit, then run db:generate
+│   │   ├── relations.ts                  # Table relations for type-safe joins
+│   │   └── migrations/                   # Authored migrations (versioned, applied by drizzle-kit migrate)
+│   │       ├── 0000_baseline.sql         # Baseline matching current prod schema
+│   │       └── meta/                     # Drizzle migration journal and snapshots
+│   │           ├── _journal.json         # Ordered list of applied migrations (idx, tag, breakpoints)
+│   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
+│   ├── scripts/
+│   │   └── migrate-and-seed.sh           # Entrypoint for the `migrate` Compose service (drizzle-kit migrate + seed)
 │   ├── hooks/
 │   │   └── use-mobile.ts                 # Mobile breakpoint detection hook (used by sidebar)
 │   ├── components/
@@ -344,9 +384,8 @@ finance-stack/
 ├── .github/workflows/ci.yml             # CI: lint + unit tests + integration tests on push/PR
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── init-db/
-│   ├── 01-create-databases.sh            # First-run DB/role creation + seed orchestration (auto-runs on empty data dir)
-│   ├── schema.sql                        # Tables, indexes, and views (applied to Finances and Finances_Test)
-│   └── seeds/
+│   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
+│   └── seeds/                            # Applied by the `migrate` Compose service after migrations
 │       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs)
 │       ├── finances-test-mock-data.sql   # account_types, transaction_categories, accounts, ~400 txns (Finances_Test only)
 │       └── rebuild-balance-history.sql   # Balance history rebuild for Finances_Test post-seed
@@ -395,7 +434,18 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-05-17 — v0.1.3 (in progress)
+### 2026-05-21 — v0.1.3.1 (in progress)
+
+**Adopt a real Drizzle migration system ([Issue #121](https://github.com/aellington89/finance-stack/issues/121))**
+- `app/drizzle/schema.ts` is now the single source of truth for the database schema. The hand-maintained `init-db/schema.sql` (previously `pg_dump`ed from prod) and the commented-out `0000_initial_schema.sql` are deleted; `drizzle-kit pull` is demoted to inspection-only.
+- New baseline migration at `app/drizzle/migrations/0000_baseline.sql` reproduces the full current prod schema (7 tables, 5 indexes, 7 FKs, 3 views, 2 `liquidity_class` CHECK constraints, 2 table COMMENTs). Future schema changes are authored via `npm run db:generate -- --name <desc>` and committed as versioned migration files.
+- New `migrate` Compose service (built from `app/Dockerfile` `target: migrate`, with `postgresql-client` for psql + `drizzle-kit` from devDeps) runs once per `docker compose up` after postgres is healthy: applies `drizzle-kit migrate` to both `Finances` and `Finances_Test`, then runs the three existing seed files (the row-count guard that protects existing Finances data moved into [`app/scripts/migrate-and-seed.sh`](app/scripts/migrate-and-seed.sh)). `finance-app` and `importer` now `depends_on: migrate.service_completed_successfully`.
+- [`init-db/01-create-databases.sh`](init-db/01-create-databases.sh) is slimmed down to DB + Metabase role creation only — no more schema or seed application from the postgres init container, which avoided the chicken-and-egg of needing tables before migrations could create them.
+- CI workflow updated: postgres bumped to 18 for compose parity, `psql -f schema.sql` replaced with `npm run db:migrate`, and a new "Schema drift gate" step `drizzle-kit pull`s from the migrated DB and fails the build on any diff against committed `schema.ts` — pointing the contributor at `npm run db:generate`.
+- [`app/tests/integration/vitest-setup.ts`](app/tests/integration/vitest-setup.ts) lost its hand-rolled `ADD COLUMN IF NOT EXISTS liquidity_class` block (dead code once migrations own that column). Lookup upserts below remain as test-state self-healing.
+- Existing local `Finances` DBs with real data adopt the baseline via a one-time `INSERT INTO drizzle.__drizzle_migrations` documented in the [Making schema changes](#making-schema-changes) section. No data loss.
+
+### 2026-05-17 — v0.1.3
 
 **Dashboard layout standardization**
 - Every dashboard page now shares one layout contract via the new [page-header.tsx](app/components/dashboard/page-header.tsx) (`DashboardPageHeader`): optional sub-nav tabs, an `<h1>` page title, then an optional filter bar on its own row directly below the title. Replaces the previous mix of in-card titles, title-less pages, and filters living variously inside card headers or beside the title.
@@ -411,7 +461,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Scaffolded the 11 new drill-down routes as stubs so the tab bars are fully clickable now; each uses the standard header plus a shared [coming-soon.tsx](app/components/dashboard/coming-soon.tsx) placeholder and is trivial to replace when built out.
 - Verified with `npm run typecheck` and `npm run lint`. No data-layer or URL-param contract changes.
 
-### 2026-05-14 — v0.1.3
+### 2026-05-14
 
 **Quick Select macros for the Date Range Picker ([Issue #61](https://github.com/aellington89/finance-stack/issues/61))**
 - The Date Range Picker's Quick Select panel now lists four built-in one-click presets (Last 7 days, Last 30 days, This month, This year) above the existing `Last/This + count + Days/Weeks/Months/Years` builder. Built-ins are non-deletable and never stored — they always reflect today's date, so "Last 30 days" stays a rolling window.
@@ -421,7 +471,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Both consumers — the Transactions filter ([transaction-filters.tsx](app/components/transactions/transaction-filters.tsx)) and the Dashboard date filter ([date-range-filter.tsx](app/components/dashboard/date-range-filter.tsx)) — pick up macros automatically with no code changes; the picker's `onChange(from, to)` contract is unchanged.
 - New module `app/components/ui/date-range-macros.ts` is the schema source of truth for the `Scope` and `Unit` types (previously inlined in `date-range-picker.tsx`) and exports defensive `parseStoredMacros`, `loadMacros`, `saveMacros`, `addMacro`, and `deleteMacro` helpers. Unit tests in `tests/unit/components/date-range-macros.test.ts` cover parse defensiveness (malformed JSON, invalid scope/unit, name length, missing fields), dedupe rules, the cap, delete semantics, and the localStorage-unavailable path via stubbed globals.
 
-### 2026-05-13 — v0.1.3 (in progress)
+### 2026-05-13
 
 **Transactions column visibility: cookie-backed persistence (Issue #106)**
 - Moved Transactions table column-visibility persistence from `localStorage` to a `txn-visible-columns` cookie (`Path=/; SameSite=Lax; Max-Age=1 year`, URL-encoded JSON array of column keys). The dashboard page now reads the cookie server-side via `next/headers` `cookies()` and passes the validated list as a prop, so SSR and the initial client render emit the user's preferred columns directly. Eliminates the visible flash on every reload where hidden columns briefly appeared before disappearing.
@@ -437,7 +487,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Switched the Transactions table to `table-fixed` and assigned explicit Tailwind width tokens per column (`w-28` for date/type, `w-32` for amount, `w-40` for category, `w-44` for account/related account, `w-80` for description). Added `truncate` on text cells so long values get an ellipsis instead of expanding the column.
 - Sort button positions now stay put across sorts and other data changes (pagination, filtering).
 
-### 2026-05-10 — v0.1.3 (in progress)
+### 2026-05-10
 
 **Date Range filter UX fixes (related to Issue #61)**
 - Picker now uses a draft-and-commit pattern: calendar clicks and typed input update local state inside the popover, and the URL is only updated when the user clicks **Apply** (or selects a Quick Select preset). Fixes the "popover closes after one click" and "phantom from-date already selected" bugs caused by passing the 30-day default through to the picker as a real selection.
@@ -446,7 +496,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Extracted the duplicated `defaultFrom = today − 30 days` block from 8 files into a single shared helper `app/lib/queries/date-range.ts` (`getDateRangeFromParams`). The 30-day default now lives only in the data-fetching layer; the picker UI shows `Last 30 days (default)` as placeholder text in the trigger when no URL params are set.
 - No change to Quick Select macros, calendar styling, or the URL-param contract (`?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`). [Issue #61](https://github.com/aellington89/finance-stack/issues/61) (saveable Quick Select presets) remains a follow-up.
 
-### 2026-05-02 — v0.1.2
+### 2026-05-02
 
 **Liabilities drilldown page (Issue #112)**
 - New page at `/dashboard/liabilities` mirrors the Assets drilldown structure with sections specific to debt: a 4-card KPI strip (Total / Current / Long-term liabilities, Period Change), liability allocation treemap (category → account type), stacked time-series decomposition by category, dynamic per-account-type Debt Mix tile breakdown, Debt Waterfall (Start → Payments → Interest → Other → End), Debt Service summary (period payments, interest accrued, estimated principal paid + per-account sub-table), and a 3-level expandable Liability Performance table.
@@ -457,7 +507,7 @@ Data is persisted in Docker volumes and will be available on next startup.
 - Schema additions deferred to follow-up issue [#110](https://github.com/aellington89/finance-stack/issues/110): APR, credit limit, minimum payment, due date, original principal, term length. Each unlocks specific metrics (weighted APR, credit utilization, payoff timeline, exact principal split, upcoming-payments widget) but none are blocking for v1.
 - Lookup-row protection tracked separately as [#109](https://github.com/aellington89/finance-stack/issues/109): the pinned payment/interest `transaction_category_id` rows are user-editable today; deleting one would silently under-report debt-service totals. Closely related to [#87](https://github.com/aellington89/finance-stack/issues/87).
 
-### 2026-05-01 — v0.1.2 (in progress)
+### 2026-05-01 — v0.1.2
 
 **Related Account column on the Transactions table (Issue #105)**
 - Added a "Related Account" column to the Transactions list at `/dashboard/transactions`, rendering `related_account_name` from `v_transactions_full`. Most rows are blank — the field is only populated for transfers between accounts.

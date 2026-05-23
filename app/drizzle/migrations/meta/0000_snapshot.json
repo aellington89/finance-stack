@@ -1,0 +1,710 @@
+{
+  "id": "3991bbeb-2aba-44d8-bd5a-c91287df27fa",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.account_balance_history": {
+      "name": "account_balance_history",
+      "schema": "",
+      "columns": {
+        "account_id": {
+          "name": "account_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance_date": {
+          "name": "balance_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "daily_balance": {
+          "name": "daily_balance",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "cumulative_balance": {
+          "name": "cumulative_balance",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        }
+      },
+      "indexes": {
+        "idx_balance_history_date": {
+          "name": "idx_balance_history_date",
+          "columns": [
+            {
+              "expression": "balance_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "date_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "account_balance_history_account_id_fkey": {
+          "name": "account_balance_history_account_id_fkey",
+          "tableFrom": "account_balance_history",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "account_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "account_balance_history_pkey": {
+          "name": "account_balance_history_pkey",
+          "columns": [
+            "account_id",
+            "balance_date"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.account_type_categories": {
+      "name": "account_type_categories",
+      "schema": "",
+      "columns": {
+        "account_type_category_id": {
+          "name": "account_type_category_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "account_type_categories_account_type_category_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "account_type_category": {
+          "name": "account_type_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.account_types": {
+      "name": "account_types",
+      "schema": "",
+      "columns": {
+        "account_type_id": {
+          "name": "account_type_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "account_types_account_type_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_type_category_id": {
+          "name": "account_type_category_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "liquidity_class": {
+          "name": "liquidity_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "account_types_account_type_category_id_fkey": {
+          "name": "account_types_account_type_category_id_fkey",
+          "tableFrom": "account_types",
+          "tableTo": "account_type_categories",
+          "columnsFrom": [
+            "account_type_category_id"
+          ],
+          "columnsTo": [
+            "account_type_category_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "account_types_liquidity_class_check": {
+          "name": "account_types_liquidity_class_check",
+          "value": "liquidity_class = ANY (ARRAY['liquid'::text, 'semi_liquid'::text, 'illiquid'::text, 'restricted'::text])"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.accounts": {
+      "name": "accounts",
+      "schema": "",
+      "columns": {
+        "account_id": {
+          "name": "account_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_name": {
+          "name": "account_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_type_id": {
+          "name": "account_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_identifier": {
+          "name": "account_identifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_date": {
+          "name": "closed_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opened_date": {
+          "name": "opened_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "liquidity_class": {
+          "name": "liquidity_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "accounts_account_type_id_fkey": {
+          "name": "accounts_account_type_id_fkey",
+          "tableFrom": "accounts",
+          "tableTo": "account_types",
+          "columnsFrom": [
+            "account_type_id"
+          ],
+          "columnsTo": [
+            "account_type_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "accounts_liquidity_class_check": {
+          "name": "accounts_liquidity_class_check",
+          "value": "liquidity_class = ANY (ARRAY['liquid'::text, 'semi_liquid'::text, 'illiquid'::text, 'restricted'::text])"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.transaction_categories": {
+      "name": "transaction_categories",
+      "schema": "",
+      "columns": {
+        "transaction_category_id": {
+          "name": "transaction_category_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "transaction_type_categories_transaction_type_category_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "transaction_category": {
+          "name": "transaction_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.transaction_types": {
+      "name": "transaction_types",
+      "schema": "",
+      "columns": {
+        "transaction_type_id": {
+          "name": "transaction_type_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "transaction_types_transaction_type_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.transactions": {
+      "name": "transactions",
+      "schema": "",
+      "columns": {
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "transaction_description": {
+          "name": "transaction_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "related_account_id": {
+          "name": "related_account_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_type_id": {
+          "name": "transaction_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_category_id": {
+          "name": "transaction_category_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "idx_transactions_account_date": {
+          "name": "idx_transactions_account_date",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "int4_ops"
+            },
+            {
+              "expression": "transaction_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "int4_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_transactions_category": {
+          "name": "idx_transactions_category",
+          "columns": [
+            {
+              "expression": "transaction_category_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "int4_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_transactions_date": {
+          "name": "idx_transactions_date",
+          "columns": [
+            {
+              "expression": "transaction_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "date_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_transactions_type": {
+          "name": "idx_transactions_type",
+          "columns": [
+            {
+              "expression": "transaction_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "int4_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transactions_account_id_fkey": {
+          "name": "transactions_account_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "account_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_related_account_id_fkey": {
+          "name": "transactions_related_account_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "related_account_id"
+          ],
+          "columnsTo": [
+            "account_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_transaction_category_id_fkey": {
+          "name": "transactions_transaction_category_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "transaction_categories",
+          "columnsFrom": [
+            "transaction_category_id"
+          ],
+          "columnsTo": [
+            "transaction_category_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_transaction_type_id_fkey": {
+          "name": "transactions_transaction_type_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "transaction_types",
+          "columnsFrom": [
+            "transaction_type_id"
+          ],
+          "columnsTo": [
+            "transaction_type_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {
+    "public.v_account_balances_current": {
+      "columns": {
+        "account_id": {
+          "name": "account_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_name": {
+          "name": "account_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type_category": {
+          "name": "account_type_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type_category_id": {
+          "name": "account_type_category_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_balance": {
+          "name": "current_balance",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "balance_date": {
+          "name": "balance_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT abh.account_id, a.account_name, at.account_type, atc.account_type_category, atc.account_type_category_id, abh.cumulative_balance AS current_balance, abh.balance_date FROM account_balance_history abh JOIN accounts a USING (account_id) JOIN account_types at USING (account_type_id) JOIN account_type_categories atc USING (account_type_category_id) WHERE abh.balance_date = (( SELECT max(account_balance_history.balance_date) AS max FROM account_balance_history WHERE account_balance_history.account_id = abh.account_id))",
+      "name": "v_account_balances_current",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.v_daily_totals": {
+      "columns": {
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_total": {
+          "name": "daily_total",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT t.transaction_date, tt.transaction_type, sum(t.amount) AS daily_total FROM transactions t JOIN transaction_types tt USING (transaction_type_id) GROUP BY t.transaction_date, tt.transaction_type",
+      "name": "v_daily_totals",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.v_transactions_full": {
+      "columns": {
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_description": {
+          "name": "transaction_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "related_account_id": {
+          "name": "related_account_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_name": {
+          "name": "account_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type_id": {
+          "name": "account_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type_category": {
+          "name": "account_type_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "related_account_name": {
+          "name": "related_account_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_type_id": {
+          "name": "transaction_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_category_id": {
+          "name": "transaction_category_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_category": {
+          "name": "transaction_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT t.transaction_id, t.transaction_description, t.transaction_date, t.amount, t.account_id, t.related_account_id, a.account_name, a.account_type_id, at.account_type, atc.account_type_category, ra.account_name AS related_account_name, tt.transaction_type_id, tt.transaction_type, tc.transaction_category_id, tc.transaction_category FROM transactions t JOIN accounts a USING (account_id) JOIN account_types at USING (account_type_id) JOIN account_type_categories atc USING (account_type_category_id) LEFT JOIN accounts ra ON t.related_account_id = ra.account_id JOIN transaction_types tt USING (transaction_type_id) JOIN transaction_categories tc USING (transaction_category_id)",
+      "name": "v_transactions_full",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    }
+  },
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

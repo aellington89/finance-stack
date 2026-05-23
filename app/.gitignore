@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# schema drift gate (CI + local) — temp dir for drizzle-kit pull output
+/.drift-tmp/

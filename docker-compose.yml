@@ -50,6 +50,39 @@ services:
       com.finance-stack.component: "database"
       com.finance-stack.description: "Primary PostgreSQL database"
 
+  # One-shot job: applies pending Drizzle migrations to Finances and Finances_Test,
+  # then seeds lookup tables (and Finances_Test mock data), then exits. Idempotent.
+  # finance-app and importer wait on it via service_completed_successfully.
+  migrate:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      target: migrate
+    container_name: finance-migrate
+    restart: "no"                        # One-shot job — must not restart after exiting
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      FINANCE_APP_DB: ${FINANCE_APP_DB:-Finances}
+    volumes:
+      - ./init-db/seeds:/seeds:ro        # Seed SQL files consumed by migrate-and-seed.sh
+    networks:
+      - appnet
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    labels:
+      com.finance-stack.component: "migrate"
+      com.finance-stack.description: "One-shot Drizzle migration + seed runner"
+
   # One-shot job: runs update-account-balance-history.sql after postgres is healthy,
   # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
   # Behind the "init" profile — only runs when explicitly requested:
@@ -104,8 +137,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - appnet
     logging: *default-logging
@@ -133,8 +166,8 @@ services:
     container_name: importer
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
       POLL_INTERVAL: 60

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { accounts, transactions, transactionCategories, transactionTypes, accountTypes, accountTypeCategories, accountBalanceHistory } from "./schema";
+import { accounts, transactions, transactionCategories, transactionTypes, accountTypeCategories, accountTypes, accountBalanceHistory } from "./schema";
 
 export const transactionsRelations = relations(transactions, ({one}) => ({
 	account_accountId: one(accounts, {
@@ -45,11 +45,11 @@ export const transactionTypesRelations = relations(transactionTypes, ({many}) =>
 }));
 
 export const accountTypesRelations = relations(accountTypes, ({one, many}) => ({
-	accounts: many(accounts),
 	accountTypeCategory: one(accountTypeCategories, {
 		fields: [accountTypes.accountTypeCategoryId],
 		references: [accountTypeCategories.accountTypeCategoryId]
 	}),
+	accounts: many(accounts),
 }));
 
 export const accountTypeCategoriesRelations = relations(accountTypeCategories, ({many}) => ({
