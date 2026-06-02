@@ -16,6 +16,7 @@ export const transactions = pgTable("transactions", {
 	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_category").using("btree", table.transactionCategoryId.asc().nullsLast().op("int4_ops")),
 	index("idx_transactions_date").using("btree", table.transactionDate.asc().nullsLast().op("date_ops")),
+	index("idx_transactions_related_account_id").using("btree", table.relatedAccountId.asc().nullsLast().op("int4_ops")).where(sql`"related_account_id" IS NOT NULL`),
 	index("idx_transactions_type").using("btree", table.transactionTypeId.asc().nullsLast().op("int4_ops")),
 	foreignKey({
 			columns: [table.accountId],
@@ -91,6 +92,7 @@ export const accountBalanceHistory = pgTable("account_balance_history", {
 	dailyBalance: numeric("daily_balance", { precision: 15, scale:  2 }).default('0').notNull(),
 	cumulativeBalance: numeric("cumulative_balance", { precision: 15, scale:  2 }).default('0').notNull(),
 }, (table) => [
+	index("idx_abh_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.balanceDate.desc().nullsFirst().op("date_ops")),
 	index("idx_balance_history_date").using("btree", table.balanceDate.asc().nullsLast().op("date_ops")),
 	foreignKey({
 			columns: [table.accountId],
