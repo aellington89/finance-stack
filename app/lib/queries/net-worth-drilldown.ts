@@ -1,8 +1,6 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
-
-// Category IDs
-const NET_WORTH_EXCLUDED_CATEGORY_ID = 2; // Restricted Asset excluded from net worth
+import { RESTRICTED_ASSET_CATEGORY } from "@/lib/constants/reference-ids";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -87,7 +85,7 @@ export async function getNetWorthWaterfall(
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
-    WHERE atc.account_type_category_id != ${NET_WORTH_EXCLUDED_CATEGORY_ID}
+    WHERE atc.account_type_category_id != ${RESTRICTED_ASSET_CATEGORY.id}
       AND abh.balance_date IN (${dateFrom}::date, ${endDate}::date)
     GROUP BY atc.account_type_category_id, atc.account_type_category
     ORDER BY atc.account_type_category_id
@@ -148,7 +146,7 @@ export async function getNetWorthDrivers(
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
-    WHERE atc.account_type_category_id != ${NET_WORTH_EXCLUDED_CATEGORY_ID}
+    WHERE atc.account_type_category_id != ${RESTRICTED_ASSET_CATEGORY.id}
       AND abh.balance_date IN (${dateFrom}::date, ${endDate}::date)
     GROUP BY
       atc.account_type_category_id, atc.account_type_category,
@@ -281,7 +279,7 @@ export async function getNetWorthTrendDecomposition(
   dateTo?: string
 ): Promise<DecompositionPoint[]> {
   const conditions = [
-    sql`atc.account_type_category_id != ${NET_WORTH_EXCLUDED_CATEGORY_ID}`,
+    sql`atc.account_type_category_id != ${RESTRICTED_ASSET_CATEGORY.id}`,
   ];
 
   if (dateFrom) {

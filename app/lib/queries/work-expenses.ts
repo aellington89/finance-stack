@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
 import { sql, type SQL } from "drizzle-orm";
 import type { CategoryBreakdown } from "@/lib/queries/accounting";
+import {
+  WORK_EXPENSE_TYPE,
+  WORK_EXPENSE_REIMBURSEMENT_TYPE,
+} from "@/lib/constants/reference-ids";
 
 // ── Types ──
 
@@ -23,9 +27,10 @@ export interface WorkExpenseTimeSeriesPoint {
 
 // ── Constants ──
 
-const WORK_EXPENSE_TYPE_ID = 5;
-const REIMBURSEMENT_TYPE_ID = 6;
-const WORK_EXPENSE_TYPE_IDS = [WORK_EXPENSE_TYPE_ID, REIMBURSEMENT_TYPE_ID];
+const WORK_EXPENSE_TYPE_IDS = [
+  WORK_EXPENSE_TYPE.id,
+  WORK_EXPENSE_REIMBURSEMENT_TYPE.id,
+];
 
 // ── Helpers ──
 
@@ -64,8 +69,8 @@ export async function getWorkExpenseTotals(
 
   const result = await db.execute(sql`
     SELECT
-      SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_TYPE_ID} THEN ABS(t.amount) ELSE 0 END) AS total_work_expenses,
-      SUM(CASE WHEN t.transaction_type_id = ${REIMBURSEMENT_TYPE_ID} THEN ABS(t.amount) ELSE 0 END) AS total_reimbursements
+      SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_work_expenses,
+      SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_REIMBURSEMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_reimbursements
     FROM transactions t
     ${where}
   `);
@@ -97,8 +102,8 @@ export async function getWorkExpenseTimeSeries(
     agg AS (
       SELECT
         date_trunc('month', t.transaction_date)::date AS date,
-        SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_TYPE_ID} THEN ABS(t.amount) ELSE 0 END) AS total_expenses,
-        SUM(CASE WHEN t.transaction_type_id = ${REIMBURSEMENT_TYPE_ID} THEN ABS(t.amount) ELSE 0 END) AS total_reimbursements
+        SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_expenses,
+        SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_REIMBURSEMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_reimbursements
       FROM transactions t
       WHERE t.transaction_date >= date_trunc('month', ${dateFrom}::date)::date
         AND t.transaction_date <= ${dateTo}::date
@@ -127,7 +132,7 @@ export async function getWorkExpenseCategoryBreakdown(
   filters: WorkExpenseFilters
 ): Promise<CategoryBreakdown[]> {
   const conditions = buildDateConditions(filters);
-  conditions.push(sql.raw(`t.transaction_type_id = ${WORK_EXPENSE_TYPE_ID}`));
+  conditions.push(sql.raw(`t.transaction_type_id = ${WORK_EXPENSE_TYPE.id}`));
   const where = whereFromConditions(conditions);
 
   const result = await db.execute(sql`
