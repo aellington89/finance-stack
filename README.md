@@ -214,6 +214,8 @@ After this, `docker compose run --rm migrate` is a no-op on existing DBs (baseli
 
 The integration test `beforeAll` (in [`app/tests/integration/vitest-setup.ts`](app/tests/integration/vitest-setup.ts)) upserts the full production row set for `account_type_categories` (6 rows) and `transaction_types` (12 rows) before any test runs. This is a drift-correction safety net — the seed files above already populate these tables on first launch. No manual seed step is required.
 
+At runtime, [`/api/health`](app/app/api/health/route.ts) performs the equivalent check live: it verifies every ID referenced from [`app/lib/constants/reference-ids.ts`](app/lib/constants/reference-ids.ts) still resolves to its canonical seed-row name, and returns 503 with a `drift[]` array if any row is missing or renamed. See the Issue #123 changelog entry below for the response shape.
+
 ## Project Structure
 
 ```
@@ -234,7 +236,7 @@ finance-stack/
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
 │   ├── app/                              # App Router — pages and layouts
-│   │   ├── api/health/route.ts           # Health check endpoint for Docker
+│   │   ├── api/health/route.ts           # Health check endpoint (Docker liveness + seed-row drift detection against SEED_REFERENCES)
 │   │   ├── layout.tsx                    # Root layout (fonts, ThemeProvider, Toaster)
 │   │   ├── globals.css                   # Global styles and Tailwind CSS theme variables
 │   │   ├── favicon.ico
@@ -338,6 +340,7 @@ finance-stack/
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
+│   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health drift check
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
 │   │   ├── actions/transaction.ts        # Server action for transaction submission
@@ -375,6 +378,7 @@ finance-stack/
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown
 │   │       ├── actions/                  #   Server action tests (account, transaction)
+│   │       ├── api/                      #   API route tests (health drift check)
 │   │       └── queries/                  #   Query function tests (rebuild-balance, liabilities-drilldown)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
@@ -435,6 +439,11 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-05-21 — v0.1.3.1 (in progress)
+
+**Centralize hardcoded reference-data IDs ([Issue #123](https://github.com/aellington89/finance-stack/issues/123))**
+- Magic seed-row IDs that were duplicated across 6 files (`OPENING_BALANCE_TYPE_ID = 12`, `INCOME_TYPE_ID = 4`, `EXPENSE_TYPE_ID = 2`, `INVESTMENT_TYPE_ID = 10`, `WORK_EXPENSE_TYPE_ID = 5`, `REIMBURSEMENT_TYPE_ID = 6`, `NET_WORTH_EXCLUDED_CATEGORY_ID = 2`, `LIABILITY_CURRENT_CATEGORY_ID = 5`, `LIABILITY_NON_CURRENT_CATEGORY_ID = 6`, `OPENING_BALANCE_CATEGORY_ID = 6`) now live in a single source of truth at [`app/lib/constants/reference-ids.ts`](app/lib/constants/reference-ids.ts). Each constant is a `{ id, name } as const` record so the canonical seed-row name travels with the ID. Callsites in [`lib/actions/account.ts`](app/lib/actions/account.ts), [`lib/queries/accounting.ts`](app/lib/queries/accounting.ts), [`lib/queries/work-expenses.ts`](app/lib/queries/work-expenses.ts), [`lib/queries/dashboard.ts`](app/lib/queries/dashboard.ts), [`lib/queries/net-worth-drilldown.ts`](app/lib/queries/net-worth-drilldown.ts), and [`lib/queries/liability-categories.ts`](app/lib/queries/liability-categories.ts) now reference the records via `.id`. The legacy `LIABILITY_CURRENT_CATEGORY_ID` / `LIABILITY_NON_CURRENT_CATEGORY_ID` / `LIABILITY_CATEGORY_IDS` exports remain (derived from the new records) so [`liabilities-drilldown.ts`](app/lib/queries/liabilities-drilldown.ts) and the existing liability-categories unit test work unchanged. The user-data category arrays `DEBT_PAYMENT_CATEGORY_IDS` and `DEBT_INTEREST_CATEGORY_IDS` are intentionally untouched — they reference user-mutable `transaction_categories` rows, not seed lookups.
+- [`/api/health`](app/app/api/health/route.ts) is no longer a bare `SELECT 1` liveness probe — it also performs a per-request seed-drift check. For each seed table (`transaction_types`, `account_type_categories`, `transaction_categories`) it runs one batched `SELECT id, name … WHERE id IN (…)`, compares against the `SEED_REFERENCES` array in `reference-ids.ts`, and returns `503` with a `drift[]` array (`{ table, id, expected, actual }`) listing any missing or renamed rows. Happy path remains `{ status: "ok", db: "connected", seedData: "ok" }`. Note: the `OPENING_BALANCE_CATEGORY` ("Other", id=6) row lives in `transaction_categories`, which is editable via `/settings/categories` — renaming it through the UI will intentionally trip the drift check until [#109](https://github.com/aellington89/finance-stack/issues/109) lands row-level protection.
+- New integration test [`tests/integration/api/health.test.ts`](app/tests/integration/api/health.test.ts) covers both branches: the happy path returns 200 + `seedData: "ok"`, and renaming the "Opening Balance" `transaction_types` row produces a 503 whose `drift[]` entry exactly identifies the (table, id, expected, actual). The test restores the canonical name in `afterEach`, so a within-suite failure cannot leak to neighbouring tests — and the suite-wide `beforeAll` upsert in [`vitest-setup.ts`](app/tests/integration/vitest-setup.ts) is a second safety net.
 
 **Adopt a real Drizzle migration system ([Issue #121](https://github.com/aellington89/finance-stack/issues/121))**
 - `app/drizzle/schema.ts` is now the single source of truth for the database schema. The hand-maintained `init-db/schema.sql` (previously `pg_dump`ed from prod) and the commented-out `0000_initial_schema.sql` are deleted; `drizzle-kit pull` is demoted to inspection-only.

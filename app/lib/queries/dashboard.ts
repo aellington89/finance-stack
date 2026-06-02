@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { sql, type SQL } from "drizzle-orm";
+import { RESTRICTED_ASSET_CATEGORY } from "@/lib/constants/reference-ids";
 
 export interface TimeSeriesPoint {
   date: string;
@@ -13,9 +14,6 @@ export interface NetWorthSummary {
   totalLiabilities: number;
   netWorth: number;
 }
-
-// Category IDs
-const NET_WORTH_EXCLUDED_CATEGORY_ID = 2; // Restricted Asset excluded from net worth
 
 export async function getCurrentNetWorth(): Promise<NetWorthSummary> {
   // All three metrics use today's cumulative_balance snapshot.
@@ -33,7 +31,7 @@ export async function getCurrentNetWorth(): Promise<NetWorthSummary> {
         THEN abh.cumulative_balance ELSE 0
       END) AS total_liabilities,
       SUM(CASE
-        WHEN at.account_type_category_id != ${NET_WORTH_EXCLUDED_CATEGORY_ID}
+        WHEN at.account_type_category_id != ${RESTRICTED_ASSET_CATEGORY.id}
         THEN abh.cumulative_balance ELSE 0
       END) AS net_worth
     FROM account_balance_history abh
@@ -81,7 +79,7 @@ export async function getNetWorthTimeSeries(
         THEN abh.cumulative_balance ELSE 0
       END) AS total_liabilities,
       SUM(CASE
-        WHEN at.account_type_category_id != ${NET_WORTH_EXCLUDED_CATEGORY_ID}
+        WHEN at.account_type_category_id != ${RESTRICTED_ASSET_CATEGORY.id}
         THEN abh.cumulative_balance ELSE 0
       END) AS net_worth
     FROM account_balance_history abh

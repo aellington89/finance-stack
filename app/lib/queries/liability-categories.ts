@@ -27,8 +27,13 @@
 // fix needs a "released"/standard-mapping concept on transaction_categories
 // so user-owned rows can opt into these aggregates. Track separately.
 
-export const LIABILITY_CURRENT_CATEGORY_ID = 5;
-export const LIABILITY_NON_CURRENT_CATEGORY_ID = 6;
+import {
+  CURRENT_LIABILITY_CATEGORY,
+  NON_CURRENT_LIABILITY_CATEGORY,
+} from "@/lib/constants/reference-ids";
+
+export const LIABILITY_CURRENT_CATEGORY_ID = CURRENT_LIABILITY_CATEGORY.id;
+export const LIABILITY_NON_CURRENT_CATEGORY_ID = NON_CURRENT_LIABILITY_CATEGORY.id;
 
 export const LIABILITY_CATEGORY_IDS = [
   LIABILITY_CURRENT_CATEGORY_ID,

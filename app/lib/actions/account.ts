@@ -8,11 +8,10 @@ import { accountFormSchema } from "@/lib/validations/account";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { eq, or } from "drizzle-orm";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
-
-// transaction_types row: "Opening Balance" (seeded reference data — do not delete)
-const OPENING_BALANCE_TYPE_ID = 12;
-// transaction_categories row: "Other" (seeded reference data — do not delete)
-const OPENING_BALANCE_CATEGORY_ID = 6;
+import {
+  OPENING_BALANCE_TYPE,
+  OPENING_BALANCE_CATEGORY,
+} from "@/lib/constants/reference-ids";
 
 function revalidateAccountPaths() {
   revalidatePath("/accounts");
@@ -67,8 +66,8 @@ export async function createAccount(
           accountId: inserted.accountId,
           amount: data.initialBalance,
           relatedAccountId: null,
-          transactionTypeId: OPENING_BALANCE_TYPE_ID,
-          transactionCategoryId: OPENING_BALANCE_CATEGORY_ID,
+          transactionTypeId: OPENING_BALANCE_TYPE.id,
+          transactionCategoryId: OPENING_BALANCE_CATEGORY.id,
         });
 
         await rebuildAccountBalance(tx, inserted.accountId);
