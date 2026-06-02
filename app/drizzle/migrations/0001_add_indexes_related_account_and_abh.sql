@@ -1,0 +1,2 @@
+CREATE INDEX "idx_abh_account_date" ON "account_balance_history" USING btree ("account_id" int4_ops,"balance_date" date_ops DESC);--> statement-breakpoint
+CREATE INDEX "idx_transactions_related_account_id" ON "transactions" USING btree ("related_account_id" int4_ops) WHERE "related_account_id" IS NOT NULL;
