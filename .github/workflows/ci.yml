@@ -75,6 +75,9 @@ jobs:
             exit 1
           fi
 
+      - name: Seed reference gate
+        run: npm run check:seed-references
+
       - name: Lint
         run: npm run lint
 
