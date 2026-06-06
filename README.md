@@ -294,7 +294,9 @@ finance-stack/
 │   │           ├── _journal.json         # Ordered list of applied migrations (idx, tag, breakpoints)
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
 │   ├── scripts/
-│   │   └── migrate-and-seed.sh           # Entrypoint for the `migrate` Compose service (drizzle-kit migrate + seed)
+│   │   ├── migrate-and-seed.sh           # Entrypoint for the `migrate` Compose service (drizzle-kit migrate + seed)
+│   │   ├── check-seed-references.ts       # CI gate: SEED_REFERENCES (id, name) must match shared-lookups.sql (#155)
+│   │   └── seed-reference-check.ts        # Pure parse + diff helpers backing the gate (unit-tested)
 │   ├── hooks/
 │   │   └── use-mobile.ts                 # Mobile breakpoint detection hook (used by sidebar)
 │   ├── components/
@@ -379,6 +381,7 @@ finance-stack/
 │   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
 │   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
+│   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
 │   │   │   └── lib/                      #   Library utility tests
 │   │   │       ├── utils.test.ts         #     cn() class-merge helper
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
@@ -395,7 +398,7 @@ finance-stack/
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed)
 │   └── parsers/                           # One module per import type (gitignored)
 ├── imports/                               # Drop folders — one per import type (gitignored)
-├── .github/workflows/ci.yml             # CI: lint + unit tests + integration tests on push/PR
+├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
@@ -448,7 +451,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-05-21 — v0.1.3.1 (in progress)
+### 2026-06-05 — v0.1.3.1 (in progress)
+
+**Add CI gate: SEED_REFERENCES names must match shared-lookups.sql ([Issue #155](https://github.com/aellington89/finance-stack/issues/155))**
+- #123's [`/api/health`](app/app/api/health/route.ts) drift check catches *DB-side* drift (the live DB diverging from code) but not *code-side* drift: renaming a row in [`init-db/seeds/shared-lookups.sql`](init-db/seeds/shared-lookups.sql) and silencing the resulting health failure by editing [`reference-ids.ts`](app/lib/constants/reference-ids.ts) to match leaves both checks green while code and seed silently disagree about a clean install. A build-time gate closes that gap.
+- New [`app/scripts/check-seed-references.ts`](app/scripts/check-seed-references.ts) imports the real `SEED_REFERENCES` and cross-checks each `(table, id, name)` against the matching `INSERT … VALUES` row parsed from `shared-lookups.sql`, failing with a `::error::` line naming `(table, id, code-side name, seed-side name)` — mirroring the existing Schema drift gate's annotation + remediation-hint style. The parse/diff logic lives in side-effect-free [`app/scripts/seed-reference-check.ts`](app/scripts/seed-reference-check.ts) so it is unit-testable.
+- **Directional + fail-closed:** every constant must match the seed, but unreferenced seed rows are fine; a referenced table with no `INSERT` block fails the gate *unless* it is in an explicit allowed-absent set. `transaction_categories` (the `OPENING_BALANCE_CATEGORY` "Other" row) is the sole allowed-absent table — it is intentionally not in `shared-lookups.sql` (row-level protection tracked in [#109](https://github.com/aellington89/finance-stack/issues/109)).
+- Wired into [`.github/workflows/ci.yml`](.github/workflows/ci.yml) as a new "Seed reference gate" step beside the Schema drift gate (no DB needed) and runnable locally via `npm run check:seed-references`; adds `tsx` as a devDependency so the gate can import the `@/`-aliased TS source directly. New unit tests in [`tests/unit/scripts/seed-reference-check.test.ts`](app/tests/unit/scripts/seed-reference-check.test.ts) cover the deliberate rename-trips-the-gate case plus missing-row, fail-closed missing-table, the allowlist skip, `''`-unescaping, and the directional extra-rows case.
 
 **Fix baseline re-application on adopted DBs ([Issue #157](https://github.com/aellington89/finance-stack/issues/157))**
 - `drizzle-kit migrate` was re-running `0000_baseline.sql` on any DB that adopted the existing schema via the README's one-time `INSERT INTO drizzle.__drizzle_migrations` (the real `Finances` and `Finances_Test`), failing with `relation "account_balance_history" already exists` (`42P07`) and blocking every new migration (e.g. #127's indexes). Root cause: drizzle treats a migration as applied only if the most-recent stored `created_at >= ` the journal `when`, but the adoption procedure recorded `created_at = now()` (wall-clock at adoption), which landed ~2.6h *before* the baseline journal `when` (`1779422763028`) — so drizzle considered the baseline pending. Fresh DBs (CI, new clones) were never affected.
