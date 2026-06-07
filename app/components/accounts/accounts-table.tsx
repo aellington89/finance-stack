@@ -22,6 +22,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { amountColorClass } from "@/lib/format/financial";
 import type { AccountBalanceRow } from "@/lib/queries/accounts";
 
 interface AccountEntry {
@@ -396,17 +397,4 @@ function AccountTypeRows({
         ))}
     </>
   );
-}
-
-/**
- * Unified color logic for account dollar amounts:
- * - Positive: green (asset growth or liability paydown)
- * - Zero: white/default
- * - Negative: red (asset loss or increasing debt)
- */
-export function amountColorClass(value: number): string {
-  if (value === 0) return "";
-  return value > 0
-    ? "text-green-600 dark:text-green-400"
-    : "text-red-600 dark:text-red-400";
 }

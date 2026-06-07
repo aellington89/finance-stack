@@ -6,7 +6,7 @@ import type { PerformanceData } from "@/lib/queries/assets-drilldown";
 import {
   signedCurrency,
   signedPercent,
-  changeColor,
+  amountColorClass,
 } from "@/lib/format/financial";
 import {
   Table,
@@ -112,12 +112,12 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                       {formatCurrency(cat.currentValue)}
                     </TableCell>
                     <TableCell
-                      className={`text-right tabular-nums ${changeColor(cat.change)}`}
+                      className={`text-right tabular-nums ${amountColorClass(cat.change)}`}
                     >
                       {signedCurrency(cat.change)}
                     </TableCell>
                     <TableCell
-                      className={`text-right tabular-nums ${changeColor(cat.percentChange)}`}
+                      className={`text-right tabular-nums ${amountColorClass(cat.percentChange)}`}
                     >
                       {signedPercent(cat.percentChange)}
                     </TableCell>
@@ -150,12 +150,12 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                               {formatCurrency(type.currentValue)}
                             </TableCell>
                             <TableCell
-                              className={`text-right tabular-nums ${changeColor(type.change)}`}
+                              className={`text-right tabular-nums ${amountColorClass(type.change)}`}
                             >
                               {signedCurrency(type.change)}
                             </TableCell>
                             <TableCell
-                              className={`text-right tabular-nums ${changeColor(type.percentChange)}`}
+                              className={`text-right tabular-nums ${amountColorClass(type.percentChange)}`}
                             >
                               {signedPercent(type.percentChange)}
                             </TableCell>
@@ -176,12 +176,12 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                                   {formatCurrency(acc.currentValue)}
                                 </TableCell>
                                 <TableCell
-                                  className={`text-right tabular-nums ${changeColor(acc.change)}`}
+                                  className={`text-right tabular-nums ${amountColorClass(acc.change)}`}
                                 >
                                   {signedCurrency(acc.change)}
                                 </TableCell>
                                 <TableCell
-                                  className={`text-right tabular-nums ${changeColor(acc.percentChange)}`}
+                                  className={`text-right tabular-nums ${amountColorClass(acc.percentChange)}`}
                                 >
                                   {signedPercent(acc.percentChange)}
                                 </TableCell>
@@ -204,12 +204,12 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                 {formatCurrency(data.totalCurrentValue)}
               </TableCell>
               <TableCell
-                className={`text-right font-bold tabular-nums ${changeColor(data.totalChange)}`}
+                className={`text-right font-bold tabular-nums ${amountColorClass(data.totalChange)}`}
               >
                 {signedCurrency(data.totalChange)}
               </TableCell>
               <TableCell
-                className={`text-right font-bold tabular-nums ${changeColor(data.totalPercentChange)}`}
+                className={`text-right font-bold tabular-nums ${amountColorClass(data.totalPercentChange)}`}
               >
                 {signedPercent(data.totalPercentChange)}
               </TableCell>

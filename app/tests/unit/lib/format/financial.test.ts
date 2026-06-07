@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   signedCurrency,
   signedPercent,
-  changeColor,
+  amountColorClass,
 } from "@/lib/format/financial";
 
 describe("signedCurrency", () => {
@@ -38,16 +38,16 @@ describe("signedPercent", () => {
   });
 });
 
-describe("changeColor", () => {
+describe("amountColorClass", () => {
   it("returns green for positive values", () => {
-    expect(changeColor(1)).toContain("green");
+    expect(amountColorClass(1)).toContain("green");
   });
 
   it("returns red for negative values", () => {
-    expect(changeColor(-1)).toContain("red");
+    expect(amountColorClass(-1)).toContain("red");
   });
 
   it("returns an empty class for zero", () => {
-    expect(changeColor(0)).toBe("");
+    expect(amountColorClass(0)).toBe("");
   });
 });

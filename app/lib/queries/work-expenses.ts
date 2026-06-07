@@ -6,6 +6,7 @@ import {
   WORK_EXPENSE_REIMBURSEMENT_TYPE,
 } from "@/lib/constants/reference-ids";
 import { isValidIsoDate } from "@/lib/validations/date-range";
+import { sumAmountByType } from "@/lib/queries/_aggregates";
 
 // ── Types ──
 
@@ -70,8 +71,8 @@ export async function getWorkExpenseTotals(
 
   const result = await db.execute(sql`
     SELECT
-      SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_work_expenses,
-      SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_REIMBURSEMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_reimbursements
+      ${sumAmountByType(WORK_EXPENSE_TYPE.id, "total_work_expenses")},
+      ${sumAmountByType(WORK_EXPENSE_REIMBURSEMENT_TYPE.id, "total_reimbursements")}
     FROM transactions t
     ${where}
   `);
@@ -103,8 +104,8 @@ export async function getWorkExpenseTimeSeries(
     agg AS (
       SELECT
         date_trunc('month', t.transaction_date)::date AS date,
-        SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_expenses,
-        SUM(CASE WHEN t.transaction_type_id = ${WORK_EXPENSE_REIMBURSEMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_reimbursements
+        ${sumAmountByType(WORK_EXPENSE_TYPE.id, "total_expenses")},
+        ${sumAmountByType(WORK_EXPENSE_REIMBURSEMENT_TYPE.id, "total_reimbursements")}
       FROM transactions t
       WHERE t.transaction_date >= date_trunc('month', ${dateFrom}::date)::date
         AND t.transaction_date <= ${dateTo}::date

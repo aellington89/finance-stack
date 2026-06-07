@@ -7,6 +7,7 @@ import {
   LIABILITY_CURRENT_CATEGORY_ID,
   LIABILITY_NON_CURRENT_CATEGORY_ID,
 } from "@/lib/queries/liability-categories";
+import { balanceAtDate } from "@/lib/queries/_aggregates";
 
 // Sign convention: liability balances are stored as negative numbers in
 // account_balance_history. We preserve that sign throughout — this module
@@ -309,10 +310,8 @@ export async function getLiabilityPerformance(
       at.account_type AS account_type_name,
       a.account_id,
       a.account_name,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${dateFrom}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS start_balance,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${endDate}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS end_balance
+      ${balanceAtDate(dateFrom, "start_balance")},
+      ${balanceAtDate(endDate, "end_balance")}
     FROM account_balance_history abh
     JOIN accounts a ON a.account_id = abh.account_id
     JOIN account_types at ON at.account_type_id = a.account_type_id
@@ -702,10 +701,8 @@ export async function getDebtWaterfall(
 
   const balanceResult = await db.execute(sql`
     SELECT
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${dateFrom}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS start_balance,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${endDate}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS end_balance
+      ${balanceAtDate(dateFrom, "start_balance")},
+      ${balanceAtDate(endDate, "end_balance")}
     FROM account_balance_history abh
     JOIN accounts a ON a.account_id = abh.account_id
     JOIN account_types at ON at.account_type_id = a.account_type_id

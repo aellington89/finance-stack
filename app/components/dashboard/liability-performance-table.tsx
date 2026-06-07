@@ -6,7 +6,7 @@ import type { LiabilityPerformanceData } from "@/lib/queries/liabilities-drilldo
 import {
   signedCurrency,
   signedPercent,
-  changeColor,
+  amountColorClass,
 } from "@/lib/format/financial";
 import {
   Table,
@@ -125,14 +125,14 @@ export function LiabilityPerformanceTable({
                       {formatCurrency(cat.currentValue)}
                     </TableCell>
                     <TableCell
-                      className={`text-right tabular-nums ${changeColor(cat.change)}`}
+                      className={`text-right tabular-nums ${amountColorClass(cat.change)}`}
                     >
                       {signedCurrency(cat.change)}
                     </TableCell>
                     <TableCell
                       className={`text-right tabular-nums ${
                         cat.percentChange !== null
-                          ? changeColor(cat.percentChange)
+                          ? amountColorClass(cat.percentChange)
                           : ""
                       }`}
                     >
@@ -167,14 +167,14 @@ export function LiabilityPerformanceTable({
                               {formatCurrency(type.currentValue)}
                             </TableCell>
                             <TableCell
-                              className={`text-right tabular-nums ${changeColor(type.change)}`}
+                              className={`text-right tabular-nums ${amountColorClass(type.change)}`}
                             >
                               {signedCurrency(type.change)}
                             </TableCell>
                             <TableCell
                               className={`text-right tabular-nums ${
                                 type.percentChange !== null
-                                  ? changeColor(type.percentChange)
+                                  ? amountColorClass(type.percentChange)
                                   : ""
                               }`}
                             >
@@ -197,14 +197,14 @@ export function LiabilityPerformanceTable({
                                   {formatCurrency(acc.currentValue)}
                                 </TableCell>
                                 <TableCell
-                                  className={`text-right tabular-nums ${changeColor(acc.change)}`}
+                                  className={`text-right tabular-nums ${amountColorClass(acc.change)}`}
                                 >
                                   {signedCurrency(acc.change)}
                                 </TableCell>
                                 <TableCell
                                   className={`text-right tabular-nums ${
                                     acc.percentChange !== null
-                                      ? changeColor(acc.percentChange)
+                                      ? amountColorClass(acc.percentChange)
                                       : ""
                                   }`}
                                 >
@@ -229,14 +229,14 @@ export function LiabilityPerformanceTable({
                 {formatCurrency(data.totalCurrentValue)}
               </TableCell>
               <TableCell
-                className={`text-right font-bold tabular-nums ${changeColor(data.totalChange)}`}
+                className={`text-right font-bold tabular-nums ${amountColorClass(data.totalChange)}`}
               >
                 {signedCurrency(data.totalChange)}
               </TableCell>
               <TableCell
                 className={`text-right font-bold tabular-nums ${
                   data.totalPercentChange !== null
-                    ? changeColor(data.totalPercentChange)
+                    ? amountColorClass(data.totalPercentChange)
                     : ""
                 }`}
               >

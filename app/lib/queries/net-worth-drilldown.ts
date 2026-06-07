@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { RESTRICTED_ASSET_CATEGORY } from "@/lib/constants/reference-ids";
+import { balanceAtDate } from "@/lib/queries/_aggregates";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -76,10 +77,8 @@ export async function getNetWorthWaterfall(
     SELECT
       atc.account_type_category_id AS category_id,
       atc.account_type_category AS category_name,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${dateFrom}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS start_balance,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${endDate}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS end_balance
+      ${balanceAtDate(dateFrom, "start_balance")},
+      ${balanceAtDate(endDate, "end_balance")}
     FROM account_balance_history abh
     JOIN accounts a ON a.account_id = abh.account_id
     JOIN account_types at ON at.account_type_id = a.account_type_id
@@ -137,10 +136,8 @@ export async function getNetWorthDrivers(
       at.account_type AS account_type_name,
       a.account_id,
       a.account_name,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${dateFrom}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS start_balance,
-      COALESCE(SUM(CASE WHEN abh.balance_date = ${endDate}::date
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS end_balance
+      ${balanceAtDate(dateFrom, "start_balance")},
+      ${balanceAtDate(endDate, "end_balance")}
     FROM account_balance_history abh
     JOIN accounts a ON a.account_id = abh.account_id
     JOIN account_types at ON at.account_type_id = a.account_type_id
