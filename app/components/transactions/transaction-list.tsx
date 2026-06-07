@@ -25,7 +25,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { amountColorClass } from "@/components/accounts/accounts-table";
+import { amountColorClass } from "@/lib/format/financial";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
 import { TransactionEditRow } from "@/components/transactions/transaction-edit-row";
 import { TransactionDeleteDialog } from "@/components/transactions/transaction-delete-dialog";

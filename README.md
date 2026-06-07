@@ -359,6 +359,7 @@ finance-stack/
 │   │   ├── actions/transaction.ts        # Server action for transaction submission
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
+│   │   ├── queries/_aggregates.ts        # Shared SQL aggregation fragments (sum-by-type, balance-at-date)
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │   │   ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │   │   ├── queries/work-expenses.ts      # Work expense queries (period totals, time series, category breakdown)
@@ -394,7 +395,7 @@ finance-stack/
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown
 │   │       ├── actions/                  #   Server action tests (account, transaction)
 │   │       ├── api/                      #   API route tests (health drift check)
-│   │       └── queries/                  #   Query function tests (rebuild-balance, liabilities-drilldown)
+│   │       └── queries/                  #   Query function tests (accounting, rebuild-balance, drilldowns)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed)
@@ -454,6 +455,11 @@ Data is persisted in Docker volumes and will be available on next startup.
 ## Updates
 
 ### 2026-06-07 — v0.1.3.1 (in progress)
+
+**Extract `amountColorClass` + shared SQL aggregations ([Issue #134](https://github.com/aellington89/finance-stack/issues/134))**
+- `amountColorClass()` — a pure Tailwind text-color helper — lived inside the [`accounts-table.tsx`](app/components/accounts/accounts-table.tsx) component and was re-imported from there into [`transaction-list.tsx`](app/components/transactions/transaction-list.tsx). It was also byte-for-byte identical to `changeColor()` already in [`app/lib/format/financial.ts`](app/lib/format/financial.ts) (same green/red/empty logic), so the codebase carried two names for one behavior. Consolidated to a single `amountColorClass` in `financial.ts`; deleted `changeColor` and repointed its call sites in [`liabilities/page.tsx`](app/app/(app)/dashboard/liabilities/page.tsx), [`asset-performance-table.tsx`](app/components/dashboard/asset-performance-table.tsx), and [`liability-performance-table.tsx`](app/components/dashboard/liability-performance-table.tsx). Pure rename/move — the function body is unchanged, so every call site emits the same classes and there is no UI change.
+- Two `SUM(CASE WHEN …)` SQL blocks were copy-pasted across the query layer, risking divergent null/rounding handling: a *sum-by-transaction-type* block (`SUM(CASE WHEN t.transaction_type_id = X THEN ABS(t.amount) ELSE 0 END)`) in [`accounting.ts`](app/lib/queries/accounting.ts) and [`work-expenses.ts`](app/lib/queries/work-expenses.ts), and a *balance-snapshot-at-date* block (`COALESCE(SUM(CASE WHEN abh.balance_date = X THEN abh.cumulative_balance ELSE 0 END), 0)`) in [`net-worth-drilldown.ts`](app/lib/queries/net-worth-drilldown.ts), [`assets-drilldown.ts`](app/lib/queries/assets-drilldown.ts), and [`liabilities-drilldown.ts`](app/lib/queries/liabilities-drilldown.ts). Both now come from `sumAmountByType()` / `balanceAtDate()` in the new [`app/lib/queries/_aggregates.ts`](app/lib/queries/_aggregates.ts) — establishing the `_`-prefixed shared-helper convention for the queries layer. Mechanical extraction only: the generated SQL (and thus query output) is unchanged.
+- New unit tests: [`tests/unit/lib/queries/_aggregates.test.ts`](app/tests/unit/lib/queries/_aggregates.test.ts) renders each fragment via Drizzle's `PgDialect` and asserts the exact parameterized SQL (with/without a predicate; string date vs `CURRENT_DATE`), and the `changeColor` block in [`tests/unit/lib/format/financial.test.ts`](app/tests/unit/lib/format/financial.test.ts) was renamed to `amountColorClass` (same behavior contract). The existing drilldown integration suites guard that the Pattern B query output is unchanged; a new [`tests/integration/queries/accounting.test.ts`](app/tests/integration/queries/accounting.test.ts) closes the prior coverage gap on the Pattern A files — it seeds a dedicated account with controlled transactions and asserts exact period totals, monthly buckets, to-date comparison, expense-category breakdown, and trailing-12-month averages (incl. the empty-range → zero path).
 
 **Centralize date-range validation ([Issue #150](https://github.com/aellington89/finance-stack/issues/150))**
 - `dateFrom`/`dateTo` URL params were handled inconsistently across three layers: [`getDateRangeFromParams()`](app/lib/queries/date-range.ts) **silently swapped** an out-of-order range and did no format check; [`accounting.ts`](app/lib/queries/accounting.ts) and [`work-expenses.ts`](app/lib/queries/work-expenses.ts) each carried a private `safeDate`/`DATE_RE` that silently dropped bad dates; and the dashboard/assets/net-worth queries fed params straight into a SQL `::date` cast, so a malformed value (e.g. `?dateFrom=banana`) surfaced as a raw Postgres 500 → generic "Something went wrong". The net effect was wrong-but-silent results or opaque errors.

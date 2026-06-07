@@ -6,6 +6,7 @@ import {
   INVESTMENT_TYPE,
 } from "@/lib/constants/reference-ids";
 import { isValidIsoDate } from "@/lib/validations/date-range";
+import { sumAmountByType } from "@/lib/queries/_aggregates";
 
 // ── Types ──
 
@@ -170,9 +171,9 @@ export async function getAccountingTimeSeries(
       agg AS (
         SELECT
           ${sql.raw(groupExpr)} AS date,
-          SUM(CASE WHEN t.transaction_type_id = ${INCOME_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_income,
-          SUM(CASE WHEN t.transaction_type_id = ${EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_expenses,
-          SUM(CASE WHEN t.transaction_type_id = ${INVESTMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_investments
+          ${sumAmountByType(INCOME_TYPE.id, "total_income")},
+          ${sumAmountByType(EXPENSE_TYPE.id, "total_expenses")},
+          ${sumAmountByType(INVESTMENT_TYPE.id, "total_investments")}
         FROM transactions t
         ${where}
         GROUP BY 1
@@ -206,9 +207,9 @@ export async function getAccountingTimeSeries(
       agg AS (
         SELECT
           ${sql.raw(groupExpr)} AS date,
-          SUM(CASE WHEN t.transaction_type_id = ${INCOME_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_income,
-          SUM(CASE WHEN t.transaction_type_id = ${EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_expenses,
-          SUM(CASE WHEN t.transaction_type_id = ${INVESTMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_investments
+          ${sumAmountByType(INCOME_TYPE.id, "total_income")},
+          ${sumAmountByType(EXPENSE_TYPE.id, "total_expenses")},
+          ${sumAmountByType(INVESTMENT_TYPE.id, "total_investments")}
         FROM transactions t
         ${where}
         GROUP BY 1
@@ -248,9 +249,9 @@ export async function getAccountingPeriodTotals(
 
   const result = await db.execute(sql`
     SELECT
-      SUM(CASE WHEN t.transaction_type_id = ${INCOME_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_income,
-      SUM(CASE WHEN t.transaction_type_id = ${EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_expenses,
-      SUM(CASE WHEN t.transaction_type_id = ${INVESTMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS total_investments
+      ${sumAmountByType(INCOME_TYPE.id, "total_income")},
+      ${sumAmountByType(EXPENSE_TYPE.id, "total_expenses")},
+      ${sumAmountByType(INVESTMENT_TYPE.id, "total_investments")}
     FROM transactions t
     ${where}
   `);
@@ -335,6 +336,9 @@ export async function getAccountingToDateComparison(
     ? sql`AND ${sql.join(extraConditions, sql` AND `)}`
     : sql``;
 
+  const curWindow = sql`t.transaction_date >= p.cur_start AND t.transaction_date <= p.cur_end`;
+  const prevWindow = sql`t.transaction_date >= p.prev_start AND t.transaction_date <= p.prev_end`;
+
   const result = await db.execute(sql`
     WITH params AS (
       SELECT
@@ -344,12 +348,12 @@ export async function getAccountingToDateComparison(
         (date_trunc(${sql.raw(`'${truncation}'`)}, ${refDate}::date) - interval '1 day')::date AS prev_end
     )
     SELECT
-      SUM(CASE WHEN t.transaction_date >= p.cur_start AND t.transaction_date <= p.cur_end AND t.transaction_type_id = ${INCOME_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS cur_income,
-      SUM(CASE WHEN t.transaction_date >= p.prev_start AND t.transaction_date <= p.prev_end AND t.transaction_type_id = ${INCOME_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS prev_income,
-      SUM(CASE WHEN t.transaction_date >= p.cur_start AND t.transaction_date <= p.cur_end AND t.transaction_type_id = ${EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS cur_expenses,
-      SUM(CASE WHEN t.transaction_date >= p.prev_start AND t.transaction_date <= p.prev_end AND t.transaction_type_id = ${EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS prev_expenses,
-      SUM(CASE WHEN t.transaction_date >= p.cur_start AND t.transaction_date <= p.cur_end AND t.transaction_type_id = ${INVESTMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS cur_investments,
-      SUM(CASE WHEN t.transaction_date >= p.prev_start AND t.transaction_date <= p.prev_end AND t.transaction_type_id = ${INVESTMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS prev_investments,
+      ${sumAmountByType(INCOME_TYPE.id, "cur_income", curWindow)},
+      ${sumAmountByType(INCOME_TYPE.id, "prev_income", prevWindow)},
+      ${sumAmountByType(EXPENSE_TYPE.id, "cur_expenses", curWindow)},
+      ${sumAmountByType(EXPENSE_TYPE.id, "prev_expenses", prevWindow)},
+      ${sumAmountByType(INVESTMENT_TYPE.id, "cur_investments", curWindow)},
+      ${sumAmountByType(INVESTMENT_TYPE.id, "prev_investments", prevWindow)},
       MIN(${sql.raw(curLabelExpr)}) AS cur_label,
       MIN(${sql.raw(prevLabelExpr)}) AS prev_label
     FROM transactions t
@@ -427,9 +431,9 @@ export async function getAccountingMonthlyAverages(
     WITH monthly AS (
       SELECT
         date_trunc('month', t.transaction_date) AS month,
-        SUM(CASE WHEN t.transaction_type_id = ${INCOME_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS income,
-        SUM(CASE WHEN t.transaction_type_id = ${EXPENSE_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS expenses,
-        SUM(CASE WHEN t.transaction_type_id = ${INVESTMENT_TYPE.id} THEN ABS(t.amount) ELSE 0 END) AS investments
+        ${sumAmountByType(INCOME_TYPE.id, "income")},
+        ${sumAmountByType(EXPENSE_TYPE.id, "expenses")},
+        ${sumAmountByType(INVESTMENT_TYPE.id, "investments")}
       FROM transactions t
       WHERE t.transaction_date >= date_trunc('month', CURRENT_DATE) - interval '12 months'
         AND t.transaction_date < date_trunc('month', CURRENT_DATE)

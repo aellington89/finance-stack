@@ -23,7 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { changeColor, signedCurrency } from "@/lib/format/financial";
+import { amountColorClass, signedCurrency } from "@/lib/format/financial";
 
 export const dynamic = "force-dynamic";
 
@@ -111,7 +111,7 @@ export default async function LiabilitiesDrilldownPage({
           </CardHeader>
           <CardContent>
             <span
-              className={`text-5xl font-bold tabular-nums tracking-tight ${changeColor(performance.totalChange)}`}
+              className={`text-5xl font-bold tabular-nums tracking-tight ${amountColorClass(performance.totalChange)}`}
             >
               {signedCurrency(performance.totalChange)}
             </span>

@@ -20,7 +20,11 @@ export function signedPercent(n: number): string {
   return `${abs}%`;
 }
 
-export function changeColor(n: number): string {
+/**
+ * Tailwind text-color class for a signed monetary value — amounts, balances,
+ * and period changes. Green for positive, red for negative, none for zero.
+ */
+export function amountColorClass(n: number): string {
   if (n > 0) return "text-green-600 dark:text-green-400";
   if (n < 0) return "text-red-600 dark:text-red-400";
   return "";
