@@ -31,11 +31,11 @@ export function getDateRangeFromParams(
   const { applyDefault = true, defaultDays = 30 } = opts;
 
   let dateFrom = coerce(params.dateFrom);
-  let dateTo = coerce(params.dateTo);
+  const dateTo = coerce(params.dateTo);
 
-  if (dateFrom && dateTo && dateFrom > dateTo) {
-    [dateFrom, dateTo] = [dateTo, dateFrom];
-  }
+  // Ordering (dateFrom <= dateTo) and format are enforced upstream by
+  // validateDateRange() at the page boundary — see lib/validations/date-range.ts.
+  // This helper only coerces params and applies the default window.
 
   if (applyDefault && !dateFrom) {
     dateFrom = todayMinusDays(defaultDays);

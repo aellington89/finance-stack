@@ -13,7 +13,9 @@ import { NetWorthDriversTable } from "@/components/dashboard/net-worth-drivers-t
 import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
 import { DashboardPageHeader } from "@/components/dashboard/page-header";
+import { DateRangeError } from "@/components/dashboard/date-range-error";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
+import { validateDateRange } from "@/lib/validations/date-range";
 import {
   Card,
   CardContent,
@@ -36,6 +38,21 @@ export default async function NetWorthDrilldownPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+
+  const validation = validateDateRange(params);
+  if (!validation.ok) {
+    return (
+      <div className="space-y-6">
+        <DashboardPageHeader
+          title="Net Worth"
+          subnav={<DrilldownTabs section="summary" />}
+          filters={<DashboardDateRangeFilter basePath="/dashboard/net-worth" />}
+        />
+        <DateRangeError message={validation.error} />
+      </div>
+    );
+  }
+
   const { dateFrom, dateTo } = getDateRangeFromParams(params);
 
   const [summary, timeSeries, waterfall, drivers, decomposition] =

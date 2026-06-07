@@ -338,6 +338,7 @@ finance-stack/
 │   │   │   ├── accounting-filters.tsx    # Label-less multi-select combobox filter bar for accounting page
 │   │   │   ├── accounting-kpi-card.tsx   # KPI card with change indicator for accounting metrics
 │   │   │   ├── date-range-filter.tsx     # URL-param-driven date range filter wrapper
+│   │   │   ├── date-range-error.tsx       # Inline "Invalid date range" error state (rendered when validateDateRange rejects params)
 │   │   │   ├── net-worth-drivers-table.tsx # Expandable net worth drivers table (category → account type → account)
 │   │   │   ├── asset-performance-table.tsx # Expandable assets performance table (category → account type → account)
 │   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
@@ -375,10 +376,11 @@ finance-stack/
 │   │   ├── validations/account.ts        # Zod schema for account form validation
 │   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
 │   │   ├── validations/categories.ts     # Zod schemas for category/type forms
+│   │   ├── validations/date-range.ts     # Canonical dateFrom/dateTo validator (format + ordering) + isValidIsoDate
 │   │   └── utils.ts                      # Utility helpers (cn() class merge)
 │   ├── tests/                            # Vitest test suite
 │   │   ├── unit/                         # Unit tests (no DB required)
-│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories)
+│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
 │   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
 │   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
@@ -386,7 +388,7 @@ finance-stack/
 │   │   │       ├── utils.test.ts         #     cn() class-merge helper
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
-│   │   │       └── queries/              #     Query module constants (liability-categories pinned IDs)
+│   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown
@@ -451,7 +453,13 @@ Data is persisted in Docker volumes and will be available on next startup.
 
 ## Updates
 
-### 2026-06-05 — v0.1.3.1 (in progress)
+### 2026-06-07 — v0.1.3.1 (in progress)
+
+**Centralize date-range validation ([Issue #150](https://github.com/aellington89/finance-stack/issues/150))**
+- `dateFrom`/`dateTo` URL params were handled inconsistently across three layers: [`getDateRangeFromParams()`](app/lib/queries/date-range.ts) **silently swapped** an out-of-order range and did no format check; [`accounting.ts`](app/lib/queries/accounting.ts) and [`work-expenses.ts`](app/lib/queries/work-expenses.ts) each carried a private `safeDate`/`DATE_RE` that silently dropped bad dates; and the dashboard/assets/net-worth queries fed params straight into a SQL `::date` cast, so a malformed value (e.g. `?dateFrom=banana`) surfaced as a raw Postgres 500 → generic "Something went wrong". The net effect was wrong-but-silent results or opaque errors.
+- New single source of truth at [`app/lib/validations/date-range.ts`](app/lib/validations/date-range.ts): `validateDateRange(params)` (a `zod/v4` schema) checks each value is a real `YYYY-MM-DD` calendar date — rejecting bad formats (`2024-1-1`) and impossible dates (`2024-02-30`, `2024-13-01`) — and enforces `dateFrom <= dateTo` via lexical compare. Ordering is now **rejected, not swapped**. The exported `isValidIsoDate()` primitive replaces the two duplicated `DATE_RE`/`safeDate` copies in the query layer (kept there as defense-in-depth).
+- All eight date-aware dashboard pages now validate at the boundary (after `await searchParams`) and, on failure, render the new [`DateRangeError`](app/components/dashboard/date-range-error.tsx) inline state — a clear "Invalid date range" message that keeps the page header + date filter visible so the user can correct the range — instead of querying with bad input. `getDateRangeFromParams()` keeps its coercion + 30-day-default job but no longer swaps.
+- New unit tests in [`tests/unit/validations/date-range.test.ts`](app/tests/unit/validations/date-range.test.ts) (validator: accept/reject matrix, coercion, `isValidIsoDate` truth table) and [`tests/unit/lib/queries/date-range.test.ts`](app/tests/unit/lib/queries/date-range.test.ts) (guards that out-of-order input is no longer swapped). Does not change the date-range picker UX ([#61](https://github.com/aellington89/finance-stack/issues/61)).
 
 **Add CI gate: SEED_REFERENCES names must match shared-lookups.sql ([Issue #155](https://github.com/aellington89/finance-stack/issues/155))**
 - #123's [`/api/health`](app/app/api/health/route.ts) drift check catches *DB-side* drift (the live DB diverging from code) but not *code-side* drift: renaming a row in [`init-db/seeds/shared-lookups.sql`](init-db/seeds/shared-lookups.sql) and silencing the resulting health failure by editing [`reference-ids.ts`](app/lib/constants/reference-ids.ts) to match leaves both checks green while code and seed silently disagree about a clean install. A build-time gate closes that gap.

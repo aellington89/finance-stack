@@ -5,6 +5,7 @@ import {
   WORK_EXPENSE_TYPE,
   WORK_EXPENSE_REIMBURSEMENT_TYPE,
 } from "@/lib/constants/reference-ids";
+import { isValidIsoDate } from "@/lib/validations/date-range";
 
 // ── Types ──
 
@@ -34,10 +35,10 @@ const WORK_EXPENSE_TYPE_IDS = [
 
 // ── Helpers ──
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
+// Defense-in-depth against malformed dates reaching the SQL layer; the page
+// boundary rejects these first via validateDateRange (lib/validations/date-range.ts).
 function safeDate(value: string | undefined): string | undefined {
-  return value && DATE_RE.test(value) ? value : undefined;
+  return isValidIsoDate(value) ? value : undefined;
 }
 
 function buildDateConditions(filters: WorkExpenseFilters, tableAlias = "t"): SQL[] {

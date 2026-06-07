@@ -10,11 +10,13 @@ import {
   type SortDirection,
 } from "@/lib/queries/transactions";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
+import { validateDateRange } from "@/lib/validations/date-range";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { TransactionFilters as TransactionFiltersUI } from "@/components/transactions/transaction-filters";
 import { TransactionList } from "@/components/transactions/transaction-list";
 import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
+import { DateRangeError } from "@/components/dashboard/date-range-error";
 import {
   VISIBLE_COLUMNS_COOKIE,
   parseVisibleColumnsCookie,
@@ -88,6 +90,34 @@ export default async function DashboardTransactionsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = await searchParams;
+
+  const validation = validateDateRange(resolvedParams);
+  if (!validation.ok) {
+    // Date-independent options still load so the filter bar stays usable to fix the range.
+    const [{ accounts, types, categories }, descriptions] = await Promise.all([
+      getTransactionFormOptions(),
+      getUniqueDescriptions(),
+    ]);
+    return (
+      <div className="space-y-6">
+        <DashboardPageHeader
+          title="Transactions"
+          subnav={<DrilldownTabs section="transactions" />}
+          filters={
+            <TransactionFiltersUI
+              descriptions={descriptions}
+              accounts={accounts}
+              types={types}
+              categories={categories}
+              filters={parseSearchParams(resolvedParams)}
+            />
+          }
+        />
+        <DateRangeError message={validation.error} />
+      </div>
+    );
+  }
+
   const filters = parseSearchParams(resolvedParams);
 
   const cookieStore = await cookies();
