@@ -7,7 +7,9 @@ import { AccountingKpiCard } from "@/components/dashboard/accounting-kpi-card";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
 import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
+import { DateRangeError } from "@/components/dashboard/date-range-error";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
+import { validateDateRange } from "@/lib/validations/date-range";
 import { WorkExpensesChart } from "@/components/charts/work-expenses-chart";
 import { ExpensesCategoryChart } from "@/components/charts/expenses-category-chart";
 
@@ -26,6 +28,21 @@ export default async function WorkExpensesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = await searchParams;
+
+  const validation = validateDateRange(resolvedParams);
+  if (!validation.ok) {
+    return (
+      <div className="space-y-6">
+        <DashboardPageHeader
+          title="Work Expenses"
+          subnav={<DrilldownTabs section="work-expenses" />}
+          filters={<DashboardDateRangeFilter basePath="/dashboard/work-expenses" />}
+        />
+        <DateRangeError message={validation.error} />
+      </div>
+    );
+  }
+
   const filters = getDateRangeFromParams(resolvedParams);
 
   const [totals, timeSeries, categoryBreakdown] = await Promise.all([

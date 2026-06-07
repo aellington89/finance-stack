@@ -5,6 +5,7 @@ import {
   EXPENSE_TYPE,
   INVESTMENT_TYPE,
 } from "@/lib/constants/reference-ids";
+import { isValidIsoDate } from "@/lib/validations/date-range";
 
 // ── Types ──
 
@@ -63,10 +64,10 @@ export interface AccountingFilters {
 
 const ACCOUNTING_TYPE_IDS = [INCOME_TYPE.id, EXPENSE_TYPE.id, INVESTMENT_TYPE.id];
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
+// Defense-in-depth against malformed dates reaching the SQL layer; the page
+// boundary rejects these first via validateDateRange (lib/validations/date-range.ts).
 function safeDate(value: string | undefined): string | undefined {
-  return value && DATE_RE.test(value) ? value : undefined;
+  return isValidIsoDate(value) ? value : undefined;
 }
 
 function buildFilterConditions(filters: AccountingFilters, tableAlias = "t"): SQL[] {

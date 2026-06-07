@@ -18,7 +18,9 @@ import { AccountingKpiCard } from "@/components/dashboard/accounting-kpi-card";
 import { AccountingFilters as AccountingFiltersUI } from "@/components/dashboard/accounting-filters";
 import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
+import { DateRangeError } from "@/components/dashboard/date-range-error";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
+import { validateDateRange } from "@/lib/validations/date-range";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +119,41 @@ export default async function AccountingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = await searchParams;
+
+  const validation = validateDateRange(resolvedParams);
+  if (!validation.ok) {
+    // Date-independent options still load so the filter bar stays usable to fix the range.
+    const [{ accounts, categories }, descriptions] = await Promise.all([
+      getTransactionFormOptions(),
+      getUniqueDescriptions(),
+    ]);
+    const { rawFilters } = parseSearchParams(resolvedParams);
+    return (
+      <div className="space-y-6">
+        <DashboardPageHeader
+          title="Personal Accounting"
+          subnav={<DrilldownTabs section="accounting" />}
+          filters={
+            <AccountingFiltersUI
+              descriptions={descriptions}
+              accounts={accounts}
+              categories={categories}
+              filters={rawFilters as Record<string, string | string[] | number[] | undefined> & {
+                dateFrom?: string;
+                dateTo?: string;
+                descriptions?: string[];
+                accountIds?: number[];
+                categoryIds?: number[];
+                timeGrouping?: string;
+              }}
+            />
+          }
+        />
+        <DateRangeError message={validation.error} />
+      </div>
+    );
+  }
+
   const { rawFilters, ...filters } = parseSearchParams(resolvedParams);
 
   const showToDate = isStandardGrouping(filters.timeGrouping ?? "month");
