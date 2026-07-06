@@ -77,8 +77,9 @@ jobs:
           docker tag finance-app:latest "finance-app:$GIT_SHA"
 
       # Boot the full stack (postgres → migrate → finance-app) and assert /api/health
-      # reports the expected version + SHA. The compose healthcheck already polls
-      # /api/health, so waiting for the container to be healthy is sufficient.
+      # reports the expected version + SHA. We poll /api/health directly (rather than the
+      # container's own wget healthcheck) so the assertion doesn't depend on the runner's
+      # wget flavour and so the response body + service logs are captured on failure.
       - name: Boot stack and verify /api/health
         working-directory: .
         # The postgres init script (init-db/01-create-databases.sh, run on first start
@@ -96,20 +97,24 @@ jobs:
         run: |
           docker compose up -d
 
-          echo "Waiting for finance-app to become healthy…"
-          TIMEOUT=120
+          echo "Polling http://localhost:3001/api/health for a 200…"
+          TIMEOUT=180
           ELAPSED=0
-          until [ "$(docker inspect -f '{{.State.Health.Status}}' finance-app 2>/dev/null)" = "healthy" ]; do
+          # curl -fsS: non-zero exit on any non-2xx (e.g. the 503 the route returns on
+          # DB-disconnect or seed drift), so the loop keeps waiting until a real 200.
+          until HEALTH="$(curl -fsS http://localhost:3001/api/health 2>/dev/null)"; do
             if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-              echo "::error::finance-app did not become healthy within ${TIMEOUT}s"
-              docker compose logs finance-app
+              echo "::error::/api/health did not return 200 within ${TIMEOUT}s"
+              echo "--- last /api/health body (with status) ---"
+              curl -s -w '\nHTTP %{http_code}\n' http://localhost:3001/api/health || true
+              echo "--- migrate logs ---";     docker compose logs --no-color migrate     || true
+              echo "--- finance-app logs ---";  docker compose logs --no-color finance-app || true
               exit 1
             fi
             sleep 5
             ELAPSED=$((ELAPSED + 5))
           done
 
-          HEALTH="$(curl -s http://localhost:3001/api/health)"
           echo "Health response: $HEALTH"
 
           GOT_VER="$(echo "$HEALTH" | jq -r '.build.version')"
