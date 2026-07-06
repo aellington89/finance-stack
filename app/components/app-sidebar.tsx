@@ -6,6 +6,7 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
@@ -13,7 +14,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { LayoutDashboardIcon, LandmarkIcon, SettingsIcon } from "lucide-react";
+import { LayoutDashboardIcon, LandmarkIcon, SettingsIcon, InfoIcon } from "lucide-react";
+import { VersionBadge } from "@/components/version-badge";
 
 const navItems = [
   {
@@ -30,6 +32,11 @@ const navItems = [
     title: "Settings",
     href: "/settings/categories",
     icon: SettingsIcon,
+  },
+  {
+    title: "About",
+    href: "/settings/about",
+    icon: InfoIcon,
   },
 ];
 
@@ -69,6 +76,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className="px-2 py-1 group-data-[state=collapsed]:hidden">
+          <VersionBadge />
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

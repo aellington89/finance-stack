@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { SEED_REFERENCES } from "@/lib/constants/reference-ids";
+import { BUILD_INFO } from "@/lib/version";
 
 export interface DriftEntry {
   table: string;
@@ -74,5 +75,10 @@ export async function GET() {
     );
   }
 
-  return Response.json({ status: "ok", db: "connected", seedData: "ok" });
+  return Response.json({
+    status: "ok",
+    db: "connected",
+    seedData: "ok",
+    build: BUILD_INFO,
+  });
 }

@@ -41,10 +41,10 @@ Tests use Vitest with two separate projects:
 
 The integration test global setup (`tests/integration/setup.ts`) asserts that `DATABASE_URL` contains `Finances_Test` before any test runs, preventing accidental execution against production.
 
-To seed the test database with sample data, see the [root README](../README.md#test-database).
+To seed the test database with sample data, see [docs/database.md](../docs/database.md#test-database).
 
 ## Schema changes
 
-`drizzle/schema.ts` is the source of truth. Edit it, then run `npm run db:generate -- --name <desc>` to produce a versioned migration in `drizzle/migrations/`. See [Making schema changes](../README.md#making-schema-changes) in the root README for the full workflow.
+`drizzle/schema.ts` is the source of truth. Edit it, then run `npm run db:generate -- --name <desc>` to produce a versioned migration in `drizzle/migrations/`. See [Making schema changes](../docs/schema-changes.md#making-schema-changes) for the full workflow.
 
-See the [root README](../README.md) for full project documentation.
+See the [documentation index](../docs/README.md) for the full project guide set.

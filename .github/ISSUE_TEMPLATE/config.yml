@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Contributing guide
+    url: https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md
+    about: Dev workflow, the Issue #N commit convention, CI gates, and the release process.
+  - name: 📚 Documentation
+    url: https://github.com/aellington89/finance-stack/tree/master/docs
+    about: Focused guides — database, schema changes, testing, importer, project structure.

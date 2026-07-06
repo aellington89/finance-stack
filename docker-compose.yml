@@ -130,6 +130,11 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile
+      args:                                # Build-time version stamp (see scripts/build.sh); defaults keep `up` argument-free
+        GIT_SHA: ${GIT_SHA:-dev}
+        BUILD_TIME: ${BUILD_TIME:-}
+      additional_contexts:                 # Supplies repo-root CHANGELOG.md to the runner COPY --from=changelog
+        changelog: .
     container_name: finance-app
     restart: unless-stopped
     ports:
