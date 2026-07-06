@@ -70,9 +70,11 @@ jobs:
         run: |
           docker compose build finance-app
 
-          IMG="$(docker compose images -q finance-app)"
-          docker tag "$IMG" "finance-app:$VER"
-          docker tag "$IMG" "finance-app:$GIT_SHA"
+          # compose builds/tags the service's `image:` (finance-app:latest); re-tag it
+          # with the release version and full SHA. (`docker compose images -q` lists images
+          # for *containers*, which don't exist after a build-only step, so it returns "".)
+          docker tag finance-app:latest "finance-app:$VER"
+          docker tag finance-app:latest "finance-app:$GIT_SHA"
 
       # Boot the full stack (postgres → migrate → finance-app) and assert /api/health
       # reports the expected version + SHA. The compose healthcheck already polls

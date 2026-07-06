@@ -139,6 +139,7 @@ services:
         # a relative additional_contexts path against the build context (./app) rather than
         # the project dir, which breaks `COPY --from=changelog CHANGELOG.md` (see release.yml).
         changelog: ${CHANGELOG_CONTEXT:-.}
+    image: finance-app:latest            # Stable local tag so `build` and `up` share one image; the release workflow re-tags it finance-app:<version>/<sha>
     container_name: finance-app
     restart: unless-stopped
     ports:
