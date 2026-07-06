@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master, test]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -77,6 +78,9 @@ jobs:
 
       - name: Seed reference gate
         run: npm run check:seed-references
+
+      - name: Changelog gate
+        run: npm run check:changelog
 
       - name: Lint
         run: npm run lint

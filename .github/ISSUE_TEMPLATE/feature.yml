@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose an enhancement or new capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a change. See [CONTRIBUTING.md](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md)
+        for the dev workflow, the `Issue #N -` commit convention, and CI gates.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should change, and why?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Observable, checkable conditions that mean this is done.
+      value: |
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: key-files
+    attributes:
+      label: Key files
+      description: Files or modules you expect this to touch, if known.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app does this touch? (Informational — doesn't auto-apply a label.)
+      multiple: true
+      options:
+        - frontend
+        - backend
+        - database
+        - infrastructure
+        - developer-experience
+        - documentation
+    validations:
+      required: false

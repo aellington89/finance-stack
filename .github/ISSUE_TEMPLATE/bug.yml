@@ -1,0 +1,61 @@
+name: Bug report
+description: Report something that isn't working.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. See [CONTRIBUTING.md](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md)
+        for the dev workflow and CI gates.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug, including what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app does this touch? (Informational — doesn't auto-apply a label.)
+      options:
+        - frontend
+        - backend
+        - database / migrations
+        - importer
+        - infrastructure
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Run mode: docker compose / local `npm run dev`
+        - App version (sidebar footer badge, `/settings/about`, or `/api/health`):
+        - Browser / OS:
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
+    validations:
+      required: false

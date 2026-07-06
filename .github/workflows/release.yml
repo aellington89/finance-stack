@@ -1,0 +1,148 @@
+# Triggered on every vX.Y.Z annotated tag push. Runs the version/tag-consistency gate
+# (check:changelog), builds the Docker image with GIT_SHA + BUILD_TIME baked in, asserts
+# /api/health reports the correct version + SHA, then publishes a GitHub Release whose
+# body is the matching CHANGELOG.md section. The gate runs before any Docker work so a
+# mismatched tag (tag ≠ package.json/CHANGELOG) fails fast without burning build time.
+# See docs/releases.md and Issue #175.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write  # required for gh release create
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for git describe (previous tag) used in the compare link
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Gate: asserts package.json version == newest CHANGELOG release == pushed tag.
+      # check-changelog.ts reads GITHUB_REF_TYPE / GITHUB_REF_NAME automatically on
+      # tag pushes, so no args are needed. Exit 1 + ::error:: annotation on any drift.
+      - name: Version & tag consistency gate
+        run: npm run check:changelog
+
+      # Compute stamp variables used by the Docker build and the Release body.
+      # GIT_SHA uses the full 40-char SHA so it matches github.sha exactly — the same
+      # value that ends up in finance-app:$GIT_SHA and in /api/health .build.gitSha.
+      - name: Compute stamp variables
+        working-directory: .
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          GIT_SHA="${{ github.sha }}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+
+          echo "VER=$VER"             >> "$GITHUB_ENV"
+          echo "GIT_SHA=$GIT_SHA"     >> "$GITHUB_ENV"
+          echo "BUILD_TIME=$BUILD_TIME" >> "$GITHUB_ENV"
+          echo "PREV_TAG=$PREV_TAG"   >> "$GITHUB_ENV"
+
+      # Build via docker compose so the CHANGELOG additional_contexts entry and the
+      # GIT_SHA/BUILD_TIME build-args are wired exactly as they are in local builds
+      # (matches scripts/build.sh and docker-compose.yml finance-app.build.args).
+      - name: Build stamped Docker image
+        working-directory: .
+        run: |
+          docker compose build finance-app
+
+          IMG="$(docker compose images -q finance-app)"
+          docker tag "$IMG" "finance-app:$VER"
+          docker tag "$IMG" "finance-app:$GIT_SHA"
+
+      # Boot the full stack (postgres → migrate → finance-app) and assert /api/health
+      # reports the expected version + SHA. The compose healthcheck already polls
+      # /api/health, so waiting for the container to be healthy is sufficient.
+      - name: Boot stack and verify /api/health
+        working-directory: .
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: changeme
+          FINANCE_APP_DB: Finances
+        run: |
+          docker compose up -d
+
+          echo "Waiting for finance-app to become healthy…"
+          TIMEOUT=120
+          ELAPSED=0
+          until [ "$(docker inspect -f '{{.State.Health.Status}}' finance-app 2>/dev/null)" = "healthy" ]; do
+            if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+              echo "::error::finance-app did not become healthy within ${TIMEOUT}s"
+              docker compose logs finance-app
+              exit 1
+            fi
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          HEALTH="$(curl -s http://localhost:3001/api/health)"
+          echo "Health response: $HEALTH"
+
+          GOT_VER="$(echo "$HEALTH" | jq -r '.build.version')"
+          GOT_SHA="$(echo "$HEALTH" | jq -r '.build.gitSha')"
+
+          if [ "$GOT_VER" != "$VER" ]; then
+            echo "::error::/api/health reported version '$GOT_VER', expected '$VER'"
+            exit 1
+          fi
+          if [ "$GOT_SHA" != "$GIT_SHA" ]; then
+            echo "::error::/api/health reported gitSha '$GOT_SHA', expected '$GIT_SHA'"
+            exit 1
+          fi
+
+          echo "✓ /api/health: version=$GOT_VER  gitSha=${GOT_SHA:0:12}…"
+
+      - name: Tear down stack
+        working-directory: .
+        if: always()
+        run: docker compose down -v
+
+      # Slice the release body straight out of CHANGELOG.md (docs/releases.md step 4).
+      # Captures everything between "## [X.Y.Z]" and the next "## [" header, then
+      # appends a Full Changelog compare link when a previous tag exists.
+      - name: Slice release body from CHANGELOG
+        working-directory: .
+        run: |
+          awk -v v="$VER" '
+            $0 ~ "^## \\[" v "\\] " { flag=1; next }
+            /^## \[/                 { flag=0 }
+            flag
+          ' CHANGELOG.md | sed 's/[[:space:]]*$//' > notes.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${GITHUB_REF_NAME}" >> notes.md
+          fi
+
+          echo "--- release body ---"
+          cat notes.md
+
+      - name: Publish GitHub Release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag

@@ -10,6 +10,12 @@ RUN npm ci
 # --- Stage 2: Build the application ---
 FROM node:22-alpine AS build
 WORKDIR /app
+# Build metadata baked into the bundle at build time (standalone has no package.json
+# at runtime). Defaults keep a plain `docker compose up` working with gitSha "dev".
+ARG GIT_SHA=dev
+ARG BUILD_TIME=
+ENV NEXT_PUBLIC_GIT_SHA=$GIT_SHA
+ENV NEXT_PUBLIC_BUILD_TIME=$BUILD_TIME
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN mkdir -p public && npm run build
@@ -39,6 +45,9 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=build /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+# CHANGELOG.md is at the repo root (outside the ./app build context).
+# Supplied via the `changelog` additional_contexts entry in docker-compose.yml.
+COPY --from=changelog --chown=nextjs:nodejs CHANGELOG.md ./CHANGELOG.md
 
 USER nextjs
 

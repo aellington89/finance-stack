@@ -15,14 +15,21 @@ async function restoreOpeningBalanceTypeName() {
 describe("GET /api/health", () => {
   afterEach(restoreOpeningBalanceTypeName);
 
-  it("returns 200 with seedData: ok when seed rows are intact", async () => {
+  it("returns 200 with seedData: ok and build metadata when seed rows are intact", async () => {
     const res = await GET();
+    const body = await res.json();
+
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      status: "ok",
-      db: "connected",
-      seedData: "ok",
+    expect(body.status).toBe("ok");
+    expect(body.db).toBe("connected");
+    expect(body.seedData).toBe("ok");
+    expect(body.build).toEqual({
+      version: expect.any(String),
+      gitSha: expect.any(String),
+      buildTime: expect.any(String),
     });
+    // Without build-time env injection (next dev / test), gitSha falls back to "dev".
+    expect(body.build.gitSha).toBe("dev");
   });
 
   it("returns 503 with a drift entry when a seed row has been renamed", async () => {
