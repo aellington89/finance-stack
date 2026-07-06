@@ -57,6 +57,10 @@ jobs:
           echo "GIT_SHA=$GIT_SHA"     >> "$GITHUB_ENV"
           echo "BUILD_TIME=$BUILD_TIME" >> "$GITHUB_ENV"
           echo "PREV_TAG=$PREV_TAG"   >> "$GITHUB_ENV"
+          # Absolute path for the `changelog` additional build context. Passing an
+          # absolute path avoids the version-dependent Compose behaviour where a relative
+          # additional_contexts path is resolved against ./app instead of the repo root.
+          echo "CHANGELOG_CONTEXT=${{ github.workspace }}" >> "$GITHUB_ENV"
 
       # Build via docker compose so the CHANGELOG additional_contexts entry and the
       # GIT_SHA/BUILD_TIME build-args are wired exactly as they are in local builds

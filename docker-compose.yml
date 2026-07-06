@@ -134,7 +134,11 @@ services:
         GIT_SHA: ${GIT_SHA:-dev}
         BUILD_TIME: ${BUILD_TIME:-}
       additional_contexts:                 # Supplies repo-root CHANGELOG.md to the runner COPY --from=changelog
-        changelog: .
+        # Default `.` = project dir (repo root) for local builds. CI overrides with an
+        # absolute path via $CHANGELOG_CONTEXT because some Compose/buildx versions resolve
+        # a relative additional_contexts path against the build context (./app) rather than
+        # the project dir, which breaks `COPY --from=changelog CHANGELOG.md` (see release.yml).
+        changelog: ${CHANGELOG_CONTEXT:-.}
     container_name: finance-app
     restart: unless-stopped
     ports:
