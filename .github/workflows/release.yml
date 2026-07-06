@@ -86,11 +86,17 @@ jobs:
         # under `set -euo pipefail`) needs POSTGRES_DB and the Metabase role vars to be
         # non-empty, or `CREATE ROLE`/`--dbname ""` aborts and postgres never goes healthy.
         # Metabase itself is profile-gated (bi) so it never starts here; only the role is created.
+        # Point the app at Finances_Test, the fully-seeded fixture DB. A fresh Finances
+        # DB is intentionally seeded with only account_type_categories + transaction_types
+        # (shared-lookups.sql); transaction_categories rows — including the "Other" row the
+        # /api/health drift check requires — are user-created in Finances but fixture-seeded
+        # in Finances_Test. So a brand-new Finances legitimately trips the drift 503; the
+        # release smoke test verifies against the complete, drift-free test dataset instead.
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
           POSTGRES_DB: postgres
-          FINANCE_APP_DB: Finances
+          FINANCE_APP_DB: Finances_Test
           MB_DB_USER: metabase
           MB_DB_PASS: changeme
           MB_DB_DBNAME: metabase
