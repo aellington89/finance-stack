@@ -81,10 +81,18 @@ jobs:
       # /api/health, so waiting for the container to be healthy is sufficient.
       - name: Boot stack and verify /api/health
         working-directory: .
+        # The postgres init script (init-db/01-create-databases.sh, run on first start
+        # under `set -euo pipefail`) needs POSTGRES_DB and the Metabase role vars to be
+        # non-empty, or `CREATE ROLE`/`--dbname ""` aborts and postgres never goes healthy.
+        # Metabase itself is profile-gated (bi) so it never starts here; only the role is created.
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: postgres
           FINANCE_APP_DB: Finances
+          MB_DB_USER: metabase
+          MB_DB_PASS: changeme
+          MB_DB_DBNAME: metabase
         run: |
           docker compose up -d
 
