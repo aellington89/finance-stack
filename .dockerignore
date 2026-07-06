@@ -33,6 +33,10 @@ secrets/
 
 # Documentation
 *.md
+# …but CHANGELOG.md must reach the image: this file is the `changelog` build
+# context (docker-compose.yml additional_contexts) that the runner stage copies
+# in for the /settings/about "What's New" page. Un-ignore it.
+!CHANGELOG.md
 
 # Next.js development artifacts
 app/node_modules
