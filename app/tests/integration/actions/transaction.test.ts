@@ -455,3 +455,20 @@ describe("deleteTransaction", () => {
     expect(result.message).toBe("Invalid transaction ID");
   });
 });
+
+// ─── non-blank CHECK constraint (issue #147) ─────────────────────────────────
+
+describe("transactions_transaction_description_not_blank", () => {
+  it("rejects a direct insert with an empty description (Postgres check violation 23514)", async () => {
+    await expect(
+      db.insert(transactions).values({
+        transactionDescription: "",
+        transactionDate: "2024-03-15",
+        accountId: testAccountId,
+        amount: "1.00",
+        transactionTypeId: 1,
+        transactionCategoryId: 1,
+      })
+    ).rejects.toMatchObject({ cause: { code: "23514" } });
+  });
+});

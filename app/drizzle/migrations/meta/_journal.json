@@ -15,6 +15,13 @@
       "when": 1780365958133,
       "tag": "0001_add_indexes_related_account_and_abh",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783478173167,
+      "tag": "0002_tighten_non_empty_description_name",
+      "breakpoints": true
     }
   ]
 }
