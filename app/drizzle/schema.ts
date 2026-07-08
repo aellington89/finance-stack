@@ -38,6 +38,7 @@ export const transactions = pgTable("transactions", {
 			foreignColumns: [transactionTypes.transactionTypeId],
 			name: "transactions_transaction_type_id_fkey"
 		}),
+	check("transactions_transaction_description_not_blank", sql`transaction_description <> ''`),
 ]);
 
 export const accountTypes = pgTable("account_types", {
@@ -69,6 +70,7 @@ export const accounts = pgTable("accounts", {
 			name: "accounts_account_type_id_fkey"
 		}),
 	check("accounts_liquidity_class_check", sql`liquidity_class = ANY (ARRAY['liquid'::text, 'semi_liquid'::text, 'illiquid'::text, 'restricted'::text])`),
+	check("accounts_account_name_not_blank", sql`account_name <> ''`),
 ]);
 
 export const accountTypeCategories = pgTable("account_type_categories", {

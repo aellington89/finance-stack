@@ -83,6 +83,14 @@ describe("createAccount", () => {
     expect(result.errors).toHaveProperty("accountName");
   });
 
+  // The DB backstop for the above (issue #147): even a direct insert bypassing
+  // validation is rejected by the non-blank CHECK constraint (Postgres 23514).
+  it("rejects a direct insert with an empty account name", async () => {
+    await expect(
+      db.insert(accounts).values({ accountName: "", accountTypeId: 1 })
+    ).rejects.toMatchObject({ cause: { code: "23514" } });
+  });
+
   it("returns error for invalid accountTypeId", async () => {
     const fd = makeFormData({ accountName: "Test", accountTypeId: "0" });
     const result = await createAccount(emptyState, fd);

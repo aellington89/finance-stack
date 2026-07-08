@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Database `CHECK` constraints (`transactions_transaction_description_not_blank`, `accounts_account_name_not_blank`) rejecting empty-string `transaction_description` / `account_name` — closing the gap where `NOT NULL` still permitted `''` that the app's `min(1)` validators reject. The `0002` migration backfills any pre-existing empty rows to a sentinel before enforcing the constraint. The columns and their FKs were already `NOT NULL`/constrained, so this empty-string tightening is the substantive change ([Issue #147](https://github.com/aellington89/finance-stack/issues/147)).
+
 ## [0.1.4] - 2026-07-05
 
 ### Added
