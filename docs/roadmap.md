@@ -45,7 +45,7 @@ merges.
 
 | Version | Milestone | Theme | Bump |
 |---|---|---|---|
-| **v0.1.5** | Phase 0 — Quick wins + the migration refactor | Finish the 0.1.x tech-debt cleanup | Patch |
+| **v0.1.5** ✅ | Phase 0 — Quick wins + the migration refactor | Finish the 0.1.x tech-debt cleanup — **released 2026-07-10** | Patch |
 | **v0.2.0** | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost | Minor |
 | **v0.3.0** | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity. **This is the 1.0 release candidate** | Minor |
 | **v1.0.0** | *(stabilization of 0.2.0–0.3.0)* | **The safety/stability commitment: trustworthy & exposable** | **Major** |
@@ -65,8 +65,7 @@ merges.
 ## Per-issue mapping
 
 ### v0.1.5 — Phase 0
-- [#147](https://github.com/aellington89/finance-stack/issues/147) Tighten NOT NULL on description/name/FK columns
-- [#149](https://github.com/aellington89/finance-stack/issues/149) Drop unused deps (@base-ui/react, tw-animate-css)
+**✅ Released 2026-07-10** — see [CHANGELOG](../CHANGELOG.md#015---2026-07-10).
 
 ### v0.2.0 — Phase 1 (Pre-exposure gates)
 - [#120](https://github.com/aellington89/finance-stack/issues/120) Authentication & authorization

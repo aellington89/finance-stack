@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-10
+
 ### Added
 
 - Database `CHECK` constraints (`transactions_transaction_description_not_blank`, `accounts_account_name_not_blank`) rejecting empty-string `transaction_description` / `account_name` — closing the gap where `NOT NULL` still permitted `''` that the app's `min(1)` validators reject. The `0002` migration backfills any pre-existing empty rows to a sentinel before enforcing the constraint. The columns and their FKs were already `NOT NULL`/constrained, so this empty-string tightening is the substantive change ([Issue #147](https://github.com/aellington89/finance-stack/issues/147)).
@@ -106,7 +108,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/aellington89/finance-stack/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/aellington89/finance-stack/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/aellington89/finance-stack/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/aellington89/finance-stack/compare/v0.1.1...v0.1.2
