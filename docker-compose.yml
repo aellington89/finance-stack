@@ -146,6 +146,7 @@ services:
       - "3001:3001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+      AUTH_SECRET: ${AUTH_SECRET}       # Signs/encrypts Auth.js session JWTs — see .env.example
     depends_on:
       migrate:
         condition: service_completed_successfully

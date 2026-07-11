@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Session-based authentication (Auth.js/NextAuth v5, Credentials provider, JWT sessions): a sign-in page at `/login`, a sign-out control in the sidebar footer, a `users` table (authored migration `0003_add_users_table`) storing scrypt password hashes, and a first-user/password-reset CLI (`npm run auth:create-user -- <username>`). Requires a new `AUTH_SECRET` env var (see `.env.example` / `app/.env.local.example`) — documented in the new [docs/auth.md](docs/auth.md) ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)).
+
+### Security
+
+- All application pages and every server action now reject unauthenticated requests, enforced in three layers: the Next 16 proxy (`app/proxy.ts`) redirects to `/login`, the `(app)` layout re-verifies the session server-side, and `requireActionUser()` gates each of the 18 server actions individually. Only the landing page, `/login`, `/api/auth/*`, and `/api/health` (Docker healthcheck + release smoke test) remain public ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)).
+
 ## [0.1.5] - 2026-07-10
 
 ### Added

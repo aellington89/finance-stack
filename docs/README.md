@@ -6,6 +6,7 @@ Finance Stack documentation is split by purpose. The root [README](../README.md)
 
 ## Guides
 
+- [Authentication](auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](database.md) — schema, views, balance history, first-launch init, and the test database
 - [Schema Changes](schema-changes.md) — making schema changes and adopting migrations on existing databases
 - [Testing](testing.md) — running tests and the static lookup-table fixtures

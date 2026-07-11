@@ -91,4 +91,5 @@ jobs:
       - name: Integration tests
         env:
           DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+          AUTH_SECRET: ci-only-integration-test-secret
         run: npm run test:integration

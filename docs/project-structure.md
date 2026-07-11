@@ -17,19 +17,24 @@ finance-stack/
 │   ├── package.json                      # Node.js dependencies and scripts
 │   ├── tsconfig.json                     # TypeScript compiler config
 │   ├── next.config.ts                    # Next.js config (standalone output for Docker)
+│   ├── auth.ts                           # Auth.js (NextAuth v5) config — Credentials provider, JWT sessions (#120)
+│   ├── proxy.ts                          # Next 16 proxy (renamed middleware) — redirects unauthenticated requests to /login
 │   ├── drizzle.config.ts                 # Drizzle ORM config (schema path + migrations output dir)
 │   ├── eslint.config.mjs                 # ESLint flat-config (Next.js + TypeScript rules)
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
 │   ├── app/                              # App Router — pages and layouts
-│   │   ├── api/health/route.ts           # Health check endpoint (Docker liveness + seed-row drift detection against SEED_REFERENCES)
+│   │   ├── api/health/route.ts           # Health check endpoint (Docker liveness + seed-row drift detection against SEED_REFERENCES; public)
+│   │   ├── api/auth/[...nextauth]/route.ts # Auth.js sign-in/sign-out/session endpoints
 │   │   ├── layout.tsx                    # Root layout (fonts, ThemeProvider, Toaster)
 │   │   ├── globals.css                   # Global styles and Tailwind CSS theme variables
 │   │   ├── favicon.ico
 │   │   ├── (landing)/                    # Route group — no sidebar
 │   │   │   └── page.tsx                  #   Landing page (/)
+│   │   ├── (auth)/                       # Route group — no sidebar
+│   │   │   └── login/page.tsx            #   Sign-in page (/login)
 │   │   └── (app)/                        # Route group — sidebar navigation shell
-│   │       ├── layout.tsx                #   App shell (SidebarProvider + AppSidebar + SidebarInset)
+│   │       ├── layout.tsx                #   App shell (SidebarProvider + AppSidebar + SidebarInset) + auth() gate → /login
 │   │       ├── error.tsx                 #   Error boundary — catches unhandled errors with retry UI
 │   │       ├── dashboard/                #   Tabbed dashboard — 5 sections, each with drill-down sub-tabs:
 │   │       │   ├── layout.tsx            #     Layout: top-level section tabs + ensureTodayBalances()
@@ -66,17 +71,20 @@ finance-stack/
 │   │   ├── relations.ts                  # Table relations for type-safe joins
 │   │   └── migrations/                   # Authored migrations (versioned, applied by drizzle-kit migrate)
 │   │       ├── 0000_baseline.sql         # Baseline matching current prod schema
+│   │       ├── 0003_add_users_table.sql  # users table for authentication (#120)
 │   │       └── meta/                     # Drizzle migration journal and snapshots
 │   │           ├── _journal.json         # Ordered list of applied migrations (idx, tag, breakpoints)
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
 │   ├── scripts/
 │   │   ├── migrate-and-seed.sh           # Entrypoint for the `migrate` Compose service (drizzle-kit migrate + seed)
 │   │   ├── check-seed-references.ts       # CI gate: SEED_REFERENCES (id, name) must match shared-lookups.sql (#155)
+│   │   ├── create-user.ts                 # First-user CLI / password reset (npm run auth:create-user -- <username>)
 │   │   └── seed-reference-check.ts        # Pure parse + diff helpers backing the gate (unit-tested)
 │   ├── hooks/
 │   │   └── use-mobile.ts                 # Mobile breakpoint detection hook (used by sidebar)
 │   ├── components/
-│   │   ├── app-sidebar.tsx               # Global sidebar navigation (Dashboard, Accounts, Settings)
+│   │   ├── app-sidebar.tsx               # Global sidebar navigation (Dashboard, Accounts, Settings) + sign-out
+│   │   ├── auth/login-form.tsx           # Sign-in form (useActionState → authenticate action)
 │   │   ├── ui/                           # shadcn/ui primitives + custom wrappers
 │   │   │   ├── combobox.tsx              # Searchable select dropdown (custom)
 │   │   │   ├── currency-input.tsx        # Numeric currency entry with symbol prefix (custom)
@@ -131,7 +139,11 @@ finance-stack/
 │   ├── lib/                              # Shared libraries
 │   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health drift check
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
+│   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
+│   │   ├── auth/verify-credentials.ts    # Username/password check against the users table
+│   │   ├── auth/guard.ts                 # requireActionUser() — session gate at the top of every server action
 │   │   ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
+│   │   ├── actions/auth.ts               # Server actions for sign-in (authenticate) and sign-out
 │   │   ├── actions/transaction.ts        # Server action for transaction submission
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
@@ -168,8 +180,9 @@ finance-stack/
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
-│   │       ├── vitest-setup.ts           #   Per-test setup/teardown
-│   │       ├── actions/                  #   Server action tests (account, transaction)
+│   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session)
+│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating)
+│   │       ├── auth/                     #   Credential verification against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
 │   │       └── queries/                  #   Query function tests (accounting, rebuild-balance, drilldowns)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)

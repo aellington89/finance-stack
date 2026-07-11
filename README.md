@@ -13,7 +13,16 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 
 ## Security
 
-This application has **no authentication**. Anyone who can reach the HTTP port (3001) can read, create, edit, and delete all financial data. Only expose it on a trusted network — localhost, a VPN, Tailscale, or similar — never on the public internet. A full security and integrity model (auth, authorization, audit logging, deployment hardening, backup policy) is tracked in [#100](https://github.com/aellington89/finance-stack/issues/100).
+The app requires **session-based sign-in** (Auth.js with a username/password stored in the `users` table). All application pages and every server action reject unauthenticated requests; only the landing page, the sign-in page, and `/api/health` are public. There is no self-registration — create the first user (or reset a password) with the CLI:
+
+```bash
+cd app
+npm run auth:create-user -- <username>
+```
+
+Sign in at http://localhost:3001/login and sign out from the sidebar footer. See [docs/auth.md](docs/auth.md) for the full model, the `AUTH_SECRET` requirement, and password resets.
+
+Authentication alone does not make the app safe for the public internet: transport encryption, rate limiting, and deployment hardening are still tracked in [#100](https://github.com/aellington89/finance-stack/issues/100) (see [#130](https://github.com/aellington89/finance-stack/issues/130), [#181](https://github.com/aellington89/finance-stack/issues/181), [#182](https://github.com/aellington89/finance-stack/issues/182)). Keep it on a trusted network — localhost, a VPN, Tailscale, or similar — until those land.
 
 ## Prerequisites
 
@@ -28,7 +37,11 @@ This application has **no authentication**. Anyone who can reach the HTTP port (
 cp .env.example .env
 ```
 
-Edit `.env` and replace the `changeme` placeholder passwords with your own values.
+Edit `.env` and replace the `changeme` placeholder passwords with your own values. Generate a real `AUTH_SECRET` (signs the session cookies):
+
+```bash
+openssl rand -base64 33
+```
 
 ### 2. Start the stack
 
@@ -70,7 +83,13 @@ cp .env.local.example .env.local
 npm install
 ```
 
-Edit `app/.env.local` and set `DATABASE_URL` to match your PostgreSQL credentials from `.env`.
+Edit `app/.env.local`, set `DATABASE_URL` to match your PostgreSQL credentials from `.env`, and set a real `AUTH_SECRET` (`openssl rand -base64 33`).
+
+Create a user to sign in with (the dev `.env.local` points at `Finances_Test`; run with `DATABASE_URL` overridden to target another database):
+
+```bash
+npm run auth:create-user -- <username>
+```
 
 ### 4. Start the Next.js dev server (local development only)
 
@@ -102,6 +121,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 ## Documentation
 
 - [Contributing](CONTRIBUTING.md) — dev workflow, conventions, and the release process
+- [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
 - [Schema Changes](docs/schema-changes.md) — making schema changes and adopting migrations on existing databases
 - [Testing](docs/testing.md) — running tests and the static lookup-table fixtures

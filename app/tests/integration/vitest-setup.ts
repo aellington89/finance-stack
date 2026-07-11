@@ -12,6 +12,25 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
 }));
 
+// Default to an authenticated session: every server action is gated by
+// requireActionUser() (Issue #120), so without this mock all action
+// integration tests would be rejected before touching the DB. Tests that
+// need the unauthenticated path override per call with
+// vi.mocked(auth).mockResolvedValueOnce(null) — see actions/account-auth.test.ts.
+vi.mock("@/auth", () => ({
+  auth: vi.fn().mockResolvedValue({
+    user: {
+      id: "00000000-0000-0000-0000-000000000000",
+      name: "integration-test-user",
+      role: "admin",
+    },
+    expires: "2099-01-01T00:00:00.000Z",
+  }),
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+  handlers: { GET: vi.fn(), POST: vi.fn() },
+}));
+
 // Drift-correction for the static lookup tables. The init-db seed files
 // (init-db/seeds/shared-lookups.sql + finances-test-mock-data.sql) populate
 // everything on first Docker launch, but this beforeAll hook keeps tests

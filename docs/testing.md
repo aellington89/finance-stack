@@ -36,3 +36,24 @@ npm run test:integration
 # Generate coverage report
 npm run test:coverage
 ```
+
+## Authentication in Integration Tests
+
+Every server action starts with a `requireActionUser()` session check (Issue #120), so [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) mocks `@/auth` with a default **authenticated** session — action tests exercise business logic without any sign-in ceremony.
+
+To test the unauthenticated path, override the mock for a single call:
+
+```ts
+import type { Mock } from "vitest";
+import { auth } from "@/auth";
+
+const mockedAuth = auth as unknown as Mock;
+
+it("rejects an unauthenticated call", async () => {
+  mockedAuth.mockResolvedValueOnce(null);
+  const result = await createAccount(emptyState, formData);
+  expect(result.success).toBe(false);
+});
+```
+
+See [`tests/integration/actions/account-auth.test.ts`](../app/tests/integration/actions/account-auth.test.ts) for the authed + unauthed pair, and [`tests/integration/auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) for credential verification against the real `users` table (created rows are cleaned up in `afterAll`).

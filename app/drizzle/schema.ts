@@ -1,4 +1,4 @@
-import { pgTable, index, foreignKey, serial, text, date, integer, numeric, check, primaryKey, pgView } from "drizzle-orm/pg-core"
+import { pgTable, index, foreignKey, serial, text, date, integer, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -87,6 +87,16 @@ export const transactionTypes = pgTable("transaction_types", {
 	transactionTypeId: integer("transaction_type_id").primaryKey().generatedAlwaysAsIdentity({ name: "transaction_types_transaction_type_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
 	transactionType: text("transaction_type").notNull(),
 });
+
+export const users = pgTable("users", {
+	userId: uuid("user_id").defaultRandom().primaryKey().notNull(),
+	username: text().unique().notNull(),
+	passwordHash: text("password_hash").notNull(),
+	role: text().default('admin').notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, () => [
+	check("users_username_not_blank", sql`username <> ''`),
+]);
 
 export const accountBalanceHistory = pgTable("account_balance_history", {
 	accountId: integer("account_id").notNull(),

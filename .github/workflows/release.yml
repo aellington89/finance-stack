@@ -100,6 +100,7 @@ jobs:
           MB_DB_USER: metabase
           MB_DB_PASS: changeme
           MB_DB_DBNAME: metabase
+          AUTH_SECRET: release-smoke-test-only-secret
         run: |
           docker compose up -d
 
