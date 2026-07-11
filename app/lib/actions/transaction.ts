@@ -7,6 +7,7 @@ import { transactions, accountBalanceHistory } from "@/drizzle/schema";
 import { transactionFormSchema } from "@/lib/validations/transaction";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
+import { requireActionUser } from "@/lib/auth/guard";
 
 function revalidateTransactionPaths() {
   revalidatePath("/dashboard");
@@ -18,6 +19,9 @@ export async function submitTransaction(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const raw = {
     transactionDescription: formData.get("transactionDescription") as string,
     transactionDate: formData.get("transactionDate") as string,
@@ -81,6 +85,9 @@ export async function updateTransaction(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const transactionId = Number(formData.get("transactionId"));
   if (!Number.isInteger(transactionId) || transactionId <= 0) {
     return { success: false, errors: {}, message: "Invalid transaction ID" };
@@ -179,6 +186,9 @@ export async function deleteTransaction(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const transactionId = Number(formData.get("transactionId"));
   if (!Number.isInteger(transactionId) || transactionId <= 0) {
     return { success: false, errors: {}, message: "Invalid transaction ID" };

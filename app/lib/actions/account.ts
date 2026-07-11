@@ -8,6 +8,7 @@ import { accountFormSchema } from "@/lib/validations/account";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { eq, or } from "drizzle-orm";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
+import { requireActionUser } from "@/lib/auth/guard";
 import {
   OPENING_BALANCE_TYPE,
   OPENING_BALANCE_CATEGORY,
@@ -23,6 +24,9 @@ export async function createAccount(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const raw = {
     accountName: formData.get("accountName") as string,
     accountTypeId: formData.get("accountTypeId") as string,
@@ -95,6 +99,9 @@ export async function updateAccount(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const accountId = Number(formData.get("accountId"));
   if (!accountId || accountId <= 0) {
     return { success: false, errors: {}, message: "Invalid account ID" };
@@ -153,6 +160,9 @@ export async function deleteAccount(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const accountId = Number(formData.get("accountId"));
   if (!accountId || accountId <= 0) {
     return { success: false, errors: {}, message: "Invalid account ID" };

@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { auth } from "@/auth";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Authoritative page-level gate: the proxy (app/proxy.ts) already redirects
+  // unauthenticated requests, but proxy interception can be bypassed, so every
+  // (app) page re-verifies the session here, next to the data it renders.
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
   return (
     <TooltipProvider>
       <SidebarProvider>

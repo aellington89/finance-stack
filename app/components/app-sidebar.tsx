@@ -14,8 +14,9 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { LayoutDashboardIcon, LandmarkIcon, SettingsIcon, InfoIcon } from "lucide-react";
+import { LayoutDashboardIcon, LandmarkIcon, SettingsIcon, InfoIcon, LogOutIcon } from "lucide-react";
 import { VersionBadge } from "@/components/version-badge";
+import { signOutAction } from "@/lib/actions/auth";
 
 const navItems = [
   {
@@ -77,6 +78,16 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <form action={signOutAction}>
+              <SidebarMenuButton type="submit">
+                <LogOutIcon />
+                <span>Sign out</span>
+              </SidebarMenuButton>
+            </form>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="px-2 py-1 group-data-[state=collapsed]:hidden">
           <VersionBadge />
         </div>

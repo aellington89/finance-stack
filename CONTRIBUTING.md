@@ -12,6 +12,10 @@ development (outside Docker), see [app/README.md](app/README.md), which lists
 all npm scripts (dev server, lint, typecheck, test, db:*). For the test
 database setup, see [docs/database.md](docs/database.md).
 
+The app requires sign-in ([docs/auth.md](docs/auth.md)): set `AUTH_SECRET` in
+`app/.env.local` (`openssl rand -base64 33`) and create a dev user with
+`npm run auth:create-user -- <username>` before using the UI.
+
 ## Branching & pull requests
 
 - **`master`** is the primary branch; all PRs target it.

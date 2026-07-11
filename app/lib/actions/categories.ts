@@ -13,6 +13,7 @@ import {
 import { eq } from "drizzle-orm";
 import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categories";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
+import { requireActionUser } from "@/lib/auth/guard";
 
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
@@ -30,6 +31,9 @@ export async function createTransactionCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const result = parseNameForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
@@ -50,6 +54,9 @@ export async function updateTransactionCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("transactionCategoryId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -76,6 +83,9 @@ export async function deleteTransactionCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("transactionCategoryId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -110,6 +120,9 @@ export async function createTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const result = parseNameForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
@@ -130,6 +143,9 @@ export async function updateTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("transactionTypeId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -156,6 +172,9 @@ export async function deleteTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("transactionTypeId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -190,6 +209,9 @@ export async function createAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const result = parseNameForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
@@ -210,6 +232,9 @@ export async function updateAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("accountTypeCategoryId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -236,6 +261,9 @@ export async function deleteAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("accountTypeCategoryId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -270,6 +298,9 @@ export async function createAccountType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const result = accountTypeSchema.safeParse({
     name: formData.get("name") as string,
     accountTypeCategoryId: formData.get("accountTypeCategoryId") as string,
@@ -297,6 +328,9 @@ export async function updateAccountType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("accountTypeId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 
@@ -330,6 +364,9 @@ export async function deleteAccountType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
   const id = Number(formData.get("accountTypeId"));
   if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
 

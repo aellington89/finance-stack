@@ -8,14 +8,17 @@ Custom finance application built with Next.js 16, TypeScript, Tailwind CSS v4, a
 # Install dependencies
 npm install
 
-# Copy environment file and configure DATABASE_URL
+# Copy environment file and configure DATABASE_URL + AUTH_SECRET
 cp .env.local.example .env.local
+
+# Create a user to sign in with (prompts for a password)
+npm run auth:create-user -- <username>
 
 # Start dev server (Turbopack, port 3001)
 npm run dev
 ```
 
-The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` should point to `Finances_Test` for safe local development.
+The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` should point to `Finances_Test` for safe local development, and `AUTH_SECRET` (generate with `openssl rand -base64 33`) signs the session cookies. All app pages require sign-in — see [docs/auth.md](../docs/auth.md).
 
 ## Scripts
 
@@ -31,6 +34,7 @@ The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` sh
 | `npm run db:generate` | Generate a migration file from a `schema.ts` change |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:pull` | Introspect DB into `schema.ts` (inspection only — `schema.ts` is the source of truth) |
+| `npm run auth:create-user -- <username>` | Create a user / reset a password (targets `DATABASE_URL`) |
 
 ## Testing
 
