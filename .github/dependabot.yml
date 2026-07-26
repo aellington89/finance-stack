@@ -37,7 +37,13 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
-  # Base images in app/Dockerfile (node:22-alpine).
+  # Base images in app/Dockerfile (node:24-alpine).
+  #
+  # The node line is tracked on LTS releases only, and a bump here is only ever
+  # half the change: `docker` reads Dockerfiles, so it cannot touch the
+  # `node-version:` pins in ci.yml, release.yml and backup-smoke.yml, or
+  # `@types/node` in app/package.json. Move all four together or CI tests on a
+  # different runtime than the image ships (Issue #210).
   - package-ecosystem: docker
     directory: /app
     schedule:
