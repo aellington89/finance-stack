@@ -95,6 +95,7 @@ merges.
 - [#133](https://github.com/aellington89/finance-stack/issues/133) Pre-commit hooks + Makefile
 - [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(recommended before v1.0.0)*
 - [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(recommended before v1.0.0)*
+- [#185](https://github.com/aellington89/finance-stack/issues/185) Audit docker-compose services: necessity & profile gating *(new)*
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx

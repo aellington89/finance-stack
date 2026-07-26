@@ -1,0 +1,101 @@
+name: Backup smoke
+
+# Proves the backup + restore round-trip works end-to-end, so silent backup
+# corruption or a script regression is caught. GitHub runners cannot see the
+# deployment host's ./backups/, so this job self-produces a dump from a known
+# seeded dataset, restores it into a throwaway database, and asserts a known
+# row count. (Verifying the *real* host dumps depends on phase-2 off-site
+# upload — see docs/backups.md.)
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'        # Mondays 06:00 UTC
+  workflow_dispatch:            # Manual runs
+  pull_request:                 # Also guard PRs that touch the scripts/workflow
+    paths:
+      - 'scripts/backup.sh'
+      - 'scripts/restore.sh'
+      - '.github/workflows/backup-smoke.yml'
+
+jobs:
+  backup-smoke:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: changeme
+      BACKUP_DIR: ${{ github.workspace }}/backups
+      BACKUP_DBS: Finances
+      BACKUP_RETENTION_DAYS: 3650   # Never prune within this short-lived job
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck backup/restore scripts
+        run: shellcheck scripts/backup.sh scripts/restore.sh
+
+      - name: Install PostgreSQL 18 client
+        # pg_dump must be >= the server major version (18); the runner's default
+        # client can be older, so install the matching client from PGDG.
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Create Finances database
+        run: psql -c 'CREATE DATABASE "Finances";'
+
+      - name: Apply Drizzle migrations
+        working-directory: app
+        env:
+          DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances
+        run: npm run db:migrate
+
+      - name: Seed Finances with a known dataset
+        run: |
+          psql -d Finances -f init-db/seeds/shared-lookups.sql
+          psql -d Finances -f init-db/seeds/finances-test-mock-data.sql
+          psql -d Finances -f init-db/seeds/rebuild-balance-history.sql
+
+      - name: Back up Finances
+        run: ./scripts/backup.sh
+
+      - name: Restore the latest Finances dump into a throwaway database
+        run: ./scripts/restore.sh --force Finances Finances_Restore_Check
+
+      - name: Assert known row count survived the round-trip
+        run: |
+          count="$(psql -d Finances_Restore_Check -tAc 'SELECT COUNT(*) FROM accounts;')"
+          echo "accounts in restored database: $count"
+          if [ "$count" != "8" ]; then
+            echo "::error::Expected 8 accounts after restore, got $count — backup/restore round-trip is broken"
+            exit 1
+          fi

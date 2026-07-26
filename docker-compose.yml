@@ -206,6 +206,57 @@ services:
       com.finance-stack.component: "importer"
       com.finance-stack.description: "File importer service"
 
+  # Scheduled logical backups. Runs pg_dump (custom format) of each database in
+  # BACKUP_DBS to ./backups/ on a loop, pruning dumps older than the retention
+  # window. Reuses the postgres:18.0 image so pg_dump stays version-matched to
+  # the server. Restore a dump with scripts/restore.sh. See docs/backups.md.
+  pg-backup:
+    image: postgres:18.0
+    container_name: pg-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy   # Only needs a reachable DB, not the app
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # Defaults track the configured DB names; override with BACKUP_DBS in .env
+      BACKUP_DBS: ${BACKUP_DBS:-${FINANCE_APP_DB:-Finances},${MB_DB_DBNAME:-metabase}}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./scripts:/scripts:ro        # Read-only — container should not modify scripts
+      - ./backups:/backups           # Host-visible dump output (gitignored — financial data)
+    entrypoint: >
+      bash -c "
+      set -uo pipefail;
+      echo \"pg-backup ready — dumping [$${BACKUP_DBS}] every $${BACKUP_INTERVAL_SECONDS}s, retention $${BACKUP_RETENTION_DAYS}d\";
+      while true; do
+        /scripts/backup.sh || echo '[backup] run failed — will retry next cycle';
+        sleep \"$${BACKUP_INTERVAL_SECONDS}\";
+      done
+      "
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:                     # Unhealthy if no dump is newer than 1.5x the interval (stalled loop)
+      test: ["CMD-SHELL", "find \"$${BACKUP_DIR}\" -name '*.dump' -mmin -$$(( BACKUP_INTERVAL_SECONDS * 3 / 2 / 60 + 1 )) | grep -q . || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s              # First dump runs at container start; allow time to land
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    labels:
+      com.finance-stack.component: "backup"
+      com.finance-stack.description: "Scheduled pg_dump backups with retention pruning"
+
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
   metabase:

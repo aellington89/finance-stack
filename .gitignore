@@ -14,6 +14,10 @@ __pycache__/
 # Credentials — never commit
 .env
 
+# Database backups — contain financial data, never commit
+/backups/*
+!/backups/.gitkeep
+
 # Next.js application (app/ directory)
 app/node_modules
 app/.next

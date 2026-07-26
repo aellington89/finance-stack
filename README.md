@@ -114,6 +114,20 @@ docker compose down
 
 Data is persisted in Docker volumes and will be available on next startup.
 
+## Backups
+
+The `pg-backup` service runs a scheduled `pg_dump` of the `Finances` and
+`metabase` databases into `./backups/` (default daily, 14-day retention). It
+starts automatically with `docker compose up`. Restore the newest dump into a
+throwaway database with:
+
+```bash
+docker compose exec pg-backup /scripts/restore.sh --force Finances Finances_Restore_Check
+```
+
+See [docs/backups.md](docs/backups.md) for configuration, full disaster
+recovery, and the weekly restore-smoke CI check.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions, CI gates, changelog habits, and the release process.
@@ -123,6 +137,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Contributing](CONTRIBUTING.md) — dev workflow, conventions, and the release process
 - [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
+- [Backups](docs/backups.md) — the scheduled backup service, retention, and disaster recovery
 - [Schema Changes](docs/schema-changes.md) — making schema changes and adopting migrations on existing databases
 - [Testing](docs/testing.md) — running tests and the static lookup-table fixtures
 - [Importer](docs/importer.md) — the importer service and adding new import types
