@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Required new configuration.** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`, and `FINANCE_METABASE_DB_PASSWORD` must be added to `.env` (see `.env.example`) — the `migrate` service aborts with a pointer to `.env.example` rather than creating a login role with a blank password. Copy the three keys in and run `docker compose up`; the roles and grants are applied to existing databases automatically. Metabase users must additionally re-point the Finances connection at `finance_metabase` once in the admin UI, since Metabase stores analytics connections in its own metadata database rather than in environment variables ([Issue #130](https://github.com/aellington89/finance-stack/issues/130)).
+- `lucide-react` 0.577 → 1.27. Lucide v1 removes every brand icon, drops the UMD build (ESM/CJS only, ~32% smaller), and now sets `aria-hidden="true"` on icons by default. None of this bites here: no brand icons are imported, all 33 icon names in use are still exported under the same names in 1.27.0, and every icon-only control already carries its own `aria-label` or `sr-only` label — so the new accessibility default is an improvement rather than a regression ([PR #206](https://github.com/aellington89/finance-stack/pull/206)).
 
 ### Added
 
