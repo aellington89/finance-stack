@@ -283,7 +283,7 @@ services:
   # at the finance_metabase role (views only, #130) once in the admin UI — see the
   # "Roles & privileges" section of docs/database.md.
   metabase:
-    image: metabase/metabase:v0.58.8
+    image: metabase/metabase:v0.63.1.6
     container_name: metabase
     profiles: ["bi"]                   # Not started by default; run with --profile bi
     restart: unless-stopped
