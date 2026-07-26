@@ -42,6 +42,24 @@ ENV PORT=3001
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Strip the bundled package managers (Issue #131). The standalone server runs
+# `node server.js` and never resolves or installs a package at runtime, so npm,
+# npx, yarn and corepack are pure attack surface here: they give anyone who gets
+# execution in this container a way to fetch and run more code.
+#
+# They also carry their own vendored dependencies, which the CI Trivy gate reads
+# as part of the image — npm alone contributed 1 CRITICAL and 5 HIGH findings
+# (tar, sigstore, brace-expansion, picomatch) that no application-level bump
+# could ever clear. Deleting them removes the vulnerability rather than
+# suppressing the report.
+#
+# The `migrate` stage above deliberately keeps npm: it runs `npx drizzle-kit`.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+           /opt/yarn-*
+
 COPY --from=build /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
