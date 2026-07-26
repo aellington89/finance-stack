@@ -40,9 +40,9 @@ is tolerated by the release-notes generator but is not preferred — use the
 
 ## CI gates
 
-CI runs on every push to `master`/`test` and on all PRs. There are four gates
-that can fail a build before lint and tests even run; all four are fast to
-satisfy locally:
+CI runs on every push to `master`/`test` and on all PRs. There are five gates
+that can fail a build before lint and tests even run, plus an image-scan gate
+that runs in a parallel job; all are fast to satisfy locally:
 
 ### Schema-drift gate
 
@@ -102,6 +102,62 @@ cd app && npm run check:changelog
 If you're not cutting a release, simply ensure you haven't accidentally bumped
 `package.json` without also closing the `CHANGELOG.md` section.
 
+### Dependency audit gate
+
+Fails if any **runtime** dependency carries a HIGH or CRITICAL advisory.
+
+**Fix:** run locally, then bump whatever it names:
+
+```sh
+cd app && npm audit --omit=dev --audit-level=high
+```
+
+`npm audit fix` handles most cases. If the only fix is a major bump, or the
+advisory is in a package vendored by a dependency (as with next's bundled
+`postcss` and `sharp`), add an entry to `overrides` in `app/package.json` and
+explain it in the `//overrides` note alongside it.
+
+A second, **non-blocking** audit covers build-time dependencies. It is advisory
+only because the eslint 9 toolchain currently has HIGH advisories whose sole fix
+is eslint 10, which `eslint-config-next` does not yet support. Once that lands
+upstream, make it blocking.
+
+### Image scan gate
+
+Runs in the parallel `image` job: builds the production image the same way
+`release.yml` does (`docker compose build finance-app`), then scans it with
+Trivy. Fails on HIGH/CRITICAL findings **that have a fix available**.
+
+**Fix**, in order of preference:
+
+1. **Remove the vulnerable component** if the image doesn't need it. The runner
+   stage deletes npm, npx, yarn and corepack for exactly this reason — the
+   standalone server runs `node server.js` and never installs a package, and
+   npm's vendored dependencies were contributing 1 CRITICAL and 5 HIGH findings
+   that no application-level bump could clear.
+2. **Rebuild on a patched base image** (bump `node:22-alpine` in
+   `app/Dockerfile`).
+3. **Suppress, with an expiry.** Add a dated, justified entry to
+   [`.trivyignore`](.trivyignore) — the file documents the required format.
+
+Note that Trivy scans the whole image, not just `app/package.json`, so findings
+can come from the base image rather than from anything this repo declares. Check
+the reported path before assuming a dependency bump will help.
+
+Reproduce locally (pinned, for the same supply-chain reason the actions are):
+
+```sh
+docker compose build finance-app
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$(pwd)/.trivyignore:/.trivyignore:ro" \
+  aquasec/trivy:0.72.0 image --severity HIGH,CRITICAL --ignore-unfixed \
+  --exit-code 1 --ignorefile /.trivyignore finance-app:latest
+```
+
+If `docker compose build` can't find `CHANGELOG.md`, set
+`CHANGELOG_CONTEXT="$(pwd)"` — the `changelog` additional build context needs an
+absolute path on some Compose/buildx versions.
+
 ### Lint and tests
 
 After the gates pass, CI runs:
@@ -114,6 +170,35 @@ npm run test:integration   # requires the Finances_Test database
 
 See [docs/testing.md](docs/testing.md) for the unit/integration split and how
 to point integration tests at the right database.
+
+## Dependabot PRs
+
+[`.github/dependabot.yml`](.github/dependabot.yml) watches five ecosystems
+weekly:
+
+| Ecosystem | Watches |
+| --- | --- |
+| `npm` | `app/package.json` |
+| `pip` | `importer/requirements.txt` |
+| `docker` | base images in `app/Dockerfile` |
+| `docker-compose` | service images in `docker-compose.yml` |
+| `github-actions` | workflow actions (SHA pins) |
+
+Two things to know when reviewing these:
+
+- **They don't follow the `Issue #N -` commit convention.** Dependabot can't
+  know the issue number, so its PRs are the one accepted exception. Everything
+  else applies — all gates must be green, and a user-visible bump still needs a
+  `CHANGELOG.md` entry.
+- **Actions are pinned by commit SHA, not tag.** Dependabot rewrites the SHA and
+  its trailing `# vX.Y.Z` comment together. Never "simplify" a pin back to a
+  mutable tag: on 19 March 2026 an attacker force-pushed malware over
+  `aquasecurity/trivy-action`'s existing tags, which is precisely the action this
+  repo's image scan depends on. The SHA is the thing that makes that survivable.
+
+Bumping `postgres` in `docker-compose.yml` also needs a manual bump of the
+`postgres:` service image in `.github/workflows/ci.yml` and
+`backup-smoke.yml` — Dependabot does not read workflow service containers.
 
 ## Changelog entries (day-to-day)
 
