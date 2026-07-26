@@ -37,7 +37,11 @@ const formatCurrencyFull = (value: number) =>
     maximumFractionDigits: 2,
   }).format(value);
 
-interface TreemapNode {
+// A type alias, not an interface: recharts 3 types `Treemap`'s `data` as
+// `TreemapDataType[]`, which carries a `[key: string]: unknown` index
+// signature. TypeScript gives object type aliases an implicit index signature
+// but never gives one to an interface, so an interface here is unassignable.
+type TreemapNode = {
   name: string;
   size?: number;
   rawValue?: number;
@@ -47,7 +51,7 @@ interface TreemapNode {
   percentOfTotal?: number;
   percentOfParent?: number;
   children?: TreemapNode[];
-}
+};
 
 interface LiabilityAllocationChartProps {
   data: LiabilityAllocationData;

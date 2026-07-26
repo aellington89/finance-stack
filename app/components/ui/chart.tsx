@@ -104,6 +104,40 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
+// Narrow view of the tooltip payload for `labelFormatter` callbacks that only
+// read the underlying row's `date`. Readonly is the load-bearing part: recharts
+// 3 hands `labelFormatter` a `ReadonlyArray`, and a parameter typed as a
+// mutable array is not assignable to that. A readonly parameter still accepts
+// recharts 2's mutable array, so this types the same callbacks under both.
+export type TooltipDatePayload = ReadonlyArray<{
+  payload?: { date?: string }
+}>
+
+// These props were previously read off `React.ComponentProps<typeof Tooltip>`.
+// recharts 3 moves `active`/`payload`/`label` out of `TooltipProps` — the chart
+// now holds them in its own store and injects them into whatever `content`
+// renders — so that type no longer describes this component's inputs.
+//
+// `DefaultTooltipContent` is the component recharts renders when no `content`
+// is given, which is exactly this component's contract, and unlike recharts 3's
+// `TooltipContentProps` it is exported by both 2.x and 3.x. `active` is declared
+// here because it belongs to the tooltip wrapper rather than the content props
+// in both majors. Everything stays optional: recharts fills these in when it
+// clones the element passed to `content`, so nothing is set at the call site.
+type ChartTooltipContentProps = React.ComponentProps<"div"> &
+  Pick<
+    React.ComponentProps<typeof RechartsPrimitive.DefaultTooltipContent>,
+    "payload" | "label" | "labelFormatter" | "formatter"
+  > & {
+    active?: boolean
+    hideLabel?: boolean
+    hideIndicator?: boolean
+    indicator?: "line" | "dot" | "dashed"
+    nameKey?: string
+    labelKey?: string
+    labelClassName?: string
+  }
+
 function ChartTooltipContent({
   active,
   payload,
@@ -118,14 +152,7 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-  React.ComponentProps<"div"> & {
-    hideLabel?: boolean
-    hideIndicator?: boolean
-    indicator?: "line" | "dot" | "dashed"
-    nameKey?: string
-    labelKey?: string
-  }) {
+}: ChartTooltipContentProps) {
   const { config } = useChart()
 
   const tooltipLabel = React.useMemo(() => {
@@ -188,7 +215,7 @@ function ChartTooltipContent({
 
             return (
               <div
-                key={item.dataKey}
+                key={typeof item.dataKey === "function" ? key : item.dataKey}
                 className={cn(
                   "flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
                   indicator === "dot" && "items-center"
@@ -259,7 +286,13 @@ function ChartLegendContent({
   verticalAlign = "bottom",
   nameKey,
 }: React.ComponentProps<"div"> &
-  Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+  // Same story as the tooltip: recharts 3 omits `payload` and `verticalAlign`
+  // from `LegendProps` and injects them into the legend's `content`, so the
+  // types have to come from the default content component instead.
+  Pick<
+    RechartsPrimitive.DefaultLegendContentProps,
+    "payload" | "verticalAlign"
+  > & {
     hideIcon?: boolean
     nameKey?: string
   }) {

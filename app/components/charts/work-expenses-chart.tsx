@@ -10,6 +10,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
+  type TooltipDatePayload,
 } from "@/components/ui/chart";
 import {
   Card,
@@ -106,7 +107,7 @@ export function WorkExpensesChart({ data, description }: WorkExpensesChartProps)
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  labelFormatter={(_: unknown, payload: Array<{ payload?: { date?: string } }>) => {
+                  labelFormatter={(_: unknown, payload: TooltipDatePayload) => {
                     if (!payload?.[0]?.payload?.date) return "";
                     return format(parseDate(payload[0].payload.date), "MMMM yyyy");
                   }}
