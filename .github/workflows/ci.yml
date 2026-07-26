@@ -12,7 +12,11 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        # Pinned to the same tag as docker-compose.yml so CI exercises the
+        # version that actually ships (Issue #131). Workflow service containers
+        # are read by neither the `docker` nor the `docker-compose` Dependabot
+        # ecosystem, so this pin is bumped by hand alongside compose.
+        image: postgres:18.0
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
@@ -30,9 +34,9 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -40,6 +44,21 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Issue #131. Runtime dependencies are the blocking gate: everything here
+      # ships inside the image. `overrides` in package.json lift next's vendored
+      # postcss/sharp, which is what keeps this green.
+      - name: Dependency audit (runtime)
+        run: npm audit --omit=dev --audit-level=high
+
+      # Build-time dependencies are reported but do not block. The eslint 9
+      # toolchain currently carries HIGH advisories whose only fix is eslint 10,
+      # which eslint-config-next does not yet support (its vendored
+      # eslint-plugin-react crashes on eslint 10's rule API). Flip this to a
+      # blocking step once that lands upstream.
+      - name: Dependency audit (build-time, advisory only)
+        continue-on-error: true
+        run: npm audit --audit-level=high
 
       - name: Create test database
         env:
@@ -127,3 +146,40 @@ jobs:
           DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
           AUTH_SECRET: ci-only-integration-test-secret
         run: npm run test:integration
+
+  # Issue #131. Builds the production image on every PR — previously it was only
+  # built on a `v*` tag by release.yml, so a broken Dockerfile reached master
+  # undetected — and scans it for known vulnerabilities. Runs as its own job so
+  # the image build and the database-backed gates above don't queue behind each
+  # other; both must be green to merge.
+  image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # `docker compose build`, not a bare `docker build`: the runner stage does
+      # `COPY --from=changelog CHANGELOG.md`, which needs the `changelog` entry
+      # in compose's additional_contexts (CHANGELOG.md lives outside ./app).
+      # This matches how release.yml builds the image.
+      - name: Build app image
+        env:
+          # Absolute path, for the same reason release.yml sets it: a relative
+          # additional_contexts path is resolved against ./app rather than the
+          # repo root on some Compose/buildx versions, and CHANGELOG.md is at
+          # the root.
+          CHANGELOG_CONTEXT: ${{ github.workspace }}
+        run: docker compose build finance-app
+
+      # Actions are SHA-pinned repo-wide (Issue #131) — mutable tags are exactly
+      # how this action was used to ship malware in March 2026.
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: finance-app:latest
+          severity: HIGH,CRITICAL
+          # node:22-alpine carries OS CVEs with no upstream fix; blocking on
+          # those makes the gate un-actionable rather than safer.
+          ignore-unfixed: true
+          exit-code: 1
+          trivyignores: .trivyignore

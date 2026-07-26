@@ -1,0 +1,20 @@
+# Trivy suppressions for the finance-app image scan (Issue #131).
+#
+# The CI gate blocks on HIGH and CRITICAL findings that have a fix available
+# (`ignore-unfixed: true`), so an entry here means "we know, and we have
+# decided to ship anyway". That decision needs to be reviewable, so every
+# entry must carry:
+#
+#   1. the CVE / advisory ID
+#   2. why it does not apply, or why the fix cannot be taken yet
+#   3. an expiry date — Trivy honours `exp:` and the finding returns after it
+#
+# Format:
+#   CVE-YYYY-NNNNN exp:YYYY-MM-DD
+#   # <why this is suppressed, and what unblocks removing it>
+#
+# Prefer rebuilding on a patched base image over adding an entry. If a
+# suppression outlives two expiry extensions, that is a signal to change the
+# base image rather than extend it a third time.
+#
+# Intentionally empty — populate only from real findings, never pre-emptively.
