@@ -60,6 +60,18 @@
     "sharp": "^0.35.3",
     "eslint-plugin-react-hooks": "7.0.1"
   },
+  "//typescript": [
+    "The floor is not decorative: DefinitelyTyped records a minimum compiler per",
+    "package in `typeScriptVersion`, and the highest among the ones declared here",
+    "is @types/node ^24 at 5.6 (@types/react is 5.3 since 19.2.15, @types/react-dom",
+    "and @types/pg are 5.2). `^5` claimed to support 5.0, which none of them have",
+    "for some time — it drifted when #210 moved @types/node ^20 -> ^24 and the",
+    "range was not revisited. The caret ceiling (<6.0.0) also matches what",
+    "typescript-eslint 8.x declares it supports. Re-derive this when a type",
+    "package moves (Issue #215).",
+    "Note that @types/react's `typesVersions` only redirects <=5.0 to its ts5.0/",
+    "fallback, so 5.1-5.2 would resolve definitions DT no longer tests."
+  ],
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
@@ -73,7 +85,7 @@
     "shadcn": "^4.15.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
-    "typescript": "^5",
+    "typescript": "^5.6",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.2"
   }
