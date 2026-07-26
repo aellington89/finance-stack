@@ -225,7 +225,7 @@ services:
 
   # Scheduled logical backups. Runs pg_dump (custom format) of each database in
   # BACKUP_DBS to ./backups/ on a loop, pruning dumps older than the retention
-  # window. Reuses the postgres:18.0 image so pg_dump stays version-matched to
+  # window. Reuses the postgres:18.4 image so pg_dump stays version-matched to
   # the server. Restore a dump with scripts/restore.sh. See docs/backups.md.
   pg-backup:
     image: postgres:18.4

@@ -16,7 +16,7 @@ jobs:
         # version that actually ships (Issue #131). Workflow service containers
         # are read by neither the `docker` nor the `docker-compose` Dependabot
         # ecosystem, so this pin is bumped by hand alongside compose.
-        image: postgres:18.0
+        image: postgres:18.4
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
