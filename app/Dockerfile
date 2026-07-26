@@ -2,13 +2,13 @@
 # Requires output: "standalone" in next.config.ts.
 
 # --- Stage 1: Install dependencies ---
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # --- Stage 2: Build the application ---
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 # Build metadata baked into the bundle at build time (standalone has no package.json
 # at runtime). Defaults keep a plain `docker compose up` working with gitSha "dev".
@@ -22,7 +22,7 @@ RUN mkdir -p public && npm run build
 
 # --- Stage 2b: Migration runner ---
 # Used by the `migrate` Compose service: drizzle-kit + psql, no Next.js build.
-FROM node:22-alpine AS migrate
+FROM node:26-alpine AS migrate
 WORKDIR /app
 RUN apk add --no-cache postgresql-client bash
 COPY --from=deps /app/node_modules ./node_modules
@@ -32,7 +32,7 @@ COPY scripts ./scripts
 ENTRYPOINT ["bash", "/app/scripts/migrate-and-seed.sh"]
 
 # --- Stage 3: Production runner ---
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
