@@ -75,6 +75,18 @@ docker compose exec pg-backup /scripts/restore.sh --force \
 For a from-scratch rebuild (lost volume), bring the stack up so the databases
 are created and migrated, then run the restore above.
 
+> **Restoring into a different cluster: create the roles first.** Dumps are taken
+> as the superuser, so they carry the `GRANT` statements for `finance_app`,
+> `finance_importer`, and `finance_metabase`, and `restore.sh` uses
+> `pg_restore --no-owner`, which still applies privileges. Restoring into a
+> cluster where those roles do not exist produces `role "finance_app" does not
+> exist` errors on those statements. Bringing the stack up first (which runs the
+> migrate service, creating the roles) avoids this; a later `docker compose up`
+> re-applies the grants either way, since
+> [`02-grants.sql`](../init-db/roles/02-grants.sql) converges. Restores into the
+> same cluster — the normal case, including the `--force` recovery above — are
+> unaffected.
+
 ## Verification (CI)
 
 `.github/workflows/backup-smoke.yml` runs weekly (and on PRs touching the backup

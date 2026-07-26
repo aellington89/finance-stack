@@ -35,6 +35,8 @@ DATABASE_URL=postgresql://postgres:<password>@localhost:5433/Finances \
   npm run auth:create-user -- <username>
 ```
 
+> **This must connect as `postgres`, not `finance_app`.** The `users` table is deliberately read-only to the application role (Issue #130), so that an app-level compromise cannot mint or alter an account. Running the CLI as `finance_app` fails with `permission denied for table users` — that is the guard working, not a bug. See [Roles & Privileges](database.md#roles--privileges).
+
 For non-interactive use, set `CREATE_USER_PASSWORD` instead of the prompt.
 
 ## Configuration

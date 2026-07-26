@@ -27,7 +27,11 @@ services:
       MB_DB_PASS: ${MB_DB_PASS}
       MB_DB_DBNAME: ${MB_DB_DBNAME}
     ports:
-      - "5433:5432"              # Exposed on 5433 to avoid conflicts with a local Postgres on the default port
+      # 5433 avoids conflicts with a local Postgres on the default port. Bound to
+      # loopback (#130): reachable from this host only, refused on the LAN. Local
+      # clients (psql, DBeaver, `npm run dev`) keep using localhost:5433; the
+      # services reach the DB over appnet, which is unaffected by this.
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql  # PG18 moved PGDATA to /var/lib/postgresql/18/docker; mount the parent
       - ./init-db:/docker-entrypoint-initdb.d:ro  # Runs once on first start (empty data dir) to create DBs and roles
@@ -66,11 +70,19 @@ services:
     environment:
       PGHOST: postgres
       PGPORT: 5432
-      PGUSER: ${POSTGRES_USER}
+      PGUSER: ${POSTGRES_USER}          # Superuser: this job applies DDL and creates roles
       PGPASSWORD: ${POSTGRES_PASSWORD}
       FINANCE_APP_DB: ${FINANCE_APP_DB:-Finances}
+      # Passwords for the least-privilege service roles this job creates (#130).
+      # Deliberately no defaults — migrate-and-seed.sh aborts if any is empty
+      # rather than creating a login role with a blank password.
+      FINANCE_APP_DB_PASSWORD: ${FINANCE_APP_DB_PASSWORD}
+      FINANCE_IMPORTER_DB_PASSWORD: ${FINANCE_IMPORTER_DB_PASSWORD}
+      FINANCE_METABASE_DB_PASSWORD: ${FINANCE_METABASE_DB_PASSWORD}
     volumes:
       - ./init-db/seeds:/seeds:ro        # Seed SQL files consumed by migrate-and-seed.sh
+      - ./init-db/roles:/roles:ro        # Role creation + grant SQL (#130)
+      - ./scripts:/scripts:ro            # For the on-demand role check — see scripts/verify-db-roles.sh
     networks:
       - appnet
     logging: *default-logging
@@ -145,7 +157,9 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+      # Connects as finance_app, not the superuser (#130): full DML on the core
+      # tables, SELECT-only on users, and no DDL. See docs/database.md.
+      DATABASE_URL: postgresql://finance_app:${FINANCE_APP_DB_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
       AUTH_SECRET: ${AUTH_SECRET}       # Signs/encrypts Auth.js session JWTs — see .env.example
     depends_on:
       migrate:
@@ -180,7 +194,10 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+      # Connects as finance_importer (#130): append-only on transactions plus
+      # SELECT on the lookup tables it resolves FKs against. It cannot UPDATE or
+      # DELETE anything, so a bad parser can only ever add rows.
+      DATABASE_URL: postgresql://finance_importer:${FINANCE_IMPORTER_DB_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
       POLL_INTERVAL: 60
     volumes:
       - ./imports:/input                      # Host drop folder — each subdirectory is an import type
@@ -259,13 +276,19 @@ services:
 
   # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
   # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
+  #
+  # The MB_DB_* vars below configure only that internal metadata DB (owned by the
+  # non-superuser MB_DB_USER role). Metabase's *analytics* connection to Finances is
+  # stored inside its own metadata DB, not in env, so it cannot be set here: point it
+  # at the finance_metabase role (views only, #130) once in the admin UI — see the
+  # "Roles & privileges" section of docs/database.md.
   metabase:
     image: metabase/metabase:v0.58.8
     container_name: metabase
     profiles: ["bi"]                   # Not started by default; run with --profile bi
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"    # Loopback only (#130) — Metabase has no auth in front of it on the LAN
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: ${MB_DB_DBNAME}         # Metabase's internal state DB — separate from the Finances DB

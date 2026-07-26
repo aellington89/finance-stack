@@ -40,8 +40,8 @@ is tolerated by the release-notes generator but is not preferred — use the
 
 ## CI gates
 
-CI runs on every push to `master`/`test` and on all PRs. There are three gates
-that can fail a build before lint and tests even run; all three are fast to
+CI runs on every push to `master`/`test` and on all PRs. There are four gates
+that can fail a build before lint and tests even run; all four are fast to
 satisfy locally:
 
 ### Schema-drift gate
@@ -69,6 +69,23 @@ table/id/name tuples) doesn't match a row in `init-db/seeds/shared-lookups.sql`.
 ```sh
 cd app && npm run check:seed-references
 ```
+
+### Role privilege gate
+
+Fails if the database service roles don't hold exactly the privileges
+`init-db/roles/02-grants.sql` is meant to establish — too few or too many. Most
+often tripped by a migration that adds a table or view the narrow
+`finance_importer` / `finance_metabase` roles need, since those grants are
+enumerated by hand (`finance_app` is covered automatically).
+
+**Fix:** update `init-db/roles/02-grants.sql`, then verify against a running
+stack:
+
+```sh
+docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh Finances_Test
+```
+
+See [Roles & Privileges](docs/database.md#roles--privileges).
 
 ### Changelog gate
 
