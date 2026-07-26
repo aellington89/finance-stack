@@ -59,6 +59,22 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Metabase is tracked on its LTS line, which Dependabot cannot see: it
+      # only knows "v0.63.1.6 is newer than v0.58.8". Metabase supports LTS
+      # releases for 14 months and standard releases for ~2, so the newest tag
+      # is reliably the *shorter*-lived one — PR #199 would have traded an image
+      # supported to 2027-02-17 for one EOL 2026-09-07 (#213).
+      #
+      # Metabase versions carry a leading `0.`, so this split falls out of
+      # semver parsing exactly right: moving off the LTS line (0.58 -> 0.63)
+      # is a minor and is ignored, while a patch within it (0.58.8 -> 0.58.21)
+      # still arrives as a PR. Revisit when the next LTS ships — 58 goes EOL
+      # 2027-02-17 and the cadence looks roughly annual.
+      - dependency-name: "metabase/metabase"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
 
   # Workflow actions. These are SHA-pinned; Dependabot rewrites both the SHA
   # and its trailing `# vX.Y.Z` comment, which is what keeps pinning
