@@ -187,7 +187,7 @@ services:
   # Importer — polls subdirectories under imports/ every 60 seconds, routes
   # each file to a matching parser in importer/parsers/, and inserts transaction rows.
   importer:
-    image: python:3.13-slim
+    image: python:3.14-slim
     container_name: importer
     restart: unless-stopped
     depends_on:
