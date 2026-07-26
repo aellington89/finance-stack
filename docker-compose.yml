@@ -16,7 +16,7 @@ services:
 
   # Primary PostgreSQL database that stores all financial data.
   postgres:
-    image: postgres:18.0
+    image: postgres:18.4
     container_name: postgres
     restart: unless-stopped              # Auto-restart on crash or Docker daemon restart
     environment:                         # All credentials sourced from .env — see .env.example for the template
@@ -100,7 +100,7 @@ services:
   # Behind the "init" profile — only runs when explicitly requested:
   #   docker compose --profile init run --rm init-script
   init-script:
-    image: postgres:18.0
+    image: postgres:18.4
     profiles: ["init"]                   # Not started by default; run with --profile init
     restart: "no"                        # One-shot job — must not restart after exiting
     depends_on:
@@ -187,7 +187,7 @@ services:
   # Importer — polls subdirectories under imports/ every 60 seconds, routes
   # each file to a matching parser in importer/parsers/, and inserts transaction rows.
   importer:
-    image: python:3.13-slim
+    image: python:3.14-slim
     container_name: importer
     restart: unless-stopped
     depends_on:
@@ -225,10 +225,10 @@ services:
 
   # Scheduled logical backups. Runs pg_dump (custom format) of each database in
   # BACKUP_DBS to ./backups/ on a loop, pruning dumps older than the retention
-  # window. Reuses the postgres:18.0 image so pg_dump stays version-matched to
+  # window. Reuses the postgres:18.4 image so pg_dump stays version-matched to
   # the server. Restore a dump with scripts/restore.sh. See docs/backups.md.
   pg-backup:
-    image: postgres:18.0
+    image: postgres:18.4
     container_name: pg-backup
     restart: unless-stopped
     depends_on:
