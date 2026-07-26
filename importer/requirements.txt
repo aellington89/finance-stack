@@ -1,0 +1,14 @@
+# Python dependencies for the importer service (Issue #131).
+#
+# Pinned exactly so the running container is reproducible and so Dependabot's
+# `pip` ecosystem has a manifest to track — previously the Compose entrypoint
+# ran `pip install --quiet psycopg2-binary`, which re-resolved to whatever was
+# newest on PyPI every time the container restarted.
+#
+# psycopg2-binary is imported by poll.py (in this repo). pdfplumber is imported
+# by the paystub parser under parsers/, which is gitignored because parsers are
+# user-specific — the dependency is pinned here anyway so the image has it ready
+# and parsers no longer need to self-install at import time.
+
+psycopg2-binary==2.9.12
+pdfplumber==0.11.10

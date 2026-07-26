@@ -82,6 +82,7 @@ merges.
 - [#186](https://github.com/aellington89/finance-stack/issues/186) List all docs/ guides in the docs README Guides section *(new)*
 - [#189](https://github.com/aellington89/finance-stack/issues/189) Make `POSTGRES_PASSWORD` and `MB_DB_PASS` rotatable from `.env` *(new)*
 - [#191](https://github.com/aellington89/finance-stack/issues/191) Split `/api/health` into a liveness probe + seed-data check *(new)*
+- [#194](https://github.com/aellington89/finance-stack/issues/194) Make the build-time `npm audit` blocking once `eslint-config-next` supports eslint 10 *(new — from #131; blocked upstream)*
 
 > Phase 1 is large; it can be sliced (e.g. auth core as v0.2.0, the heavier
 > security items trailing into v0.2.x/v0.3.0). The milestone maps to a version
@@ -100,6 +101,8 @@ merges.
 - [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(recommended before v1.0.0)*
 - [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(recommended before v1.0.0)*
 - [#185](https://github.com/aellington89/finance-stack/issues/185) Audit docker-compose services: necessity & profile gating *(new)*
+- [#193](https://github.com/aellington89/finance-stack/issues/193) Adopt `react-hooks/set-state-in-effect`; drop the `eslint-plugin-react-hooks` pin *(new — from #131)*
+- [#195](https://github.com/aellington89/finance-stack/issues/195) Run `npm run typecheck` in CI *(new — from #131)*
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx

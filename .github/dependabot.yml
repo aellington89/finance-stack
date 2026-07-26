@@ -1,0 +1,64 @@
+# Dependabot configuration (Issue #131).
+#
+# Five ecosystems cover every dependency manifest in the repo. Note that
+# `docker` and `docker-compose` are distinct ecosystems: `docker` reads
+# Dockerfiles, `docker-compose` reads compose files, and we need both.
+#
+# Dependabot cannot follow this repo's `Issue #N - <imperative>` commit
+# convention, so its PRs are an accepted exception (see CONTRIBUTING.md).
+#
+# Deliberately not configured: auto-merge (out of scope per Issue #131).
+# Every bump gets reviewed and must pass the full gate suite.
+
+version: 2
+
+updates:
+  # The Next.js application — the only Node package in the repo (no root
+  # package.json, no workspaces).
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Grouped so a routine week arrives as two reviewable PRs rather than a
+    # dozen. Majors stay ungrouped: they get their own PR and their own review.
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  # Importer service Python dependencies (importer/requirements.txt).
+  - package-ecosystem: pip
+    directory: /importer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Base images in app/Dockerfile (node:22-alpine).
+  - package-ecosystem: docker
+    directory: /app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Service images in docker-compose.yml (postgres, python, metabase).
+  # Bumping postgres here needs a matching manual bump of the `postgres:`
+  # service image in .github/workflows/ci.yml and backup-smoke.yml, which
+  # Dependabot does not read.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Workflow actions. These are SHA-pinned; Dependabot rewrites both the SHA
+  # and its trailing `# vX.Y.Z` comment, which is what keeps pinning
+  # maintainable rather than a one-off snapshot.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
