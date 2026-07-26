@@ -282,8 +282,14 @@ services:
   # stored inside its own metadata DB, not in env, so it cannot be set here: point it
   # at the finance_metabase role (views only, #130) once in the admin UI — see the
   # "Roles & privileges" section of docs/database.md.
+  #
+  # Pinned to the 0.58 LTS line (#213). Metabase supports LTS releases for 14 months
+  # and standard releases for ~2, so 0.58 (EOL 2027-02-17) outlives every newer major
+  # by more than a year. Take 0.58.x patches; do not jump the minor. Dependabot is
+  # configured to match in .github/dependabot.yml. Each major bump runs a one-way
+  # migration on the metabase DB — roll back by restoring it from ./backups.
   metabase:
-    image: metabase/metabase:v0.58.8
+    image: metabase/metabase:v0.58.21
     container_name: metabase
     profiles: ["bi"]                   # Not started by default; run with --profile bi
     restart: unless-stopped
