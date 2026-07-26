@@ -80,6 +80,8 @@ merges.
 - [#182](https://github.com/aellington89/finance-stack/issues/182) Edge hardening: TLS, security headers, rate limiting *(new)*
 - [#187](https://github.com/aellington89/finance-stack/issues/187) Backfill `transaction_types` id=12 — `/api/health` seed drift (503) *(new)*
 - [#186](https://github.com/aellington89/finance-stack/issues/186) List all docs/ guides in the docs README Guides section *(new)*
+- [#189](https://github.com/aellington89/finance-stack/issues/189) Make `POSTGRES_PASSWORD` and `MB_DB_PASS` rotatable from `.env` *(new)*
+- [#191](https://github.com/aellington89/finance-stack/issues/191) Split `/api/health` into a liveness probe + seed-data check *(new)*
 
 > Phase 1 is large; it can be sliced (e.g. auth core as v0.2.0, the heavier
 > security items trailing into v0.2.x/v0.3.0). The milestone maps to a version
