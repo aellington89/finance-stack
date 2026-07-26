@@ -205,7 +205,7 @@ services:
     working_dir: /app
     entrypoint: >
       bash -c "
-      pip install --quiet psycopg2-binary &&
+      pip install --quiet -r /app/requirements.txt &&
       echo 'importer ready — polling /input subdirectories every $${POLL_INTERVAL}s' &&
       python poll.py
       "
