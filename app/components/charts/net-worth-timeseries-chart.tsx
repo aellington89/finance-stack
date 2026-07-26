@@ -146,6 +146,13 @@ export function NetWorthTimeSeriesChart({
           ])
         );
 
+  // Annotated as the union rather than inlined into `data`: recharts 3 infers
+  // the chart's data point type from this prop, and a bare ternary resolves to
+  // `TimeSeriesPoint[] | PivotedRow[]`, which pins the inference to the first
+  // arm and rejects the second.
+  const chartData: Array<TimeSeriesPoint | PivotedRow> =
+    mode === "net-worth" ? timeSeries : decomposed.rows;
+
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
       const next = new Set(prev);
@@ -191,10 +198,7 @@ export function NetWorthTimeSeriesChart({
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
         <ChartContainer config={chartConfig} className="min-h-0 flex-1 w-full">
-          <LineChart
-            data={mode === "net-worth" ? timeSeries : decomposed.rows}
-            margin={{ left: 8, right: 8 }}
-          >
+          <LineChart data={chartData} margin={{ left: 8, right: 8 }}>
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"

@@ -10,6 +10,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
+  type TooltipDatePayload,
 } from "@/components/ui/chart";
 import {
   Card,
@@ -103,13 +104,13 @@ function makeTickFormatter(grouping: TimeGrouping) {
 
 function makeTooltipLabelFormatter(grouping: TimeGrouping) {
   if (grouping === "day") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) => {
+    return (_: unknown, payload: TooltipDatePayload) => {
       if (!payload?.[0]?.payload?.date) return "";
       return format(parseDate(payload[0].payload.date), "MMM d, yyyy");
     };
   }
   if (grouping === "week") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) => {
+    return (_: unknown, payload: TooltipDatePayload) => {
       if (!payload?.[0]?.payload?.date) return "";
       const start = parseDate(payload[0].payload.date);
       const end = addDays(start, 6);
@@ -117,37 +118,37 @@ function makeTooltipLabelFormatter(grouping: TimeGrouping) {
     };
   }
   if (grouping === "month") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) => {
+    return (_: unknown, payload: TooltipDatePayload) => {
       if (!payload?.[0]?.payload?.date) return "";
       return format(parseDate(payload[0].payload.date), "MMMM yyyy");
     };
   }
   if (grouping === "quarter") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) => {
+    return (_: unknown, payload: TooltipDatePayload) => {
       if (!payload?.[0]?.payload?.date) return "";
       const d = parseDate(payload[0].payload.date);
       return `Q${getQuarter(d)} ${d.getFullYear()}`;
     };
   }
   if (grouping === "year") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) => {
+    return (_: unknown, payload: TooltipDatePayload) => {
       if (!payload?.[0]?.payload?.date) return "";
       return format(parseDate(payload[0].payload.date), "yyyy");
     };
   }
   if (grouping === "day_of_week") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) =>
+    return (_: unknown, payload: TooltipDatePayload) =>
       DOW_NAMES[Number(payload?.[0]?.payload?.date)] ?? String(payload?.[0]?.payload?.date);
   }
   if (grouping === "month_of_year") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) =>
+    return (_: unknown, payload: TooltipDatePayload) =>
       MONTH_NAMES[Number(payload?.[0]?.payload?.date)] ?? String(payload?.[0]?.payload?.date);
   }
   if (grouping === "quarter_of_year") {
-    return (_: unknown, payload: Array<{ payload?: { date?: string } }>) =>
+    return (_: unknown, payload: TooltipDatePayload) =>
       `Q${payload?.[0]?.payload?.date}`;
   }
-  return (_: unknown, payload: Array<{ payload?: { date?: string } }>) =>
+  return (_: unknown, payload: TooltipDatePayload) =>
     String(payload?.[0]?.payload?.date ?? "");
 }
 
