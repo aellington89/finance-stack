@@ -5,8 +5,16 @@
 # Runs in the `migrate` Compose service after postgres becomes
 # healthy. Idempotent: safe to re-run on every `docker compose up`.
 #
-# For each target database it:
+# It first creates the least-privilege service roles from /roles/ (mounted from
+# init-db/roles) — those are cluster-global, so once per run. Then, for each
+# target database it:
 #   1. Applies any pending Drizzle migrations (drizzle-kit migrate).
+#   2. Applies that database's service-role grants (/roles/02-grants.sql).
+#
+# Roles and grants live here rather than in init-db/01-create-databases.sh for
+# two reasons (issue #130): that script only runs on an empty data directory, so
+# an existing Postgres volume would never gain the roles; and a GRANT names
+# tables, so it can only run after step 1 has created them.
 #
 # Then it applies seed files from /seeds/ (mounted from init-db/seeds):
 #   - Finances:      shared-lookups.sql, but ONLY if the DB has no
@@ -17,11 +25,20 @@
 #
 # Required env vars (set by docker-compose.yml):
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD, FINANCE_APP_DB
+#   FINANCE_APP_DB_PASSWORD, FINANCE_IMPORTER_DB_PASSWORD,
+#   FINANCE_METABASE_DB_PASSWORD  (the three service-role passwords, #130)
 # ------------------------------------------------------------
 set -euo pipefail
 
 FINANCE_APP_DB="${FINANCE_APP_DB:-Finances}"
 TEST_DB="Finances_Test"
+
+# Fail fast and loudly on a missing role password. Compose substitutes an unset
+# variable with the empty string rather than leaving it unset, so without these
+# guards a stale .env would silently create login roles with blank passwords.
+: "${FINANCE_APP_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #130)}"
+: "${FINANCE_IMPORTER_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #130)}"
+: "${FINANCE_METABASE_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #130)}"
 
 # Baseline journal `when` — the value drizzle-kit stores as created_at when it
 # applies 0000_baseline itself. Derived from the journal so it tracks the file
@@ -59,9 +76,27 @@ END
 SQL
 }
 
+# Grants the least-privilege service roles their per-database privileges. Must
+# run after run_migrate for the same database: GRANT statements name tables, so
+# they fail on a database whose schema has not been created yet.
+apply_grants() {
+    local db="$1"
+    echo ">>> Applying service-role grants to ${db}..."
+    psql -v ON_ERROR_STOP=1 -d "${db}" -v OWNER="${PGUSER}" -f /roles/02-grants.sql
+}
+
+# Roles are cluster-global, so create them once, before the per-database loop.
+echo ">>> Creating least-privilege service roles..."
+psql -v ON_ERROR_STOP=1 -d postgres \
+    -v app_password="${FINANCE_APP_DB_PASSWORD}" \
+    -v importer_password="${FINANCE_IMPORTER_DB_PASSWORD}" \
+    -v metabase_password="${FINANCE_METABASE_DB_PASSWORD}" \
+    -f /roles/01-create-roles.sql
+
 for db in "${FINANCE_APP_DB}" "${TEST_DB}"; do
     heal_adopted_baseline "${db}"
     run_migrate "${db}"
+    apply_grants "${db}"
 done
 
 # --- Finances: additive lookup seed, only when the DB is empty.
@@ -86,4 +121,4 @@ psql -v ON_ERROR_STOP=1 -d "${TEST_DB}" -f /seeds/finances-test-mock-data.sql
 echo ">>> Rebuilding ${TEST_DB} account_balance_history..."
 psql -v ON_ERROR_STOP=1 -d "${TEST_DB}" -f /seeds/rebuild-balance-history.sql
 
-echo ">>> Migrations and seeds complete."
+echo ">>> Migrations, roles, and seeds complete."

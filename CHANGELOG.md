@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Required new configuration.** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`, and `FINANCE_METABASE_DB_PASSWORD` must be added to `.env` (see `.env.example`) — the `migrate` service aborts with a pointer to `.env.example` rather than creating a login role with a blank password. Copy the three keys in and run `docker compose up`; the roles and grants are applied to existing databases automatically. Metabase users must additionally re-point the Finances connection at `finance_metabase` once in the admin UI, since Metabase stores analytics connections in its own metadata database rather than in environment variables ([Issue #130](https://github.com/aellington89/finance-stack/issues/130)).
+
 ### Added
 
 - Scheduled database backups: a default-on `pg-backup` Compose service runs `pg_dump` (custom format) of the `Finances` and `metabase` databases into `./backups/` on an interval (default daily) with retention pruning, plus `scripts/backup.sh` / `scripts/restore.sh` (one-command restore into a clean DB, guarded against clobbering production DBs without `--force`) and a weekly `backup-smoke` CI workflow that seeds a known dataset, dumps it, restores it, and asserts a known row count to catch silent backup corruption. Documented in the new [docs/backups.md](docs/backups.md); tunable via `BACKUP_DBS` / `BACKUP_RETENTION_DAYS` / `BACKUP_INTERVAL_SECONDS` (see `.env.example`) ([Issue #122](https://github.com/aellington89/finance-stack/issues/122)).
@@ -14,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Postgres surface-area lockdown: the Postgres (`5433`) and Metabase (`3000`) host ports are now bound to `127.0.0.1` instead of `0.0.0.0`, and the three long-running services no longer connect as the `postgres` superuser. Each authenticates as its own least-privilege role — `finance_app` (full DML on the core tables, **`SELECT`-only on `users`**, no DDL), `finance_importer` (append-only on `transactions` plus lookup reads, no `UPDATE`/`DELETE`), and `finance_metabase` (`SELECT` on the three views, no base-table access at all). None can create, alter, drop, or truncate a table, create roles or databases, or reach the `drizzle` migration ledger; tables stay owned by `POSTGRES_USER`. The superuser is retained only for the maintenance jobs that need DDL or cluster-wide reads (`migrate`, `init-script`, `pg-backup`). Roles and grants are created and re-applied idempotently by the `migrate` service on every `docker compose up` (`init-db/roles/`), so existing volumes are upgraded with no manual SQL, and the grant files revoke before granting so a hand-widened privilege converges back. A new CI "role privilege gate" (`scripts/verify-db-roles.sh`) asserts the full matrix against the catalog and then connects as each role to confirm permitted statements succeed and forbidden ones are refused. Documented in [docs/database.md](docs/database.md#roles--privileges) ([Issue #130](https://github.com/aellington89/finance-stack/issues/130)).
 - All application pages and every server action now reject unauthenticated requests, enforced in three layers: the Next 16 proxy (`app/proxy.ts`) redirects to `/login`, the `(app)` layout re-verifies the session server-side, and `requireActionUser()` gates each of the 18 server actions individually. Only the landing page, `/login`, `/api/auth/*`, and `/api/health` (Docker healthcheck + release smoke test) remain public ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)).
 
 ## [0.1.5] - 2026-07-10

@@ -101,6 +101,13 @@ jobs:
           MB_DB_PASS: changeme
           MB_DB_DBNAME: metabase
           AUTH_SECRET: release-smoke-test-only-secret
+          # Required by the migrate service, which creates the least-privilege
+          # service roles (#130) and aborts on an empty password. finance-app and
+          # importer authenticate with these, so the health poll below only turns
+          # 200 if the roles were created and granted correctly.
+          FINANCE_APP_DB_PASSWORD: release-smoke-app-pw
+          FINANCE_IMPORTER_DB_PASSWORD: release-smoke-importer-pw
+          FINANCE_METABASE_DB_PASSWORD: release-smoke-metabase-pw
         run: |
           docker compose up -d
 

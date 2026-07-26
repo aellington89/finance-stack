@@ -6,10 +6,10 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 
 | Service | Description | Local Port |
 |---|---|---|
-| PostgreSQL 18 | Primary database | 5433 |
+| PostgreSQL 18 | Primary database | 5433 (loopback only) |
 | Next.js 16 | Custom finance application | 3001 |
 | importer | File ingestion (polls `imports/` subfolders) | — |
-| Metabase | BI dashboards and analytics (`--profile bi`) | 3000 |
+| Metabase | BI dashboards and analytics (`--profile bi`) | 3000 (loopback only) |
 
 ## Security
 
@@ -21,6 +21,8 @@ npm run auth:create-user -- <username>
 ```
 
 Sign in at http://localhost:3001/login and sign out from the sidebar footer. See [docs/auth.md](docs/auth.md) for the full model, the `AUTH_SECRET` requirement, and password resets.
+
+At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append transactions, and Metabase sees the three views and no base tables. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.
 
 Authentication alone does not make the app safe for the public internet: transport encryption, rate limiting, and deployment hardening are still tracked in [#100](https://github.com/aellington89/finance-stack/issues/100) (see [#130](https://github.com/aellington89/finance-stack/issues/130), [#181](https://github.com/aellington89/finance-stack/issues/181), [#182](https://github.com/aellington89/finance-stack/issues/182)). Keep it on a trusted network — localhost, a VPN, Tailscale, or similar — until those land.
 
@@ -37,11 +39,13 @@ Authentication alone does not make the app safe for the public internet: transpo
 cp .env.example .env
 ```
 
-Edit `.env` and replace the `changeme` placeholder passwords with your own values. Generate a real `AUTH_SECRET` (signs the session cookies):
+Edit `.env` and replace **every** `changeme` placeholder with your own value — including the three `FINANCE_*_DB_PASSWORD` service-role passwords, which are required (the migrate service aborts rather than create a login role with a blank password). Keep them URL-safe, since they go into connection strings. Generate a real `AUTH_SECRET` (signs the session cookies):
 
 ```bash
 openssl rand -base64 33
 ```
+
+> **Upgrading an existing stack?** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`, and `FINANCE_METABASE_DB_PASSWORD` are new. Copy them from `.env.example` into your `.env`, then `docker compose up` — the migrate service creates the roles and applies their grants to your existing databases. No manual SQL, no data migration. If you use Metabase, re-point its Finances connection at `finance_metabase` ([docs/database.md](docs/database.md#pointing-metabase-at-finance_metabase)).
 
 ### 2. Start the stack
 
@@ -103,8 +107,8 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 ### 5. Access the services
 
 - **Finance App:** http://localhost:3001
-- **Metabase:** http://localhost:3000 (requires `--profile bi`)
-- **PostgreSQL:** `localhost:5433` (user: `postgres`, database: `Finances`)
+- **Metabase:** http://localhost:3000 (requires `--profile bi`; loopback only)
+- **PostgreSQL:** `localhost:5433` (database: `Finances`) — loopback only, so use `localhost`, not the host's LAN address. Connect as `postgres` for admin work; the services use their own restricted roles ([grant matrix](docs/database.md#roles--privileges)).
 
 ## Stopping the Stack
 

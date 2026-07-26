@@ -1,6 +1,16 @@
 # Testing
 
-Covers running unit and integration tests and the static lookup-table fixtures.
+Covers running unit and integration tests, the static lookup-table fixtures, and the database role gate.
+
+## Database Role Gate
+
+CI verifies the least-privilege service roles (Issue #130) on every PR via [`scripts/verify-db-roles.sh`](../scripts/verify-db-roles.sh): it applies the real grant files to `Finances_Test`, asserts the whole grant matrix against the catalog, and then connects as each role to confirm that permitted statements succeed and forbidden ones are refused with `SQLSTATE 42501`. Run it yourself with:
+
+```bash
+docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh Finances
+```
+
+**The integration suite still connects as `postgres`, and should stay that way.** Two of its behaviours are ones `finance_app` is deliberately not allowed: [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) calls `setval()` on the lookup sequences (needs `UPDATE` on the sequence; the role has only `USAGE`), and [`auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) inserts into `users` (read-only to the app role). Pointing the suite at `finance_app` would fail for exactly the reasons the grants exist — role coverage belongs in the gate above, not in the suite.
 
 ## Static Lookup Tables in Integration Tests
 
