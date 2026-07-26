@@ -190,7 +190,9 @@ finance-stack/
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed)
 │   └── parsers/                           # One module per import type (gitignored)
 ├── imports/                               # Drop folders — one per import type (gitignored)
+├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
 ├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests
+├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122)
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
@@ -199,5 +201,7 @@ finance-stack/
 │       ├── finances-test-mock-data.sql   # account_types, transaction_categories, accounts, ~400 txns (Finances_Test only)
 │       └── rebuild-balance-history.sql   # Balance history rebuild for Finances_Test post-seed
 └── scripts/
-    └── update-account-balance-history.sql   # Balance history rebuild script (manual / --profile init)
+    ├── update-account-balance-history.sql   # Balance history rebuild script (manual / --profile init)
+    ├── backup.sh                            # Scheduled pg_dump with retention pruning (pg-backup service)
+    └── restore.sh                           # Restore a dump into a clean database (#122)
 ```

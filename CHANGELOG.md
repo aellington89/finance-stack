@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scheduled database backups: a default-on `pg-backup` Compose service runs `pg_dump` (custom format) of the `Finances` and `metabase` databases into `./backups/` on an interval (default daily) with retention pruning, plus `scripts/backup.sh` / `scripts/restore.sh` (one-command restore into a clean DB, guarded against clobbering production DBs without `--force`) and a weekly `backup-smoke` CI workflow that seeds a known dataset, dumps it, restores it, and asserts a known row count to catch silent backup corruption. Documented in the new [docs/backups.md](docs/backups.md); tunable via `BACKUP_DBS` / `BACKUP_RETENTION_DAYS` / `BACKUP_INTERVAL_SECONDS` (see `.env.example`) ([Issue #122](https://github.com/aellington89/finance-stack/issues/122)).
 - Session-based authentication (Auth.js/NextAuth v5, Credentials provider, JWT sessions): a sign-in page at `/login`, a sign-out control in the sidebar footer, a `users` table (authored migration `0003_add_users_table`) storing scrypt password hashes, and a first-user/password-reset CLI (`npm run auth:create-user -- <username>`). Requires a new `AUTH_SECRET` env var (see `.env.example` / `app/.env.local.example`) — documented in the new [docs/auth.md](docs/auth.md) ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)).
 
 ### Security
