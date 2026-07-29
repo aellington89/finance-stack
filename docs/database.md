@@ -41,11 +41,51 @@ On the first `docker compose up` (empty Postgres data volume), [`init-db/01-crea
 Schema and seeding then come from the `migrate` Compose service, which runs after postgres is healthy. The migrate service:
 
 1. Creates the least-privilege service roles, then applies pending Drizzle migrations from [`app/drizzle/migrations/`](../app/drizzle/migrations/) to both `Finances` and `Finances_Test` and grants each role its privileges — see [Roles & Privileges](#roles--privileges).
-2. Seeds the two **shared lookup tables** (`account_type_categories`, `transaction_types`) into both databases so they start in sync. The Finances side uses `ON CONFLICT DO NOTHING` and is additionally guarded by a pre-flight row-count check — **existing Finances user data is never overwritten**, even on a manual re-run.
+2. Seeds the two **shared lookup tables** (`account_type_categories`, `transaction_types`) into both databases so they start in sync. This runs on **every** migrate run, not only on an empty database: the seed is purely additive (`ON CONFLICT DO NOTHING`, `setval`, and `UPDATE`s guarded by `WHERE liquidity_class IS NULL`), so **existing Finances user data is never overwritten** and a reference row added to the seed after your database was first created is backfilled automatically. See [Repairing seed drift](#repairing-seed-drift).
 3. Seeds `Finances_Test` with mock data: all 19 `account_types`, all 27 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
 4. Rebuilds `Finances_Test.account_balance_history` so balances are up-to-date as of today.
 
-`finance-app` and `importer` wait on `migrate: service_completed_successfully` before starting. After the migrate service exits, `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
+`finance-app` and `importer` wait on `migrate: service_completed_successfully` before starting. After the migrate service exits, a fresh `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use; an existing `Finances` has its lookups reconciled against the current seed and is otherwise untouched. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
+
+### Repairing seed drift
+
+`GET /api/health` returns `503` with `"seedData": "drift"` when a row the application depends on by ID is missing or renamed:
+
+```json
+{"status":"error","db":"connected","seedData":"drift",
+ "drift":[{"table":"transaction_types","id":12,"expected":"Opening Balance","actual":null}]}
+```
+
+`actual: null` means the row is **absent**; a string means it was **renamed**. Docker reports `finance-app` as `unhealthy` for as long as this persists.
+
+For any row that ships in `shared-lookups.sql`, re-running the migrate service is the fix — it re-applies the seed and backfills whatever is missing, without touching your data:
+
+```bash
+docker compose run --rm migrate
+docker compose up -d --force-recreate finance-app
+```
+
+Until Issue #187 this could not self-heal: the Finances seed was skipped whenever the database held any accounts or transactions, so a populated database never received a reference row added later. That is why production ended up permanently missing `transaction_types` id 12 (`Opening Balance`) — the row the opening-balance path writes on every account created with an initial balance.
+
+Two cases the re-run does *not* cover:
+
+- **A renamed row.** The seed is `ON CONFLICT DO NOTHING`, so it will not rename a row back. Rename it in the UI, or `UPDATE` it to the name in [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts).
+- **`transaction_categories` id 6 `"Other"`.** It is health-checked but deliberately not in `shared-lookups.sql` — categories are user-created in `Finances`. A brand-new empty `Finances` therefore trips the drift check until that category exists. Tracked in Issue #178.
+
+If you need to repair a database you cannot restart the stack for, the seed's own statement is safe to run by hand:
+
+```sql
+INSERT INTO transaction_types (transaction_type_id, transaction_type)
+OVERRIDING SYSTEM VALUE VALUES (12, 'Opening Balance')
+ON CONFLICT (transaction_type_id) DO NOTHING;
+
+SELECT setval(pg_get_serial_sequence('transaction_types', 'transaction_type_id'),
+              GREATEST((SELECT MAX(transaction_type_id) FROM transaction_types), 1));
+```
+
+### Editing the shared seed
+
+Because `shared-lookups.sql` is now applied to the live database unconditionally, its idempotency is load-bearing. Every statement in it must be additive and safe to re-run: `INSERT … ON CONFLICT DO NOTHING`, `SELECT setval(…)`, `UPDATE … WHERE <guard>` — no `DELETE`, `TRUNCATE`, `DROP`, `ALTER`, `ON CONFLICT DO UPDATE`, or unguarded `UPDATE`. `npm run check:seed-references` enforces that list on every PR, and CI additionally proves the behaviour end-to-end against a populated throwaway database (the "Reference backfill gate").
 
 ## Roles & Privileges
 
@@ -121,7 +161,7 @@ Metabase stores its analytics connections in its own metadata database, not in e
 
 | File | Purpose |
 |---|---|
-| `shared-lookups.sql` | 6 account type categories + 12 transaction types (runs against both DBs) |
+| `shared-lookups.sql` | 6 account type categories + 12 transaction types, plus `account_types.liquidity_class` defaults for the known asset type names (runs against both DBs, on every migrate run) |
 | `finances-test-mock-data.sql` | 19 account types, 27 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
 | `rebuild-balance-history.sql` | Mirrors `scripts/update-account-balance-history.sql`, runs against `Finances_Test` at seed time |
 

@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SeedReferenceGroup } from "@/lib/constants/reference-ids";
 import {
   parseSeedRows,
   findSeedReferenceMismatches,
+  findUnsafeSeedStatements,
   TABLES_ALLOWED_ABSENT,
 } from "@/scripts/seed-reference-check";
 
@@ -99,5 +103,109 @@ ON CONFLICT (account_type_category_id) DO NOTHING;`;
     expect(findSeedReferenceMismatches(refs, seedWithoutTxTypes)).toEqual([
       { table: "transaction_types", id: null, expected: null, actual: null, reason: "missing-table" },
     ]);
+  });
+});
+
+// The seed is applied to the live Finances database on every migrate run
+// (issue #187), so these rules are what stands between an edit to that file and
+// real user data.
+describe("findUnsafeSeedStatements", () => {
+  const reasons = (sql: string) => findUnsafeSeedStatements(sql).map((u) => u.reason);
+
+  it("accepts the representative slice: DO NOTHING inserts, setval, guarded UPDATE", () => {
+    expect(findUnsafeSeedStatements(SEED)).toEqual([]);
+  });
+
+  it("accepts the shipped shared-lookups.sql", () => {
+    // The fixture above is a slice; this is the file the migrate service runs.
+    const seedPath = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../../init-db/seeds/shared-lookups.sql",
+    );
+    expect(findUnsafeSeedStatements(readFileSync(seedPath, "utf8"))).toEqual([]);
+  });
+
+  it("flags ON CONFLICT DO UPDATE — it overwrites a row the user may have edited", () => {
+    const sql = `
+INSERT INTO transaction_types (transaction_type_id, transaction_type)
+OVERRIDING SYSTEM VALUE VALUES (12, 'Opening Balance')
+ON CONFLICT (transaction_type_id) DO UPDATE
+  SET transaction_type = EXCLUDED.transaction_type;`;
+    expect(findUnsafeSeedStatements(sql)).toEqual([
+      {
+        reason: "conflict-not-do-nothing",
+        table: "transaction_types",
+        snippet: expect.stringContaining("INSERT INTO transaction_types"),
+      },
+    ]);
+  });
+
+  it("flags an INSERT with no ON CONFLICT — it aborts the migrate job on re-run", () => {
+    const sql = `INSERT INTO transaction_types (transaction_type_id, transaction_type)
+      VALUES (13, 'Adjustment');`;
+    expect(reasons(sql)).toEqual(["insert-without-on-conflict"]);
+  });
+
+  it("flags an UPDATE with no WHERE clause", () => {
+    expect(reasons(`UPDATE account_types SET liquidity_class = 'liquid';`)).toEqual([
+      "unguarded-update",
+    ]);
+  });
+
+  it("flags DELETE, TRUNCATE, DROP and ALTER", () => {
+    const sql = `
+DELETE FROM transaction_types WHERE transaction_type_id = 12;
+TRUNCATE account_type_categories;
+DROP TABLE transaction_types;
+ALTER TABLE account_types ADD COLUMN foo text;`;
+    expect(reasons(sql)).toEqual([
+      "destructive-statement",
+      "destructive-statement",
+      "destructive-statement",
+      "destructive-statement",
+    ]);
+  });
+
+  it("does not flag prose in comments that names the forbidden keywords", () => {
+    // This file's own header lists DELETE / TRUNCATE / DO UPDATE as forbidden.
+    const sql = `
+-- Never add a DELETE, a TRUNCATE, or an ON CONFLICT DO UPDATE here.
+/* DROP TABLE and ALTER TABLE are likewise out. */
+INSERT INTO transaction_types (transaction_type_id, transaction_type)
+VALUES (12, 'Opening Balance') ON CONFLICT (transaction_type_id) DO NOTHING;`;
+    expect(findUnsafeSeedStatements(sql)).toEqual([]);
+  });
+
+  it("does not flag a seeded value that happens to contain a forbidden keyword", () => {
+    const sql = `INSERT INTO transaction_categories (transaction_category_id, transaction_category)
+VALUES (99, 'Delete') ON CONFLICT (transaction_category_id) DO NOTHING;`;
+    expect(findUnsafeSeedStatements(sql)).toEqual([]);
+  });
+
+  it("does not flag SELECT setval", () => {
+    const sql = `SELECT setval(pg_get_serial_sequence('transaction_types', 'transaction_type_id'), 12);`;
+    expect(findUnsafeSeedStatements(sql)).toEqual([]);
+  });
+
+  it("reports every violation in a file, not just the first", () => {
+    const sql = `
+INSERT INTO a (id, name) VALUES (1, 'x') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+UPDATE b SET c = 1;
+DELETE FROM d WHERE id = 1;`;
+    expect(reasons(sql).sort()).toEqual([
+      "conflict-not-do-nothing",
+      "destructive-statement",
+      "unguarded-update",
+    ]);
+  });
+
+  it("truncates a long statement in the snippet so CI output stays readable", () => {
+    // Long in structure, not in literals — literals are scrubbed to '' before
+    // the snippet is taken, so a long string would collapse rather than truncate.
+    const assignments = Array.from({ length: 40 }, (_, i) => `col_${i} = ${i}`).join(", ");
+    const [violation] = findUnsafeSeedStatements(`UPDATE account_types SET ${assignments};`);
+    expect(violation.reason).toBe("unguarded-update");
+    expect(violation.snippet.length).toBeLessThanOrEqual(80);
+    expect(violation.snippet.endsWith("...")).toBe(true);
   });
 });
