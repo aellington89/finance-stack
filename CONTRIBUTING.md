@@ -61,8 +61,21 @@ file — ship a follow-on migration instead).
 
 ### Seed-reference gate
 
-Fails if any entry in `app/lib/constants/reference-ids.ts` (`SEED_REFERENCES`
-table/id/name tuples) doesn't match a row in `init-db/seeds/shared-lookups.sql`.
+Two assertions over `init-db/seeds/shared-lookups.sql`:
+
+1. Every entry in `app/lib/constants/reference-ids.ts` (`SEED_REFERENCES`
+   table/id/name tuples) matches a row in the seed.
+2. Every statement in the seed is additive and safe to re-run — `INSERT … ON
+   CONFLICT DO NOTHING`, `SELECT setval(…)`, `UPDATE … WHERE <guard>`. No
+   `DELETE`, `TRUNCATE`, `DROP`, `ALTER`, `ON CONFLICT DO UPDATE`, or unguarded
+   `UPDATE`.
+
+The second exists because the migrate service applies that file to the **live
+`Finances` database on every run**, not just to an empty one (Issue #187) — so
+anything destructive added there reaches real user data on the next
+`docker compose up`. CI pairs this static check with a behavioural **reference
+backfill gate** that drops a canonical row from a populated throwaway database,
+re-applies the seed, and asserts the row returns with user data untouched.
 
 **Fix:** run locally, then keep the two files in sync:
 
