@@ -17,11 +17,21 @@
 # tables, so it can only run after step 1 has created them.
 #
 # Then it applies seed files from /seeds/ (mounted from init-db/seeds):
-#   - Finances:      shared-lookups.sql, but ONLY if the DB has no
-#                    user data (row-count guard preserves real data).
+#   - Finances:      shared-lookups.sql, unconditionally.
 #   - Finances_Test: shared-lookups.sql + finances-test-mock-data.sql
 #                    + rebuild-balance-history.sql. All three files are
 #                    idempotent via ON CONFLICT DO NOTHING.
+#
+# The Finances seed used to be skipped whenever the DB held any accounts or
+# transactions, so a populated database never received a reference row added to
+# shared-lookups.sql after it was first seeded — which is how production ended
+# up permanently missing transaction_types id=12 "Opening Balance" and 503ing
+# the /api/health drift check. The guard was never what protected user data:
+# shared-lookups.sql is purely additive (ON CONFLICT DO NOTHING, setval, and
+# UPDATEs guarded by `WHERE liquidity_class IS NULL`), so applying it to a
+# populated database is a no-op for everything the user owns. That contract is
+# now enforced by `npm run check:seed-references` rather than by skipping the
+# file — see the header of shared-lookups.sql before editing it (issue #187).
 #
 # Required env vars (set by docker-compose.yml):
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD, FINANCE_APP_DB
@@ -99,17 +109,11 @@ for db in "${FINANCE_APP_DB}" "${TEST_DB}"; do
     apply_grants "${db}"
 done
 
-# --- Finances: additive lookup seed, only when the DB is empty.
-FINANCES_TXN_COUNT=$(psql -tAc 'SELECT count(*) FROM transactions' -d "${FINANCE_APP_DB}" 2>/dev/null || echo "")
-FINANCES_ACCT_COUNT=$(psql -tAc 'SELECT count(*) FROM accounts' -d "${FINANCE_APP_DB}" 2>/dev/null || echo "")
-
-if [ "${FINANCES_TXN_COUNT:-0}" = "0" ] && [ "${FINANCES_ACCT_COUNT:-0}" = "0" ]; then
-    echo ">>> Seeding shared lookups into ${FINANCE_APP_DB}..."
-    psql -v ON_ERROR_STOP=1 -d "${FINANCE_APP_DB}" -f /seeds/shared-lookups.sql
-else
-    echo ">>> Skipping ${FINANCE_APP_DB} seed: DB already contains user data" \
-         "(accounts=${FINANCES_ACCT_COUNT}, transactions=${FINANCES_TXN_COUNT})."
-fi
+# --- Finances: additive lookup seed, applied whether or not the DB holds user
+# data. Backfills canonical reference rows added since this DB was first seeded
+# (issue #187); a no-op when they are all already present.
+echo ">>> Seeding shared lookups into ${FINANCE_APP_DB}..."
+psql -v ON_ERROR_STOP=1 -d "${FINANCE_APP_DB}" -f /seeds/shared-lookups.sql
 
 # --- Finances_Test: full reset-style seed (idempotent).
 echo ">>> Seeding shared lookups into ${TEST_DB}..."

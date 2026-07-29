@@ -5,13 +5,25 @@
 --   - account_type_categories (6 rows)
 --   - transaction_types (12 rows)
 --
--- Purely additive: ON CONFLICT DO NOTHING ensures existing rows are never
--- overwritten, so this file is safe to run against a populated Finances DB.
--- (The init shell script also guards the Finances call behind a row-count
--- check; this is the last line of defense.)
+-- CONTRACT (issue #187): this file is applied UNCONDITIONALLY to the live
+-- Finances database on every migrate run — there is no longer a row-count guard
+-- in front of it, because that guard is what left production permanently
+-- missing transaction_types id=12. Its own idempotency is therefore the only
+-- thing standing between an edit here and real user data. Every statement must
+-- be additive and safe to re-run against a populated database:
+--
+--   * INSERT ... ON CONFLICT DO NOTHING   -- never DO UPDATE: that overwrites
+--   * SELECT setval(...)
+--   * UPDATE ... WHERE <guard>            -- never unconditional
+--   * no DELETE, TRUNCATE, DROP or ALTER
+--
+-- `npm run check:seed-references` enforces exactly that list, so a violation
+-- fails CI rather than production.
 --
 -- Finances_Test drift is corrected at test-suite startup by
--- app/tests/integration/vitest-setup.ts, which uses DO UPDATE.
+-- app/tests/integration/vitest-setup.ts, which uses DO UPDATE. That is safe
+-- there and would not be here — Finances_Test holds fixtures, Finances holds
+-- the user's records.
 -- ==============================================
 
 INSERT INTO account_type_categories (account_type_category_id, account_type_category)
@@ -61,22 +73,41 @@ SELECT setval(
 -- liquidity_class default. Idempotent: WHERE liquidity_class IS NULL
 -- so user overrides are never clobbered. Liabilities intentionally
 -- remain NULL.
+--
+-- Each statement is additionally scoped to the four ASSET categories
+-- (1 Current Asset, 2 Restricted Asset, 3 Fixed Asset, 4 Investment) — the
+-- same set as ASSET_CATEGORY_IDS in app/lib/queries/assets-drilldown.ts.
+-- Matching on account_type alone would classify a liability that happens to
+-- share one of these names, e.g. a user-created 'Earmarked' filed under
+-- Current Liability. That is inert today (getLiquidityBreakdown and
+-- getAssetTrendDecomposition both filter to the asset categories before
+-- reading liquidity_class, and no liability query reads the column at all),
+-- but the guard keeps "liabilities remain NULL" true by construction rather
+-- than by the naming convention holding (issue #187).
+--
+-- Note liquidity_class does NOT decide asset vs. liability anywhere — that is
+-- account_type_category_id alone. Setting it can never move an account
+-- between the two.
 -- ==============================================
 
 UPDATE account_types SET liquidity_class = 'liquid'
-    WHERE liquidity_class IS NULL AND account_type IN (
+    WHERE liquidity_class IS NULL AND account_type_category_id IN (1,2,3,4)
+      AND account_type IN (
         'Cash & Cash Equivalent','Accounts Receivable',
         'Checking Account','Savings Account');
 
 UPDATE account_types SET liquidity_class = 'semi_liquid'
-    WHERE liquidity_class IS NULL AND account_type IN (
+    WHERE liquidity_class IS NULL AND account_type_category_id IN (1,2,3,4)
+      AND account_type IN (
         'Short-term Investment','Stock, Bond, or Mutual Fund',
         'Cryptocurrency','Certificate of Deposit');
 
 UPDATE account_types SET liquidity_class = 'illiquid'
-    WHERE liquidity_class IS NULL AND account_type IN (
+    WHERE liquidity_class IS NULL AND account_type_category_id IN (1,2,3,4)
+      AND account_type IN (
         'Real Estate','Vehicle','Retirement Account');
 
 UPDATE account_types SET liquidity_class = 'restricted'
-    WHERE liquidity_class IS NULL AND account_type IN (
+    WHERE liquidity_class IS NULL AND account_type_category_id IN (1,2,3,4)
+      AND account_type IN (
         'Escrow Account','Security Deposit','Earmarked');

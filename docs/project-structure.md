@@ -77,7 +77,7 @@ finance-stack/
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
 │   ├── scripts/
 │   │   ├── migrate-and-seed.sh           # Entrypoint for the `migrate` Compose service (drizzle-kit migrate + seed)
-│   │   ├── check-seed-references.ts       # CI gate: SEED_REFERENCES (id, name) must match shared-lookups.sql (#155)
+│   │   ├── check-seed-references.ts       # CI gate: SEED_REFERENCES (id, name) must match shared-lookups.sql (#155), which must stay additive (#187)
 │   │   ├── create-user.ts                 # First-user CLI / password reset (npm run auth:create-user -- <username>)
 │   │   └── seed-reference-check.ts        # Pure parse + diff helpers backing the gate (unit-tested)
 │   ├── hooks/
@@ -201,7 +201,7 @@ finance-stack/
 │   │   ├── 02-grants.sql                 # Per-database grant matrix; revokes then grants, so it converges
 │   │   └── assert-grants.sql             # Catalog assertions for the matrix — the CI grant gate
 │   └── seeds/                            # Applied by the `migrate` Compose service after migrations
-│       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs)
+│       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs, every run — must stay additive, #187)
 │       ├── finances-test-mock-data.sql   # account_types, transaction_categories, accounts, ~400 txns (Finances_Test only)
 │       └── rebuild-balance-history.sql   # Balance history rebuild for Finances_Test post-seed
 └── scripts/
