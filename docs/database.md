@@ -13,6 +13,8 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `transaction_categories` | Expense/income categories (e.g. Groceries, Salary, Rent) |
 | `transaction_types` | Transaction classifications (e.g. Debit, Credit, Transfer) |
 | `account_balance_history` | Daily cumulative balance snapshots per account |
+| `users` | Sign-in accounts (see [Authentication](auth.md)) |
+| `audit_log` | Who changed what, with before/after row state. Written **only** by a database trigger, never by the app — see [Audit Log](audit-log.md) |
 
 ## Views
 
@@ -21,6 +23,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `v_transactions_full` | Fully joined transaction view with account names, types, categories, and related account info |
 | `v_account_balances_current` | Current balance per account with full classification hierarchy (type, category) |
 | `v_daily_totals` | Daily transaction totals grouped by transaction type (for income/expense line charts) |
+| `v_audit_log` | The audit trail, flattened for reading. The only audit object `finance_metabase` can reach |
 
 ## Balance History
 
@@ -93,9 +96,9 @@ The long-running services do **not** connect as the `postgres` superuser (Issue 
 
 | Role | Used by | Privileges |
 |---|---|---|
-| `finance_app` | `finance-app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table **except `users`, which is `SELECT`-only**; `SELECT` on the views; `USAGE` on the sequences |
+| `finance_app` | `finance-app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table **except `users` and `audit_log`, which are `SELECT`-only**; `SELECT` on the views; `USAGE` on the sequences |
 | `finance_importer` | `importer` | `SELECT` + `INSERT` on `transactions`; `SELECT` on `accounts`, `transaction_categories`, `transaction_types`. No `UPDATE`, no `DELETE` |
-| `finance_metabase` | Metabase's Finances connection | `SELECT` on the three views. **No privilege on any base table** |
+| `finance_metabase` | Metabase's Finances connection | `SELECT` on the four views. **No privilege on any base table** |
 
 None of them is a superuser, none can create databases or roles, and none has `CREATE` on schema `public` — so no service can add, alter, drop, or truncate a table, and none can reach the `drizzle` migration ledger. Tables stay owned by `POSTGRES_USER`, which is what makes that true.
 
@@ -103,8 +106,8 @@ The superuser is still used, deliberately, by the jobs that need DDL or cluster-
 
 Two details worth knowing before you change any of this:
 
-- **`finance_metabase` works without base-table access** because the three views are created without `security_invoker`, so they execute with the view *owner's* rights. `SELECT` on the view is sufficient, and the underlying tables stay invisible in Metabase's data browser. Add `security_invoker` to a view and this role stops being able to read it.
-- **`finance_app` is granted broadly and then revoked** (`GRANT … ON ALL TABLES`, then `REVOKE … ON users`) plus `ALTER DEFAULT PRIVILEGES`, so a table added by a future migration is covered automatically. The two narrow roles are enumerated instead — if a migration adds a table or view they need, [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) must be updated by hand.
+- **`finance_metabase` works without base-table access** because the four views are created without `security_invoker`, so they execute with the view *owner's* rights. `SELECT` on the view is sufficient, and the underlying tables stay invisible in Metabase's data browser. Add `security_invoker` to a view and this role stops being able to read it.
+- **`finance_app` is granted broadly and then revoked** (`GRANT … ON ALL TABLES`, then `REVOKE … ON users` and `REVOKE … ON audit_log`) plus `ALTER DEFAULT PRIVILEGES`, so a table added by a future migration is covered automatically. The `audit_log` revoke is what makes the audit trail worth having: the app still *causes* audit rows, because the trigger that writes them is `SECURITY DEFINER` and runs with the table owner's rights, but it cannot forge or delete one ([Audit Log](audit-log.md)). The two narrow roles are enumerated instead — if a migration adds a table or view they need, [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) must be updated by hand.
 
 ### How the roles are applied
 

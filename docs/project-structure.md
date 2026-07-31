@@ -72,6 +72,7 @@ finance-stack/
 │   │   └── migrations/                   # Authored migrations (versioned, applied by drizzle-kit migrate)
 │   │       ├── 0000_baseline.sql         # Baseline matching current prod schema
 │   │       ├── 0003_add_users_table.sql  # users table for authentication (#120)
+│   │       ├── 0004_add_audit_log.sql    # audit_log + the audit_row_change() trigger, hand-appended (#180)
 │   │       └── meta/                     # Drizzle migration journal and snapshots
 │   │           ├── _journal.json         # Ordered list of applied migrations (idx, tag, breakpoints)
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
@@ -139,6 +140,7 @@ finance-stack/
 │   ├── lib/                              # Shared libraries
 │   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health drift check
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
+│   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
 │   │   ├── auth/verify-credentials.ts    # Username/password check against the users table
 │   │   ├── auth/guard.ts                 # requireActionUser() — session gate at the top of every server action
@@ -177,11 +179,12 @@ finance-stack/
 │   │   │       ├── utils.test.ts         #     cn() class-merge helper
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
+│   │   │       ├── db/                   #     auditedTransaction() actor plumbing
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session)
-│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating)
+│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, audit trail)
 │   │       ├── auth/                     #   Credential verification against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
 │   │       └── queries/                  #   Query function tests (accounting, rebuild-balance, drilldowns)

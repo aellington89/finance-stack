@@ -1,4 +1,4 @@
-import { pgTable, index, foreignKey, serial, text, date, integer, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, index, foreignKey, serial, text, date, integer, bigint, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -98,6 +98,37 @@ export const users = pgTable("users", {
 	check("users_username_not_blank", sql`username <> ''`),
 ]);
 
+// Written only by the audit_row_change() trigger installed in migration
+// 0004_add_audit_log.sql — never by the application. finance_app holds SELECT
+// and nothing else (init-db/roles/02-grants.sql), which is what stops a
+// compromised app from forging entries or erasing its own tracks. See
+// docs/audit-log.md before changing anything here (issue #180).
+export const auditLog = pgTable("audit_log", {
+	auditId: bigint("audit_id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+	occurredAt: timestamp("occurred_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	// No FK to users: the log has to survive the deletion of the user it names,
+	// and actor_label is the human-readable snapshot taken at write time.
+	actorUserId: uuid("actor_user_id"),
+	actorLabel: text("actor_label").notNull(),
+	actorSource: text("actor_source").notNull(),
+	action: text().notNull(),
+	tableName: text("table_name").notNull(),
+	rowPk: text("row_pk").notNull(),
+	beforeData: jsonb("before_data"),
+	afterData: jsonb("after_data"),
+	changedColumns: text("changed_columns").array(),
+}, (table) => [
+	// Both are declared ascending even though every query here reads newest-first:
+	// a btree serves ORDER BY ... DESC by scanning backwards, and on the composite
+	// index the leading table_name/row_pk equality makes that scan a plain range
+	// walk. Keeping them ASC avoids a schema.ts that claims a direction
+	// drizzle-kit does not emit into the migration SQL.
+	index("idx_audit_log_occurred_at").using("btree", table.occurredAt.asc().nullsLast().op("timestamptz_ops")),
+	index("idx_audit_log_table_row").using("btree", table.tableName.asc().nullsLast().op("text_ops"), table.rowPk.asc().nullsLast().op("text_ops"), table.occurredAt.asc().nullsLast().op("timestamptz_ops")),
+	check("audit_log_action_check", sql`action = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])`),
+	check("audit_log_actor_source_check", sql`actor_source = ANY (ARRAY['app'::text, 'database'::text])`),
+]);
+
 export const accountBalanceHistory = pgTable("account_balance_history", {
 	accountId: integer("account_id").notNull(),
 	balanceDate: date("balance_date").notNull(),
@@ -143,3 +174,19 @@ export const vDailyTotals = pgView("v_daily_totals", {	transactionDate: date("tr
 	transactionType: text("transaction_type"),
 	dailyTotal: numeric("daily_total"),
 }).as(sql`SELECT t.transaction_date, tt.transaction_type, sum(t.amount) AS daily_total FROM transactions t JOIN transaction_types tt USING (transaction_type_id) GROUP BY t.transaction_date, tt.transaction_type`);
+
+// The read surface for the audit log. Like the three views above it is created
+// without security_invoker, so it runs with the view owner's rights — which is
+// how finance_metabase reads it while holding no privilege on audit_log itself.
+export const vAuditLog = pgView("v_audit_log", {	auditId: bigint("audit_id", { mode: "number" }),
+	occurredAt: timestamp("occurred_at", { withTimezone: true, mode: 'string' }),
+	actorUserId: uuid("actor_user_id"),
+	actorLabel: text("actor_label"),
+	actorSource: text("actor_source"),
+	action: text(),
+	tableName: text("table_name"),
+	rowPk: text("row_pk"),
+	changedColumns: text("changed_columns").array(),
+	beforeData: jsonb("before_data"),
+	afterData: jsonb("after_data"),
+}).as(sql`SELECT audit_id, occurred_at, actor_user_id, actor_label, actor_source, action, table_name, row_pk, changed_columns, before_data, after_data FROM audit_log`);

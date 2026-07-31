@@ -90,8 +90,22 @@ BEGIN
         END IF;
     END LOOP;
 
+    -- audit_log is read-only to the app for the same reason, and that is what
+    -- makes the trail trustworthy (Issue #180). The app still causes audit rows
+    -- via the SECURITY DEFINER trigger, which needs no privilege of its own.
+    IF NOT has_table_privilege('finance_app', 'audit_log', 'SELECT') THEN
+        failures := failures || 'finance_app cannot SELECT audit_log';
+    END IF;
+    FOREACH t IN ARRAY ARRAY['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']
+    LOOP
+        IF has_table_privilege('finance_app', 'audit_log', t) THEN
+            failures := failures || format('finance_app can %s audit_log', t);
+        END IF;
+    END LOOP;
+
     -- Views readable; serial sequences usable but not resettable (no setval).
-    FOREACH t IN ARRAY ARRAY['v_transactions_full', 'v_account_balances_current', 'v_daily_totals']
+    FOREACH t IN ARRAY ARRAY['v_transactions_full', 'v_account_balances_current',
+                             'v_daily_totals', 'v_audit_log']
     LOOP
         IF NOT has_table_privilege('finance_app', t, 'SELECT') THEN
             failures := failures || format('finance_app cannot SELECT %s', t);
@@ -125,8 +139,8 @@ BEGIN
             failures := failures || format('finance_importer can INSERT %s', t);
         END IF;
     END LOOP;
-    FOREACH t IN ARRAY ARRAY['users', 'account_balance_history', 'account_types',
-                             'v_transactions_full']
+    FOREACH t IN ARRAY ARRAY['users', 'audit_log', 'account_balance_history',
+                             'account_types', 'v_transactions_full']
     LOOP
         IF has_table_privilege('finance_importer', t, 'SELECT') THEN
             failures := failures || format('finance_importer can SELECT %s', t);
@@ -139,8 +153,9 @@ BEGIN
         failures := failures || 'finance_importer has USAGE on the accounts sequence';
     END IF;
 
-    -- ── finance_metabase: the three views, nothing else ───────────────────
-    FOREACH t IN ARRAY ARRAY['v_transactions_full', 'v_account_balances_current', 'v_daily_totals']
+    -- ── finance_metabase: the four views, nothing else ────────────────────
+    FOREACH t IN ARRAY ARRAY['v_transactions_full', 'v_account_balances_current',
+                             'v_daily_totals', 'v_audit_log']
     LOOP
         IF NOT has_table_privilege('finance_metabase', t, 'SELECT') THEN
             failures := failures || format('finance_metabase cannot SELECT %s', t);
@@ -151,7 +166,8 @@ BEGIN
     END LOOP;
     FOREACH t IN ARRAY ARRAY['transactions', 'accounts', 'account_types',
                              'account_type_categories', 'transaction_categories',
-                             'transaction_types', 'account_balance_history', 'users']
+                             'transaction_types', 'account_balance_history', 'users',
+                             'audit_log']
     LOOP
         IF has_table_privilege('finance_metabase', t, 'SELECT') THEN
             failures := failures || format('finance_metabase can SELECT base table %s', t);

@@ -16,11 +16,12 @@
 --
 -- The grant matrix (see docs/database.md):
 --
---   finance_app       DML on every public table except users (SELECT only),
---                     SELECT on the views, USAGE on the sequences.
+--   finance_app       DML on every public table except users and audit_log
+--                     (SELECT only on both), SELECT on the views, USAGE on the
+--                     sequences.
 --   finance_importer  SELECT+INSERT on transactions, SELECT on the three lookup
 --                     tables it resolves FKs against, and nothing else.
---   finance_metabase  SELECT on the three views. No base-table access at all.
+--   finance_metabase  SELECT on the four views. No base-table access at all.
 --
 -- Table ownership stays with OWNER, so no service role can ALTER or DROP the
 -- schema, TRUNCATE a table, or touch the `drizzle` migration ledger.
@@ -68,6 +69,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO finance_a
 -- POSTGRES_USER. So an app-level injection or RCE cannot mint an admin user.
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON users FROM finance_app;
 
+-- audit_log is read-only to the app for the same reason, and this is what gives
+-- the audit trail its value (Issue #180). The app still *causes* audit rows:
+-- audit_row_change() is SECURITY DEFINER and owned by OWNER, so the trigger
+-- inserts with the owner's rights, not the app's. An app-level compromise can
+-- therefore neither forge an entry nor delete one covering its tracks. SELECT is
+-- kept so a future reader UI needs no grant change.
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON audit_log FROM finance_app;
+
 -- accounts.account_id and transactions.transaction_id are `serial`, so INSERT
 -- needs USAGE on their sequences. USAGE+SELECT permits nextval/currval but not
 -- setval — the lookup tables' GENERATED ALWAYS AS IDENTITY sequences need no
@@ -110,7 +119,8 @@ SELECT format('GRANT USAGE, SELECT ON SEQUENCE %s TO finance_importer',
 -- A new view added by a future migration must be added here explicitly.
 GRANT CONNECT ON DATABASE :"DBNAME" TO finance_metabase;
 GRANT USAGE ON SCHEMA public TO finance_metabase;
-GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals
+GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals,
+    v_audit_log
     TO finance_metabase;
 
 COMMIT;
