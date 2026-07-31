@@ -102,15 +102,25 @@ INSERT_TXN="INSERT INTO transactions
 
 READ_VIEWS="SELECT (SELECT count(*) FROM v_transactions_full)
                  + (SELECT count(*) FROM v_account_balances_current)
-                 + (SELECT count(*) FROM v_daily_totals)"
+                 + (SELECT count(*) FROM v_daily_totals)
+                 + (SELECT count(*) FROM v_audit_log)"
 
 # ── finance_app — DML on the core tables, read-only on users, no DDL ──────
+# The "INSERT a transaction" case now carries a second meaning (Issue #180): it
+# fires the audit_transactions trigger, and finance_app holds no INSERT on
+# audit_log. It passes only because audit_row_change() is SECURITY DEFINER, so a
+# regression that dropped that keyword would surface here as a 42501, not as a
+# silently missing audit trail.
 expect finance_app "$FINANCE_APP_DB_PASSWORD" allow "INSERT a transaction"     "BEGIN; ${INSERT_TXN}; ROLLBACK"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" allow "DELETE balance history"   "BEGIN; DELETE FROM account_balance_history; ROLLBACK"
-expect finance_app "$FINANCE_APP_DB_PASSWORD" allow "SELECT the three views"   "$READ_VIEWS"
+expect finance_app "$FINANCE_APP_DB_PASSWORD" allow "SELECT the four views"    "$READ_VIEWS"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" allow "SELECT users"             "SELECT count(*) FROM users"
+expect finance_app "$FINANCE_APP_DB_PASSWORD" allow "SELECT audit_log"         "SELECT count(*) FROM audit_log"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "INSERT a user"            "BEGIN; INSERT INTO users (username, password_hash) VALUES ('smoke','x'); ROLLBACK"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "UPDATE users"             "BEGIN; UPDATE users SET role = 'admin'; ROLLBACK"
+expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "forge an audit row"       "BEGIN; INSERT INTO audit_log (actor_label, actor_source, action, table_name, row_pk) VALUES ('smoke','app','INSERT','transactions','1'); ROLLBACK"
+expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "erase audit rows"         "BEGIN; DELETE FROM audit_log; ROLLBACK"
+expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "rewrite an audit row"     "BEGIN; UPDATE audit_log SET actor_label = 'smoke'; ROLLBACK"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "TRUNCATE transactions"    "BEGIN; TRUNCATE transactions CASCADE; ROLLBACK"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "CREATE TABLE"             "CREATE TABLE privilege_smoke_escalation (id int)"
 expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "DROP TABLE transactions"  "BEGIN; DROP TABLE transactions CASCADE; ROLLBACK"
@@ -124,12 +134,14 @@ expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "SELECT the lookup
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "UPDATE transactions"  "BEGIN; UPDATE transactions SET amount = 0; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "DELETE transactions"  "BEGIN; DELETE FROM transactions; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT users"         "SELECT count(*) FROM users"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT audit_log"     "SELECT count(*) FROM audit_log"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT a view"        "SELECT count(*) FROM v_transactions_full"
 
-# ── finance_metabase — the three views and nothing else ──────────────────
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" allow "SELECT the three views"       "$READ_VIEWS"
+# ── finance_metabase — the four views and nothing else ───────────────────
+expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" allow "SELECT the four views"        "$READ_VIEWS"
 expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table transactions" "SELECT count(*) FROM transactions"
 expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table accounts"     "SELECT count(*) FROM accounts"
+expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table audit_log"    "SELECT count(*) FROM audit_log"
 expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT users"                   "SELECT count(*) FROM users"
 expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "INSERT a transaction"           "BEGIN; ${INSERT_TXN}; ROLLBACK"
 

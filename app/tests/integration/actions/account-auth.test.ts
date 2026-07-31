@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import type { Mock } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { accounts } from "@/drizzle/schema";
+import { accounts, auditLog } from "@/drizzle/schema";
 import { auth } from "@/auth";
 import { createAccount } from "@/lib/actions/account";
 
@@ -23,6 +23,14 @@ function makeFormData(fields: Record<string, string>): FormData {
 
 afterEach(async () => {
   await db.delete(accounts).where(eq(accounts.accountName, ACCOUNT_NAME));
+  await db
+    .delete(auditLog)
+    .where(
+      and(
+        eq(auditLog.tableName, "accounts"),
+        sql`coalesce(${auditLog.afterData}, ${auditLog.beforeData}) ->> 'account_name' = ${ACCOUNT_NAME}`
+      )
+    );
 });
 
 describe("server action auth gating (createAccount)", () => {
@@ -42,6 +50,19 @@ describe("server action auth gating (createAccount)", () => {
       .from(accounts)
       .where(eq(accounts.accountName, ACCOUNT_NAME));
     expect(rows).toHaveLength(0);
+
+    // The guard rejects before any DB work, so there is nothing for the audit
+    // trigger to fire on either (Issue #180).
+    const audits = await db
+      .select({ auditId: auditLog.auditId })
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.tableName, "accounts"),
+          sql`${auditLog.afterData} ->> 'account_name' = ${ACCOUNT_NAME}`
+        )
+      );
+    expect(audits).toHaveLength(0);
   });
 
   it("accepts an authenticated call and writes the row", async () => {

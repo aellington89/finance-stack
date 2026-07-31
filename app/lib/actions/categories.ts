@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { auditedTransaction } from "@/lib/db/audited";
 import {
   transactionCategories,
   transactionTypes,
@@ -15,6 +16,11 @@ import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categorie
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { requireActionUser } from "@/lib/auth/guard";
 
+// Every write below goes through auditedTransaction() even where it is a single
+// statement: that helper is what names the actor for the audit trigger, and a
+// bare db.insert/update/delete runs in an implicit transaction with nowhere to
+// set it (Issue #180). The `inUse` pre-checks stay outside — they are reads, and
+// holding the transaction open across them buys nothing.
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
   revalidatePath("/dashboard/transactions");
@@ -40,7 +46,9 @@ export async function createTransactionCategory(
   }
 
   try {
-    await db.insert(transactionCategories).values({ transactionCategory: result.data.name });
+    await auditedTransaction(async (tx) => {
+      await tx.insert(transactionCategories).values({ transactionCategory: result.data.name });
+    });
   } catch (error) {
     console.error("createTransactionCategory failed:", error);
     return { success: false, errors: {}, message: "Failed to create category. Please try again." };
@@ -66,10 +74,12 @@ export async function updateTransactionCategory(
   }
 
   try {
-    await db
-      .update(transactionCategories)
-      .set({ transactionCategory: result.data.name })
-      .where(eq(transactionCategories.transactionCategoryId, id));
+    await auditedTransaction(async (tx) => {
+      await tx
+        .update(transactionCategories)
+        .set({ transactionCategory: result.data.name })
+        .where(eq(transactionCategories.transactionCategoryId, id));
+    });
   } catch (error) {
     console.error("updateTransactionCategory failed:", error);
     return { success: false, errors: {}, message: "Failed to update category. Please try again." };
@@ -104,7 +114,9 @@ export async function deleteTransactionCategory(
   }
 
   try {
-    await db.delete(transactionCategories).where(eq(transactionCategories.transactionCategoryId, id));
+    await auditedTransaction(async (tx) => {
+      await tx.delete(transactionCategories).where(eq(transactionCategories.transactionCategoryId, id));
+    });
   } catch (error) {
     console.error("deleteTransactionCategory failed:", error);
     return { success: false, errors: {}, message: "Failed to delete category. Please try again." };
@@ -129,7 +141,9 @@ export async function createTransactionType(
   }
 
   try {
-    await db.insert(transactionTypes).values({ transactionType: result.data.name });
+    await auditedTransaction(async (tx) => {
+      await tx.insert(transactionTypes).values({ transactionType: result.data.name });
+    });
   } catch (error) {
     console.error("createTransactionType failed:", error);
     return { success: false, errors: {}, message: "Failed to create type. Please try again." };
@@ -155,10 +169,12 @@ export async function updateTransactionType(
   }
 
   try {
-    await db
-      .update(transactionTypes)
-      .set({ transactionType: result.data.name })
-      .where(eq(transactionTypes.transactionTypeId, id));
+    await auditedTransaction(async (tx) => {
+      await tx
+        .update(transactionTypes)
+        .set({ transactionType: result.data.name })
+        .where(eq(transactionTypes.transactionTypeId, id));
+    });
   } catch (error) {
     console.error("updateTransactionType failed:", error);
     return { success: false, errors: {}, message: "Failed to update type. Please try again." };
@@ -193,7 +209,9 @@ export async function deleteTransactionType(
   }
 
   try {
-    await db.delete(transactionTypes).where(eq(transactionTypes.transactionTypeId, id));
+    await auditedTransaction(async (tx) => {
+      await tx.delete(transactionTypes).where(eq(transactionTypes.transactionTypeId, id));
+    });
   } catch (error) {
     console.error("deleteTransactionType failed:", error);
     return { success: false, errors: {}, message: "Failed to delete type. Please try again." };
@@ -218,7 +236,9 @@ export async function createAccountTypeCategory(
   }
 
   try {
-    await db.insert(accountTypeCategories).values({ accountTypeCategory: result.data.name });
+    await auditedTransaction(async (tx) => {
+      await tx.insert(accountTypeCategories).values({ accountTypeCategory: result.data.name });
+    });
   } catch (error) {
     console.error("createAccountTypeCategory failed:", error);
     return { success: false, errors: {}, message: "Failed to create category. Please try again." };
@@ -244,10 +264,12 @@ export async function updateAccountTypeCategory(
   }
 
   try {
-    await db
-      .update(accountTypeCategories)
-      .set({ accountTypeCategory: result.data.name })
-      .where(eq(accountTypeCategories.accountTypeCategoryId, id));
+    await auditedTransaction(async (tx) => {
+      await tx
+        .update(accountTypeCategories)
+        .set({ accountTypeCategory: result.data.name })
+        .where(eq(accountTypeCategories.accountTypeCategoryId, id));
+    });
   } catch (error) {
     console.error("updateAccountTypeCategory failed:", error);
     return { success: false, errors: {}, message: "Failed to update category. Please try again." };
@@ -282,7 +304,9 @@ export async function deleteAccountTypeCategory(
   }
 
   try {
-    await db.delete(accountTypeCategories).where(eq(accountTypeCategories.accountTypeCategoryId, id));
+    await auditedTransaction(async (tx) => {
+      await tx.delete(accountTypeCategories).where(eq(accountTypeCategories.accountTypeCategoryId, id));
+    });
   } catch (error) {
     console.error("deleteAccountTypeCategory failed:", error);
     return { success: false, errors: {}, message: "Failed to delete category. Please try again." };
@@ -311,9 +335,11 @@ export async function createAccountType(
   }
 
   try {
-    await db.insert(accountTypes).values({
-      accountType: result.data.name,
-      accountTypeCategoryId: Number(result.data.accountTypeCategoryId),
+    await auditedTransaction(async (tx) => {
+      await tx.insert(accountTypes).values({
+        accountType: result.data.name,
+        accountTypeCategoryId: Number(result.data.accountTypeCategoryId),
+      });
     });
   } catch (error) {
     console.error("createAccountType failed:", error);
@@ -344,13 +370,15 @@ export async function updateAccountType(
   }
 
   try {
-    await db
-      .update(accountTypes)
-      .set({
-        accountType: result.data.name,
-        accountTypeCategoryId: Number(result.data.accountTypeCategoryId),
-      })
-      .where(eq(accountTypes.accountTypeId, id));
+    await auditedTransaction(async (tx) => {
+      await tx
+        .update(accountTypes)
+        .set({
+          accountType: result.data.name,
+          accountTypeCategoryId: Number(result.data.accountTypeCategoryId),
+        })
+        .where(eq(accountTypes.accountTypeId, id));
+    });
   } catch (error) {
     console.error("updateAccountType failed:", error);
     return { success: false, errors: {}, message: "Failed to update account type. Please try again." };
@@ -385,7 +413,9 @@ export async function deleteAccountType(
   }
 
   try {
-    await db.delete(accountTypes).where(eq(accountTypes.accountTypeId, id));
+    await auditedTransaction(async (tx) => {
+      await tx.delete(accountTypes).where(eq(accountTypes.accountTypeId, id));
+    });
   } catch (error) {
     console.error("deleteAccountType failed:", error);
     return { success: false, errors: {}, message: "Failed to delete account type. Please try again." };

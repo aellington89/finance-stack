@@ -42,6 +42,13 @@ List them with:
 ls -lt backups/
 ```
 
+A `Finances` dump includes `audit_log`, which is retained indefinitely and holds
+a full `jsonb` copy of every row before and after every change ([Audit
+Log](audit-log.md)). It is the one table here that grows without bound, so it is
+the first thing to look at if dump size becomes a problem — that guide has a
+pruning recipe. Restoring a dump is itself an unattributed write, and shows up in
+the restored log as whatever role ran it.
+
 ## Restoring
 
 `scripts/restore.sh` drops and recreates the target database, then applies the

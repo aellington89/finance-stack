@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { auditedTransaction } from "@/lib/db/audited";
 import { accounts, accountBalanceHistory, transactions } from "@/drizzle/schema";
 import { accountFormSchema } from "@/lib/validations/account";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
@@ -48,7 +49,7 @@ export async function createAccount(
   const data = result.data;
 
   try {
-    await db.transaction(async (tx) => {
+    await auditedTransaction(async (tx) => {
       const [inserted] = await tx
         .insert(accounts)
         .values({
@@ -127,17 +128,22 @@ export async function updateAccount(
   const data = result.data;
 
   try {
-    await db
-      .update(accounts)
-      .set({
-        accountName: data.accountName,
-        accountTypeId: Number(data.accountTypeId),
-        accountIdentifier: data.accountIdentifier || null,
-        openedDate: data.openedDate || null,
-        closedDate: data.closedDate || null,
-        liquidityClass: data.liquidityClass ?? null,
-      })
-      .where(eq(accounts.accountId, accountId));
+    // Wrapped despite being a single statement: auditedTransaction is what
+    // names the actor for the audit trigger, and a bare db.update() runs in an
+    // implicit transaction with nowhere to set it (Issue #180).
+    await auditedTransaction(async (tx) => {
+      await tx
+        .update(accounts)
+        .set({
+          accountName: data.accountName,
+          accountTypeId: Number(data.accountTypeId),
+          accountIdentifier: data.accountIdentifier || null,
+          openedDate: data.openedDate || null,
+          closedDate: data.closedDate || null,
+          liquidityClass: data.liquidityClass ?? null,
+        })
+        .where(eq(accounts.accountId, accountId));
+    });
   } catch (error) {
     console.error("Account update failed:", error);
     return {
@@ -190,7 +196,7 @@ export async function deleteAccount(
   }
 
   try {
-    await db.transaction(async (tx) => {
+    await auditedTransaction(async (tx) => {
       // Clean up any balance history rows
       await tx
         .delete(accountBalanceHistory)

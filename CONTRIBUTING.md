@@ -91,6 +91,12 @@ often tripped by a migration that adds a table or view the narrow
 `finance_importer` / `finance_metabase` roles need, since those grants are
 enumerated by hand (`finance_app` is covered automatically).
 
+A second way to trip it: bringing a table into the audit set
+([docs/audit-log.md](docs/audit-log.md)). The trigger itself needs no grant — it
+is `SECURITY DEFINER` — but a new *view* over the log does, and `audit_log` must
+stay `SELECT`-only for `finance_app` in both `02-grants.sql` and
+`assert-grants.sql` or the negative assertions fail.
+
 **Fix:** update `init-db/roles/02-grants.sql`, then verify against a running
 stack:
 

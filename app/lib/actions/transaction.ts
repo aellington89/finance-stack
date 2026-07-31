@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { auditedTransaction } from "@/lib/db/audited";
 import { transactions, accountBalanceHistory } from "@/drizzle/schema";
 import { transactionFormSchema } from "@/lib/validations/transaction";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
@@ -46,7 +46,7 @@ export async function submitTransaction(
     : null;
 
   try {
-    await db.transaction(async (tx) => {
+    await auditedTransaction(async (tx) => {
       await tx.insert(transactions).values({
         transactionDescription: data.transactionDescription,
         transactionDate: data.transactionDate,
@@ -118,7 +118,7 @@ export async function updateTransaction(
   let notFound = false;
 
   try {
-    await db.transaction(async (tx) => {
+    await auditedTransaction(async (tx) => {
       const [existing] = await tx
         .select({
           accountId: transactions.accountId,
@@ -197,7 +197,7 @@ export async function deleteTransaction(
   let notFound = false;
 
   try {
-    await db.transaction(async (tx) => {
+    await auditedTransaction(async (tx) => {
       const [existing] = await tx
         .select({
           accountId: transactions.accountId,
