@@ -14,6 +14,7 @@ import {
 import { eq } from "drizzle-orm";
 import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categories";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
+import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
 
 // Every write below goes through auditedTransaction() even where it is a single
@@ -50,8 +51,7 @@ export async function createTransactionCategory(
       await tx.insert(transactionCategories).values({ transactionCategory: result.data.name });
     });
   } catch (error) {
-    console.error("createTransactionCategory failed:", error);
-    return { success: false, errors: {}, message: "Failed to create category. Please try again." };
+    return actionFailure("createTransactionCategory", error, "Failed to create category. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -81,8 +81,7 @@ export async function updateTransactionCategory(
         .where(eq(transactionCategories.transactionCategoryId, id));
     });
   } catch (error) {
-    console.error("updateTransactionCategory failed:", error);
-    return { success: false, errors: {}, message: "Failed to update category. Please try again." };
+    return actionFailure("updateTransactionCategory", error, "Failed to update category. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -118,8 +117,7 @@ export async function deleteTransactionCategory(
       await tx.delete(transactionCategories).where(eq(transactionCategories.transactionCategoryId, id));
     });
   } catch (error) {
-    console.error("deleteTransactionCategory failed:", error);
-    return { success: false, errors: {}, message: "Failed to delete category. Please try again." };
+    return actionFailure("deleteTransactionCategory", error, "Failed to delete category. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -145,8 +143,7 @@ export async function createTransactionType(
       await tx.insert(transactionTypes).values({ transactionType: result.data.name });
     });
   } catch (error) {
-    console.error("createTransactionType failed:", error);
-    return { success: false, errors: {}, message: "Failed to create type. Please try again." };
+    return actionFailure("createTransactionType", error, "Failed to create type. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -176,8 +173,7 @@ export async function updateTransactionType(
         .where(eq(transactionTypes.transactionTypeId, id));
     });
   } catch (error) {
-    console.error("updateTransactionType failed:", error);
-    return { success: false, errors: {}, message: "Failed to update type. Please try again." };
+    return actionFailure("updateTransactionType", error, "Failed to update type. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -213,8 +209,7 @@ export async function deleteTransactionType(
       await tx.delete(transactionTypes).where(eq(transactionTypes.transactionTypeId, id));
     });
   } catch (error) {
-    console.error("deleteTransactionType failed:", error);
-    return { success: false, errors: {}, message: "Failed to delete type. Please try again." };
+    return actionFailure("deleteTransactionType", error, "Failed to delete type. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -240,8 +235,7 @@ export async function createAccountTypeCategory(
       await tx.insert(accountTypeCategories).values({ accountTypeCategory: result.data.name });
     });
   } catch (error) {
-    console.error("createAccountTypeCategory failed:", error);
-    return { success: false, errors: {}, message: "Failed to create category. Please try again." };
+    return actionFailure("createAccountTypeCategory", error, "Failed to create category. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -271,8 +265,7 @@ export async function updateAccountTypeCategory(
         .where(eq(accountTypeCategories.accountTypeCategoryId, id));
     });
   } catch (error) {
-    console.error("updateAccountTypeCategory failed:", error);
-    return { success: false, errors: {}, message: "Failed to update category. Please try again." };
+    return actionFailure("updateAccountTypeCategory", error, "Failed to update category. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -308,8 +301,7 @@ export async function deleteAccountTypeCategory(
       await tx.delete(accountTypeCategories).where(eq(accountTypeCategories.accountTypeCategoryId, id));
     });
   } catch (error) {
-    console.error("deleteAccountTypeCategory failed:", error);
-    return { success: false, errors: {}, message: "Failed to delete category. Please try again." };
+    return actionFailure("deleteAccountTypeCategory", error, "Failed to delete category. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -342,8 +334,7 @@ export async function createAccountType(
       });
     });
   } catch (error) {
-    console.error("createAccountType failed:", error);
-    return { success: false, errors: {}, message: "Failed to create account type. Please try again." };
+    return actionFailure("createAccountType", error, "Failed to create account type. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -380,8 +371,7 @@ export async function updateAccountType(
         .where(eq(accountTypes.accountTypeId, id));
     });
   } catch (error) {
-    console.error("updateAccountType failed:", error);
-    return { success: false, errors: {}, message: "Failed to update account type. Please try again." };
+    return actionFailure("updateAccountType", error, "Failed to update account type. Please try again.");
   }
 
   revalidateCategoryPaths();
@@ -417,8 +407,7 @@ export async function deleteAccountType(
       await tx.delete(accountTypes).where(eq(accountTypes.accountTypeId, id));
     });
   } catch (error) {
-    console.error("deleteAccountType failed:", error);
-    return { success: false, errors: {}, message: "Failed to delete account type. Please try again." };
+    return actionFailure("deleteAccountType", error, "Failed to delete account type. Please try again.");
   }
 
   revalidateCategoryPaths();

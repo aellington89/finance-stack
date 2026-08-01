@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { reportError } from "@/lib/report";
 
 export default function AppError({
   error,
@@ -9,9 +11,17 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const pathname = usePathname();
+
+  // Runs in the browser, so this record lands in the browser console, not in
+  // `docker logs`. That is the ceiling here, not an oversight: in production
+  // React redacts a Server Component error before it crosses the wire, so
+  // `error.message` is a generic string and `digest` is the only identifying
+  // part. The real error is captured server-side by instrumentation.ts under
+  // the same digest — see docs/observability.md for how to join the two.
   useEffect(() => {
-    console.error(error);
-  }, [error]);
+    reportError(error, { route: pathname, digest: error.digest });
+  }, [error, pathname]);
 
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-8">

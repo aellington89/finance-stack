@@ -190,6 +190,16 @@ npm run test:integration   # requires the Finances_Test database
 See [docs/testing.md](docs/testing.md) for the unit/integration split and how
 to point integration tests at the right database.
 
+**`no-console` is enforced** over `app/`, `lib/`, `components/` and `hooks/`
+(Issue #129). Application code logs through `lib/log.ts`, which emits one line
+of JSON per record; a bare `console.*` is unparseable downstream and carries no
+route/action/user context. Use `log.info(...)`, `reportError(err, ctx)`, or —
+inside a server action's catch block — `actionFailure(name, err, message)`.
+`scripts/` and `tests/` are exempt: console output *is* the interface of a CLI
+like `check-changelog.ts`. Before adding a log call, read the redaction section
+of [docs/observability.md](docs/observability.md) — drizzle puts every bound
+query parameter in the error message, so logging a raw error leaks the row.
+
 ## Dependabot PRs
 
 [`.github/dependabot.yml`](.github/dependabot.yml) watches five ecosystems

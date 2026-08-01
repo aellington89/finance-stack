@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { SEED_REFERENCES } from "@/lib/constants/reference-ids";
 import { BUILD_INFO } from "@/lib/version";
+import { reportError } from "@/lib/report";
 
 export interface DriftEntry {
   table: string;
@@ -61,7 +62,7 @@ export async function GET() {
   try {
     drift = await checkSeedReferences();
   } catch (err) {
-    console.error("Seed-reference health check failed:", err);
+    reportError(err, { route: "/api/health" });
     return Response.json(
       { status: "error", db: "connected", seedData: "error" },
       { status: 503 },
