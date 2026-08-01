@@ -103,6 +103,7 @@ merges.
 - [#185](https://github.com/aellington89/finance-stack/issues/185) Audit docker-compose services: necessity & profile gating *(new)*
 - [#193](https://github.com/aellington89/finance-stack/issues/193) Adopt `react-hooks/set-state-in-effect`; drop the `eslint-plugin-react-hooks` pin *(new — from #131)*
 - [#195](https://github.com/aellington89/finance-stack/issues/195) Run `npm run typecheck` in CI *(new — from #131)*
+- [#232](https://github.com/aellington89/finance-stack/issues/232) Wire an error-tracking backend into `reportError()` *(new — from #129)*
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx

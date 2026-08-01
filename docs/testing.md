@@ -67,3 +67,17 @@ it("rejects an unauthenticated call", async () => {
 ```
 
 See [`tests/integration/actions/account-auth.test.ts`](../app/tests/integration/actions/account-auth.test.ts) for the authed + unauthed pair, and [`tests/integration/auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) for credential verification against the real `users` table (created rows are cleaned up in `afterAll`).
+
+## Asserting on Log Output
+
+Structured logging (Issue #129) is tested by spying on `console` and asserting on the **emitted string**, not on a mock of the logger — the acceptance criterion is about what an operator's `jq` actually receives, so a mocked logger would assert nothing about the format:
+
+```ts
+const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+const line = consoleError.mock.calls[0][0] as string;
+expect(line).not.toContain("\n");              // one record, one line
+expect(JSON.parse(line).action).toBe("createAccount");
+```
+
+Redaction is covered at both levels on purpose. [`tests/unit/lib/report.test.ts`](../app/tests/unit/lib/report.test.ts) models the error shapes — a pg `DatabaseError` and drizzle's `DrizzleQueryError` wrapper — while [`tests/integration/actions/logging.test.ts`](../app/tests/integration/actions/logging.test.ts) forces a real foreign-key violation through `createAccount` so those models cannot drift from what the driver actually throws. **If you change `serializeError()`, the integration test is the one that tells you the truth.** See [Observability](observability.md#redaction) for what is stripped and why.

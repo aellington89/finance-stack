@@ -27,7 +27,8 @@ export default defineConfig({
     ],
     coverage: {
       provider: "v8",
-      include: ["lib/**/*.ts", "app/**/*.ts", "app/**/*.tsx"],
+      // instrumentation.ts sits at the package root, outside both globs below.
+      include: ["lib/**/*.ts", "app/**/*.ts", "app/**/*.tsx", "instrumentation.ts"],
       exclude: [
         "**/*.test.ts",
         "app/(app)/test-ui/**",

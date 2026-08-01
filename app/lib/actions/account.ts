@@ -9,6 +9,7 @@ import { accountFormSchema } from "@/lib/validations/account";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { eq, or } from "drizzle-orm";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
+import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
 import {
   OPENING_BALANCE_TYPE,
@@ -79,12 +80,11 @@ export async function createAccount(
       }
     });
   } catch (error) {
-    console.error("Account creation failed:", error);
-    return {
-      success: false,
-      errors: {},
-      message: "Failed to create account. Please try again.",
-    };
+    return actionFailure(
+      "createAccount",
+      error,
+      "Failed to create account. Please try again."
+    );
   }
 
   revalidateAccountPaths();
@@ -145,12 +145,11 @@ export async function updateAccount(
         .where(eq(accounts.accountId, accountId));
     });
   } catch (error) {
-    console.error("Account update failed:", error);
-    return {
-      success: false,
-      errors: {},
-      message: "Failed to update account. Please try again.",
-    };
+    return actionFailure(
+      "updateAccount",
+      error,
+      "Failed to update account. Please try again."
+    );
   }
 
   revalidateAccountPaths();
@@ -207,12 +206,11 @@ export async function deleteAccount(
         .where(eq(accounts.accountId, accountId));
     });
   } catch (error) {
-    console.error("Account deletion failed:", error);
-    return {
-      success: false,
-      errors: {},
-      message: "Failed to delete account. Please try again.",
-    };
+    return actionFailure(
+      "deleteAccount",
+      error,
+      "Failed to delete account. Please try again."
+    );
   }
 
   revalidateAccountPaths();

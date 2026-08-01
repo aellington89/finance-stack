@@ -161,6 +161,10 @@ services:
       # tables, SELECT-only on users, and no DDL. See docs/database.md.
       DATABASE_URL: postgresql://finance_app:${FINANCE_APP_DB_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
       AUTH_SECRET: ${AUTH_SECRET}       # Signs/encrypts Auth.js session JWTs — see .env.example
+      # Structured-log verbosity (#129): debug|info|warn|error. Records are one
+      # line of JSON each, captured by the json-file driver below and readable
+      # with `docker compose logs finance-app | jq`. See docs/observability.md.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       migrate:
         condition: service_completed_successfully
