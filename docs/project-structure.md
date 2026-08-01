@@ -154,7 +154,7 @@ finance-stack/
 │   │   ├── actions/transaction.ts        # Server action for transaction submission
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
-│   │   ├── queries/_aggregates.ts        # Shared SQL aggregation fragments (sum-by-type, balance-at-date)
+│   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list)
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │   │   ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │   │   ├── queries/work-expenses.ts      # Work expense queries (period totals, time series, category breakdown)
@@ -173,10 +173,12 @@ finance-stack/
 │   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
 │   │   ├── validations/categories.ts     # Zod schemas for category/type forms
 │   │   ├── validations/date-range.ts     # Canonical dateFrom/dateTo validator (format + ordering) + isValidIsoDate
+│   │   ├── validations/id.ts             # parseEntityId()/isEntityId() — the one positive-int4 check for every ID (#179)
+│   │   ├── validations/search-params.ts  # validateFilterParams() — ID lists, amount, descriptions from the URL (#179)
 │   │   └── utils.ts                      # Utility helpers (cn() class merge)
 │   ├── tests/                            # Vitest test suite
 │   │   ├── unit/                         # Unit tests (no DB required)
-│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range)
+│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range, id, search-params)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
 │   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
 │   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
@@ -191,10 +193,10 @@ finance-stack/
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session)
-│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, audit trail, failure logging)
+│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, audit trail, failure logging, validation contract)
 │   │       ├── auth/                     #   Credential verification against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
-│   │       └── queries/                  #   Query function tests (accounting, rebuild-balance, drilldowns)
+│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance, drilldowns)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed)

@@ -6,7 +6,7 @@ import {
   WORK_EXPENSE_REIMBURSEMENT_TYPE,
 } from "@/lib/constants/reference-ids";
 import { isValidIsoDate } from "@/lib/validations/date-range";
-import { sumAmountByType } from "@/lib/queries/_aggregates";
+import { sumAmountByType, valueList } from "@/lib/queries/_aggregates";
 
 // ── Types ──
 
@@ -36,21 +36,23 @@ const WORK_EXPENSE_TYPE_IDS = [
 
 // ── Helpers ──
 
-// Defense-in-depth against malformed dates reaching the SQL layer; the page
+// Every date below is a bound parameter, so this is not an injection guard
+// (Issue #179). It is what keeps an impossible-but-well-formed date like
+// 2024-02-30 from reaching the `::date` cast and erroring there; the page
 // boundary rejects these first via validateDateRange (lib/validations/date-range.ts).
 function safeDate(value: string | undefined): string | undefined {
   return isValidIsoDate(value) ? value : undefined;
 }
 
-function buildDateConditions(filters: WorkExpenseFilters, tableAlias = "t"): SQL[] {
+function buildDateConditions(filters: WorkExpenseFilters): SQL[] {
   const conditions: SQL[] = [];
   const dateFrom = safeDate(filters.dateFrom);
   const dateTo = safeDate(filters.dateTo);
   if (dateFrom) {
-    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date >= ${dateFrom}`);
+    conditions.push(sql`t.transaction_date >= ${dateFrom}`);
   }
   if (dateTo) {
-    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date <= ${dateTo}`);
+    conditions.push(sql`t.transaction_date <= ${dateTo}`);
   }
   return conditions;
 }
@@ -66,7 +68,7 @@ export async function getWorkExpenseTotals(
   filters: WorkExpenseFilters
 ): Promise<WorkExpenseTotals> {
   const conditions = buildDateConditions(filters);
-  conditions.push(sql.raw(`t.transaction_type_id IN (${WORK_EXPENSE_TYPE_IDS.join(", ")})`));
+  conditions.push(sql`t.transaction_type_id IN (${valueList(WORK_EXPENSE_TYPE_IDS)})`);
   const where = whereFromConditions(conditions);
 
   const result = await db.execute(sql`
@@ -109,7 +111,7 @@ export async function getWorkExpenseTimeSeries(
       FROM transactions t
       WHERE t.transaction_date >= date_trunc('month', ${dateFrom}::date)::date
         AND t.transaction_date <= ${dateTo}::date
-        AND t.transaction_type_id IN (${sql.raw(WORK_EXPENSE_TYPE_IDS.join(", "))})
+        AND t.transaction_type_id IN (${valueList(WORK_EXPENSE_TYPE_IDS)})
       GROUP BY 1
     )
     SELECT
@@ -134,7 +136,7 @@ export async function getWorkExpenseCategoryBreakdown(
   filters: WorkExpenseFilters
 ): Promise<CategoryBreakdown[]> {
   const conditions = buildDateConditions(filters);
-  conditions.push(sql.raw(`t.transaction_type_id = ${WORK_EXPENSE_TYPE.id}`));
+  conditions.push(sql`t.transaction_type_id = ${WORK_EXPENSE_TYPE.id}`);
   const where = whereFromConditions(conditions);
 
   const result = await db.execute(sql`

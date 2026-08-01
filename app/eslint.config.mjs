@@ -27,6 +27,33 @@ const eslintConfig = defineConfig([
     files: ["app/**/*.{ts,tsx}", "lib/**/*.ts", "components/**/*.{ts,tsx}", "hooks/**/*.ts"],
     rules: { "no-console": "error" },
   },
+  // Issue #179. sql.raw() splices its argument into the SQL text with no
+  // escaping, so it is the one drizzle API that can carry a value into a query
+  // as syntax rather than as a parameter. The audit found exactly that: a URL
+  // search param reaching sql.raw() in lib/queries/accounting.ts, held back
+  // only by a regex.
+  //
+  // Every previous use has an escaped or bound equivalent — bind the value,
+  // sql.identifier() for an identifier, valueList() for an IN (…) list, or a
+  // static sql`` fragment — so the rule is absolute rather than a default with
+  // opt-outs. Reaching for an eslint-disable here means the fragment being
+  // built is the wrong shape; see docs/input-validation.md.
+  //
+  // tests/ and scripts/ are out of scope, as with no-console above.
+  {
+    files: ["app/**/*.{ts,tsx}", "lib/**/*.ts", "components/**/*.{ts,tsx}", "hooks/**/*.ts"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "sql",
+          property: "raw",
+          message:
+            "sql.raw() bypasses parameterization (Issue #179). Bind the value with ${…}, use sql.identifier() for an identifier, valueList() for an IN (…) list, or build a static sql`` fragment.",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

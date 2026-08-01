@@ -21,6 +21,11 @@ import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DateRangeError } from "@/components/dashboard/date-range-error";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { validateDateRange } from "@/lib/validations/date-range";
+import {
+  getParam,
+  validateFilterParams,
+  type FilterParams,
+} from "@/lib/validations/search-params";
 
 export const dynamic = "force-dynamic";
 
@@ -63,34 +68,16 @@ function computeChange(
   };
 }
 
+// Takes the already-validated filter params (Issue #179) and adds the date
+// window plus timeGrouping, which is matched against VALID_GROUPINGS and used
+// to select a static SQL fragment rather than reaching SQL as a value.
 function parseSearchParams(
-  params: Record<string, string | string[] | undefined>
+  params: Record<string, string | string[] | undefined>,
+  filterParams: FilterParams
 ): AccountingFilters & { rawFilters: Record<string, string | string[] | number[] | undefined> } {
-  const get = (key: string): string | undefined => {
-    const val = params[key];
-    if (Array.isArray(val)) return val[0];
-    return val || undefined;
-  };
-
-  const getNumberArray = (key: string): number[] | undefined => {
-    const raw = get(key);
-    if (!raw) return undefined;
-    const nums = raw.split(",").map(Number).filter((n) => !isNaN(n));
-    return nums.length > 0 ? nums : undefined;
-  };
-
-  const getStringArray = (key: string): string[] | undefined => {
-    const raw = get(key);
-    if (!raw) return undefined;
-    const items = raw.split(",").filter(Boolean);
-    return items.length > 0 ? items : undefined;
-  };
-
   const { dateFrom, dateTo } = getDateRangeFromParams(params);
-  const descriptions = getStringArray("descriptions");
-  const accountIds = getNumberArray("accountIds");
-  const categoryIds = getNumberArray("categoryIds");
-  const rawGrouping = get("timeGrouping");
+  const { descriptions, accountIds, categoryIds } = filterParams;
+  const rawGrouping = getParam(params, "timeGrouping");
   const timeGrouping: TimeGrouping = VALID_GROUPINGS.includes(rawGrouping as TimeGrouping)
     ? (rawGrouping as TimeGrouping)
     : "month";
@@ -103,8 +90,8 @@ function parseSearchParams(
     categoryIds,
     timeGrouping,
     rawFilters: {
-      dateFrom: get("dateFrom"),
-      dateTo: get("dateTo"),
+      dateFrom: getParam(params, "dateFrom"),
+      dateTo: getParam(params, "dateTo"),
       descriptions,
       accountIds,
       categoryIds,
@@ -120,14 +107,25 @@ export default async function AccountingPage({
 }) {
   const resolvedParams = await searchParams;
 
-  const validation = validateDateRange(resolvedParams);
-  if (!validation.ok) {
-    // Date-independent options still load so the filter bar stays usable to fix the range.
+  const dateRange = validateDateRange(resolvedParams);
+  const filterParams = validateFilterParams(resolvedParams);
+
+  // A rejected filter contributes nothing, so the bar renders with the rest.
+  const safeFilters: FilterParams = filterParams.ok ? filterParams : {};
+
+  const paramError = !dateRange.ok
+    ? { title: "Invalid date range", message: dateRange.error }
+    : !filterParams.ok
+      ? { title: "Invalid filter", message: filterParams.error }
+      : null;
+
+  if (paramError) {
+    // Filter-independent options still load so the bar stays usable to fix it.
     const [{ accounts, categories }, descriptions] = await Promise.all([
       getTransactionFormOptions(),
       getUniqueDescriptions(),
     ]);
-    const { rawFilters } = parseSearchParams(resolvedParams);
+    const { rawFilters } = parseSearchParams(resolvedParams, safeFilters);
     return (
       <div className="space-y-6">
         <DashboardPageHeader
@@ -149,12 +147,12 @@ export default async function AccountingPage({
             />
           }
         />
-        <DateRangeError message={validation.error} />
+        <DateRangeError title={paramError.title} message={paramError.message} />
       </div>
     );
   }
 
-  const { rawFilters, ...filters } = parseSearchParams(resolvedParams);
+  const { rawFilters, ...filters } = parseSearchParams(resolvedParams, safeFilters);
 
   const showToDate = isStandardGrouping(filters.timeGrouping ?? "month");
 

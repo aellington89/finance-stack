@@ -68,6 +68,14 @@ it("rejects an unauthenticated call", async () => {
 
 See [`tests/integration/actions/account-auth.test.ts`](../app/tests/integration/actions/account-auth.test.ts) for the authed + unauthed pair, and [`tests/integration/auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) for credential verification against the real `users` table (created rows are cleaned up in `afterAll`).
 
+## The Server Action Validation Contract
+
+[`tests/integration/actions/validation-contract.test.ts`](../app/tests/integration/actions/validation-contract.test.ts) is the executable form of the [Issue #179](https://github.com/aellington89/finance-stack/issues/179) checklist. For every mutating server action it asserts that an empty payload, and a payload carrying `1.5` / `Infinity` / `2147483648` in each ID field, is rejected with an authored message that contains no driver text.
+
+**It is self-maintaining in both directions**, which is the point: the registry is checked against the action modules' actual exports *and* against the table in [Input Validation](input-validation.md). Adding a nineteenth action fails the suite until it appears in all three places.
+
+The sharpest assertion is the `console.error` spy. Every rejection must happen *before* the database is reached, so a log line means the action let the payload through to `actionFailure()` and tidied up afterwards — which fails the test even though the returned message looks right.
+
 ## Asserting on Log Output
 
 Structured logging (Issue #129) is tested by spying on `console` and asserting on the **emitted string**, not on a mock of the logger — the acceptance criterion is about what an operator's `jq` actually receives, so a mocked logger would assert nothing about the format:
