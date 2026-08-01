@@ -7,6 +7,7 @@ import { transactions, accountBalanceHistory } from "@/drizzle/schema";
 import { transactionFormSchema } from "@/lib/validations/transaction";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
+import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
 
 function revalidateTransactionPaths() {
@@ -64,12 +65,11 @@ export async function submitTransaction(
       }
     });
   } catch (error) {
-    console.error("Transaction insert failed:", error);
-    return {
-      success: false,
-      errors: {},
-      message: "Failed to save transaction. Please try again.",
-    };
+    return actionFailure(
+      "submitTransaction",
+      error,
+      "Failed to save transaction. Please try again."
+    );
   }
 
   revalidateTransactionPaths();
@@ -161,12 +161,11 @@ export async function updateTransaction(
       }
     });
   } catch (error) {
-    console.error("Transaction update failed:", error);
-    return {
-      success: false,
-      errors: {},
-      message: "Failed to update transaction. Please try again.",
-    };
+    return actionFailure(
+      "updateTransaction",
+      error,
+      "Failed to update transaction. Please try again."
+    );
   }
 
   if (notFound) {
@@ -241,12 +240,11 @@ export async function deleteTransaction(
       }
     });
   } catch (error) {
-    console.error("Transaction delete failed:", error);
-    return {
-      success: false,
-      errors: {},
-      message: "Failed to delete transaction. Please try again.",
-    };
+    return actionFailure(
+      "deleteTransaction",
+      error,
+      "Failed to delete transaction. Please try again."
+    );
   }
 
   if (notFound) {

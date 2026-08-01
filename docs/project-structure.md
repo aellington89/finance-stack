@@ -19,8 +19,9 @@ finance-stack/
 │   ├── next.config.ts                    # Next.js config (standalone output for Docker)
 │   ├── auth.ts                           # Auth.js (NextAuth v5) config — Credentials provider, JWT sessions (#120)
 │   ├── proxy.ts                          # Next 16 proxy (renamed middleware) — redirects unauthenticated requests to /login
+│   ├── instrumentation.ts                # onRequestError — captures unhandled server throws as structured logs (#129)
 │   ├── drizzle.config.ts                 # Drizzle ORM config (schema path + migrations output dir)
-│   ├── eslint.config.mjs                 # ESLint flat-config (Next.js + TypeScript rules)
+│   ├── eslint.config.mjs                 # ESLint flat-config (Next.js + TypeScript rules, no-console over app code)
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
 │   ├── app/                              # App Router — pages and layouts
@@ -28,6 +29,7 @@ finance-stack/
 │   │   ├── api/auth/[...nextauth]/route.ts # Auth.js sign-in/sign-out/session endpoints
 │   │   ├── layout.tsx                    # Root layout (fonts, ThemeProvider, Toaster)
 │   │   ├── globals.css                   # Global styles and Tailwind CSS theme variables
+│   │   ├── global-error.tsx              # Root-layout error boundary — own <html>/<body>, no app providers (#129)
 │   │   ├── favicon.ico
 │   │   ├── (landing)/                    # Route group — no sidebar
 │   │   │   └── page.tsx                  #   Landing page (/)
@@ -35,7 +37,7 @@ finance-stack/
 │   │   │   └── login/page.tsx            #   Sign-in page (/login)
 │   │   └── (app)/                        # Route group — sidebar navigation shell
 │   │       ├── layout.tsx                #   App shell (SidebarProvider + AppSidebar + SidebarInset) + auth() gate → /login
-│   │       ├── error.tsx                 #   Error boundary — catches unhandled errors with retry UI
+│   │       ├── error.tsx                 #   Error boundary — retry UI; reports with route + digest (#129)
 │   │       ├── dashboard/                #   Tabbed dashboard — 5 sections, each with drill-down sub-tabs:
 │   │       │   ├── layout.tsx            #     Layout: top-level section tabs + ensureTodayBalances()
 │   │       │   ├── dashboard-tabs.tsx    #     Top-level tabs (Summary / Accounting / Transactions / Accounts / Work Expenses)
@@ -141,10 +143,13 @@ finance-stack/
 │   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health drift check
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
+│   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
+│   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
 │   │   ├── auth/verify-credentials.ts    # Username/password check against the users table
 │   │   ├── auth/guard.ts                 # requireActionUser() — session gate at the top of every server action
 │   │   ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
+│   │   ├── actions/failure.ts            # actionFailure() — reports a caught action error with its actor, returns the ActionState (#129)
 │   │   ├── actions/auth.ts               # Server actions for sign-in (authenticate) and sign-out
 │   │   ├── actions/transaction.ts        # Server action for transaction submission
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
@@ -180,11 +185,13 @@ finance-stack/
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
 │   │   │       ├── db/                   #     auditedTransaction() actor plumbing
+│   │   │       ├── log.test.ts           #     Structured logger (single-line output, LOG_LEVEL gate, hostile payloads)
+│   │   │       ├── report.test.ts        #     reportError() serialization + drizzle/pg redaction
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session)
-│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, audit trail)
+│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, audit trail, failure logging)
 │   │       ├── auth/                     #   Credential verification against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
 │   │       └── queries/                  #   Query function tests (accounting, rebuild-balance, drilldowns)
