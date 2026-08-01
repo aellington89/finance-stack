@@ -6,7 +6,7 @@ import {
   INVESTMENT_TYPE,
 } from "@/lib/constants/reference-ids";
 import { isValidIsoDate } from "@/lib/validations/date-range";
-import { sumAmountByType } from "@/lib/queries/_aggregates";
+import { sumAmountByType, valueList } from "@/lib/queries/_aggregates";
 
 // ── Types ──
 
@@ -65,38 +65,54 @@ export interface AccountingFilters {
 
 const ACCOUNTING_TYPE_IDS = [INCOME_TYPE.id, EXPENSE_TYPE.id, INVESTMENT_TYPE.id];
 
-// Defense-in-depth against malformed dates reaching the SQL layer; the page
+// Every date below is a bound parameter, so this is not an injection guard
+// (Issue #179). It is what keeps an impossible-but-well-formed date like
+// 2024-02-30 from reaching the `::date` cast and erroring there; the page
 // boundary rejects these first via validateDateRange (lib/validations/date-range.ts).
 function safeDate(value: string | undefined): string | undefined {
   return isValidIsoDate(value) ? value : undefined;
 }
 
-function buildFilterConditions(filters: AccountingFilters, tableAlias = "t"): SQL[] {
+/**
+ * The non-date filters, shared by the queries that build their own date window
+ * (`getAccountingToDateComparison`, `getAccountingMonthlyAverages`) and by
+ * `buildFilterConditions()` below, which adds the date range on top.
+ */
+function buildValueConditions(filters: AccountingFilters): SQL[] {
+  const conditions: SQL[] = [];
+
+  if (filters.descriptions && filters.descriptions.length > 0) {
+    conditions.push(sql`t.transaction_description IN (${valueList(filters.descriptions)})`);
+  }
+  if (filters.accountIds && filters.accountIds.length > 0) {
+    conditions.push(sql`t.account_id IN (${valueList(filters.accountIds)})`);
+  }
+  if (filters.categoryIds && filters.categoryIds.length > 0) {
+    conditions.push(sql`t.transaction_category_id IN (${valueList(filters.categoryIds)})`);
+  }
+
+  return conditions;
+}
+
+function buildFilterConditions(filters: AccountingFilters): SQL[] {
   const conditions: SQL[] = [];
 
   const dateFrom = safeDate(filters.dateFrom);
   const dateTo = safeDate(filters.dateTo);
 
   if (dateFrom) {
-    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date >= ${dateFrom}`);
+    conditions.push(sql`t.transaction_date >= ${dateFrom}`);
   }
   if (dateTo) {
-    conditions.push(sql`${sql.raw(tableAlias)}.transaction_date <= ${dateTo}`);
-  }
-  if (filters.descriptions && filters.descriptions.length > 0) {
-    const placeholders = filters.descriptions.map((d) => sql`${d}`);
-    conditions.push(sql`${sql.raw(tableAlias)}.transaction_description IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  if (filters.accountIds && filters.accountIds.length > 0) {
-    const placeholders = filters.accountIds.map((id) => sql`${id}`);
-    conditions.push(sql`${sql.raw(tableAlias)}.account_id IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  if (filters.categoryIds && filters.categoryIds.length > 0) {
-    const placeholders = filters.categoryIds.map((id) => sql`${id}`);
-    conditions.push(sql`${sql.raw(tableAlias)}.transaction_category_id IN (${sql.join(placeholders, sql`, `)})`);
+    conditions.push(sql`t.transaction_date <= ${dateTo}`);
   }
 
-  return conditions;
+  return [...conditions, ...buildValueConditions(filters)];
+}
+
+/** The three transaction types this page reports on, as a bound `IN (…)` list. */
+function accountingTypeFilter(): SQL {
+  return sql`t.transaction_type_id IN (${valueList(ACCOUNTING_TYPE_IDS)})`;
 }
 
 function whereFromConditions(conditions: SQL[]): SQL {
@@ -106,18 +122,25 @@ function whereFromConditions(conditions: SQL[]): SQL {
 
 // Map TimeGrouping to a SQL expression for the GROUP BY key.
 // date_trunc-based groupings return a date; extract-based return a number.
-const GROUPING_SQL: Record<TimeGrouping, string> = {
-  day: "date_trunc('day', t.transaction_date)::date",
-  week: "date_trunc('week', t.transaction_date)::date",
-  month: "date_trunc('month', t.transaction_date)::date",
-  quarter: "date_trunc('quarter', t.transaction_date)::date",
-  year: "date_trunc('year', t.transaction_date)::date",
-  day_of_week: "EXTRACT(dow FROM t.transaction_date)::int",
-  day_of_month: "EXTRACT(day FROM t.transaction_date)::int",
-  day_of_year: "EXTRACT(doy FROM t.transaction_date)::int",
-  week_of_year: "EXTRACT(week FROM t.transaction_date)::int",
-  month_of_year: "EXTRACT(month FROM t.transaction_date)::int",
-  quarter_of_year: "EXTRACT(quarter FROM t.transaction_date)::int",
+//
+// These are `SQL` fragments rather than strings so they compose into a query
+// directly. As strings they had to be re-injected with `sql.raw`, which is what
+// put a raw-interpolation habit next to the user-supplied `dateFrom` a few
+// lines below (Issue #179). EXTRACT's field name is a keyword, not a value, so
+// those arms stay literal — but they are closed constants of this map, not
+// anything a caller can reach.
+const GROUPING_SQL: Record<TimeGrouping, SQL> = {
+  day: sql`date_trunc('day', t.transaction_date)::date`,
+  week: sql`date_trunc('week', t.transaction_date)::date`,
+  month: sql`date_trunc('month', t.transaction_date)::date`,
+  quarter: sql`date_trunc('quarter', t.transaction_date)::date`,
+  year: sql`date_trunc('year', t.transaction_date)::date`,
+  day_of_week: sql`EXTRACT(dow FROM t.transaction_date)::int`,
+  day_of_month: sql`EXTRACT(day FROM t.transaction_date)::int`,
+  day_of_year: sql`EXTRACT(doy FROM t.transaction_date)::int`,
+  week_of_year: sql`EXTRACT(week FROM t.transaction_date)::int`,
+  month_of_year: sql`EXTRACT(month FROM t.transaction_date)::int`,
+  quarter_of_year: sql`EXTRACT(quarter FROM t.transaction_date)::int`,
 };
 
 // ── Query A: Time Series ──
@@ -147,7 +170,7 @@ export async function getAccountingTimeSeries(
   const grouping = filters.timeGrouping ?? "month";
   const groupExpr = GROUPING_SQL[grouping];
   const conditions = buildFilterConditions(filters);
-  conditions.push(sql.raw(`t.transaction_type_id IN (${ACCOUNTING_TYPE_IDS.join(", ")})`));
+  conditions.push(accountingTypeFilter());
   const where = whereFromConditions(conditions);
 
   const interval = GROUPING_INTERVALS[grouping];
@@ -159,18 +182,27 @@ export async function getAccountingTimeSeries(
     const dateTo = safeDate(filters.dateTo) ?? new Date().toISOString().slice(0, 10);
     const truncUnit = TO_DATE_TRUNCATIONS[grouping] ?? "month";
 
+    // date_trunc's unit and the generate_series step both bind as ordinary
+    // parameters (`date_trunc($1::text, $2::date)`, `$3::interval`). Before
+    // Issue #179 this block interpolated `dateFrom` — a URL search param —
+    // into a `sql.raw` string, held back from the SQL text only by the regex
+    // in safeDate().
+    //
+    // The casts are load-bearing, not decoration: a bound parameter arrives as
+    // `unknown`, and both date_trunc and generate_series are overloaded, so
+    // without them Postgres cannot pick an implementation (42725).
     const result = await db.execute(sql`
       WITH series AS (
-        SELECT ${sql.raw(`date_trunc('${truncUnit}', d)::date`)} AS date
+        SELECT date_trunc(${truncUnit}::text, d)::date AS date
         FROM generate_series(
-          ${sql.raw(`date_trunc('${truncUnit}', '${dateFrom}'::date)`)}::date,
+          date_trunc(${truncUnit}::text, ${dateFrom}::date)::date,
           ${dateTo}::date,
-          ${sql.raw(`'${interval}'::interval`)}
+          ${interval}::interval
         ) AS d
       ),
       agg AS (
         SELECT
-          ${sql.raw(groupExpr)} AS date,
+          ${groupExpr} AS date,
           ${sumAmountByType(INCOME_TYPE.id, "total_income")},
           ${sumAmountByType(EXPENSE_TYPE.id, "total_expenses")},
           ${sumAmountByType(INVESTMENT_TYPE.id, "total_investments")}
@@ -202,11 +234,11 @@ export async function getAccountingTimeSeries(
     // Extract-based groupings: generate full integer range
     const result = await db.execute(sql`
       WITH series AS (
-        SELECT g AS date FROM generate_series(${sql.raw(String(extractRange.start))}, ${sql.raw(String(extractRange.end))}) AS g
+        SELECT g AS date FROM generate_series(${extractRange.start}::int, ${extractRange.end}::int) AS g
       ),
       agg AS (
         SELECT
-          ${sql.raw(groupExpr)} AS date,
+          ${groupExpr} AS date,
           ${sumAmountByType(INCOME_TYPE.id, "total_income")},
           ${sumAmountByType(EXPENSE_TYPE.id, "total_expenses")},
           ${sumAmountByType(INVESTMENT_TYPE.id, "total_investments")}
@@ -244,7 +276,7 @@ export async function getAccountingPeriodTotals(
   filters: AccountingFilters
 ): Promise<AccountingPeriodTotals> {
   const conditions = buildFilterConditions(filters);
-  conditions.push(sql.raw(`t.transaction_type_id IN (${ACCOUNTING_TYPE_IDS.join(", ")})`));
+  conditions.push(accountingTypeFilter());
   const where = whereFromConditions(conditions);
 
   const result = await db.execute(sql`
@@ -284,20 +316,22 @@ const TO_DATE_INTERVALS: Record<string, string> = {
   year: "1 year",
 };
 
+// to_char() format strings. Unquoted, because they bind as parameters rather
+// than being spliced into the SQL text (Issue #179).
 const TO_DATE_LABEL_FORMATS: Record<string, string> = {
-  day: "'DD Mon YYYY'",
-  month: "'Mon YYYY'",
-  quarter: "'\"Q\"Q YYYY'",
-  year: "'YYYY'",
+  day: "DD Mon YYYY",
+  month: "Mon YYYY",
+  quarter: '"Q"Q YYYY',
+  year: "YYYY",
 };
 
 // Week needs a date range label, so we build the full SQL expression
-function getLabelExpr(truncation: string, alias: string): string {
+function getLabelExpr(truncation: string, alias: SQL): SQL {
   if (truncation === "week") {
-    return `to_char(${alias}, 'FMMM.FMDD.YYYY') || ' - ' || to_char(${alias} + interval '6 days', 'FMMM.FMDD.YYYY')`;
+    return sql`to_char(${alias}, 'FMMM.FMDD.YYYY') || ' - ' || to_char(${alias} + interval '6 days', 'FMMM.FMDD.YYYY')`;
   }
-  const fmt = TO_DATE_LABEL_FORMATS[truncation] ?? "'Mon YYYY'";
-  return `to_char(${alias}, ${fmt})`;
+  const fmt = TO_DATE_LABEL_FORMATS[truncation] ?? "Mon YYYY";
+  return sql`to_char(${alias}, ${fmt}::text)`;
 }
 
 export function isStandardGrouping(grouping: TimeGrouping): boolean {
@@ -310,27 +344,15 @@ export async function getAccountingToDateComparison(
   const grouping = filters.timeGrouping ?? "month";
   const truncation = TO_DATE_TRUNCATIONS[grouping] ?? "month";
   const intervalStr = TO_DATE_INTERVALS[truncation] ?? "1 month";
-  const curLabelExpr = getLabelExpr(truncation, "p.cur_start");
-  const prevLabelExpr = getLabelExpr(truncation, "p.prev_start");
+  const curLabelExpr = getLabelExpr(truncation, sql`p.cur_start`);
+  const prevLabelExpr = getLabelExpr(truncation, sql`p.prev_start`);
 
   // Use dateTo as reference date (or today)
   const refDate = safeDate(filters.dateTo) ?? new Date().toISOString().slice(0, 10);
 
   // Build optional filter conditions (excluding date range — we handle that ourselves)
-  const extraConditions: SQL[] = [];
-  if (filters.descriptions && filters.descriptions.length > 0) {
-    const placeholders = filters.descriptions.map((d) => sql`${d}`);
-    extraConditions.push(sql`t.transaction_description IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  if (filters.accountIds && filters.accountIds.length > 0) {
-    const placeholders = filters.accountIds.map((id) => sql`${id}`);
-    extraConditions.push(sql`t.account_id IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  if (filters.categoryIds && filters.categoryIds.length > 0) {
-    const placeholders = filters.categoryIds.map((id) => sql`${id}`);
-    extraConditions.push(sql`t.transaction_category_id IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  extraConditions.push(sql.raw(`t.transaction_type_id IN (${ACCOUNTING_TYPE_IDS.join(", ")})`));
+  const extraConditions = buildValueConditions(filters);
+  extraConditions.push(accountingTypeFilter());
 
   const extraWhere = extraConditions.length > 0
     ? sql`AND ${sql.join(extraConditions, sql` AND `)}`
@@ -342,10 +364,10 @@ export async function getAccountingToDateComparison(
   const result = await db.execute(sql`
     WITH params AS (
       SELECT
-        date_trunc(${sql.raw(`'${truncation}'`)}, ${refDate}::date)::date AS cur_start,
+        date_trunc(${truncation}::text, ${refDate}::date)::date AS cur_start,
         ${refDate}::date AS cur_end,
-        (date_trunc(${sql.raw(`'${truncation}'`)}, ${refDate}::date) - interval ${sql.raw(`'${intervalStr}'`)})::date AS prev_start,
-        (date_trunc(${sql.raw(`'${truncation}'`)}, ${refDate}::date) - interval '1 day')::date AS prev_end
+        (date_trunc(${truncation}::text, ${refDate}::date) - ${intervalStr}::interval)::date AS prev_start,
+        (date_trunc(${truncation}::text, ${refDate}::date) - interval '1 day')::date AS prev_end
     )
     SELECT
       ${sumAmountByType(INCOME_TYPE.id, "cur_income", curWindow)},
@@ -354,8 +376,8 @@ export async function getAccountingToDateComparison(
       ${sumAmountByType(EXPENSE_TYPE.id, "prev_expenses", prevWindow)},
       ${sumAmountByType(INVESTMENT_TYPE.id, "cur_investments", curWindow)},
       ${sumAmountByType(INVESTMENT_TYPE.id, "prev_investments", prevWindow)},
-      MIN(${sql.raw(curLabelExpr)}) AS cur_label,
-      MIN(${sql.raw(prevLabelExpr)}) AS prev_label
+      MIN(${curLabelExpr}) AS cur_label,
+      MIN(${prevLabelExpr}) AS prev_label
     FROM transactions t
     CROSS JOIN params p
     WHERE t.transaction_date >= p.prev_start
@@ -382,7 +404,7 @@ export async function getExpenseCategoryBreakdown(
   filters: AccountingFilters
 ): Promise<CategoryBreakdown[]> {
   const conditions = buildFilterConditions(filters);
-  conditions.push(sql.raw(`t.transaction_type_id = ${EXPENSE_TYPE.id}`));
+  conditions.push(sql`t.transaction_type_id = ${EXPENSE_TYPE.id}`);
   const where = whereFromConditions(conditions);
 
   const result = await db.execute(sql`
@@ -408,20 +430,8 @@ export async function getAccountingMonthlyAverages(
   filters: AccountingFilters
 ): Promise<AccountingPeriodTotals> {
   // Extra filters (non-date)
-  const extraConditions: SQL[] = [];
-  if (filters.descriptions && filters.descriptions.length > 0) {
-    const placeholders = filters.descriptions.map((d) => sql`${d}`);
-    extraConditions.push(sql`t.transaction_description IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  if (filters.accountIds && filters.accountIds.length > 0) {
-    const placeholders = filters.accountIds.map((id) => sql`${id}`);
-    extraConditions.push(sql`t.account_id IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  if (filters.categoryIds && filters.categoryIds.length > 0) {
-    const placeholders = filters.categoryIds.map((id) => sql`${id}`);
-    extraConditions.push(sql`t.transaction_category_id IN (${sql.join(placeholders, sql`, `)})`);
-  }
-  extraConditions.push(sql.raw(`t.transaction_type_id IN (${ACCOUNTING_TYPE_IDS.join(", ")})`));
+  const extraConditions = buildValueConditions(filters);
+  extraConditions.push(accountingTypeFilter());
 
   const extraWhere = extraConditions.length > 0
     ? sql`AND ${sql.join(extraConditions, sql` AND `)}`

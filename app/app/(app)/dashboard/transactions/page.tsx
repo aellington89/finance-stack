@@ -11,6 +11,11 @@ import {
 } from "@/lib/queries/transactions";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
 import { validateDateRange } from "@/lib/validations/date-range";
+import {
+  getParam,
+  validateFilterParams,
+  type FilterParams,
+} from "@/lib/validations/search-params";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { TransactionFilters as TransactionFiltersUI } from "@/components/transactions/transaction-filters";
 import { TransactionList } from "@/components/transactions/transaction-list";
@@ -30,36 +35,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Takes the already-validated filter params (Issue #179) and adds the
+// presentation params, which are safe by construction: sortBy/sortDir are
+// matched against allowlists and never reach SQL as values, and page/pageSize
+// are clamped to a range.
 function parseSearchParams(
-  searchParams: Record<string, string | string[] | undefined>
+  searchParams: Record<string, string | string[] | undefined>,
+  filterParams: FilterParams
 ): TransactionFilters {
-  const get = (key: string): string | undefined => {
-    const val = searchParams[key];
-    if (Array.isArray(val)) return val[0];
-    return val || undefined;
-  };
-
-  const getNumberArray = (key: string): number[] | undefined => {
-    const raw = get(key);
-    if (!raw) return undefined;
-    const nums = raw.split(",").map(Number).filter((n) => !isNaN(n));
-    return nums.length > 0 ? nums : undefined;
-  };
-
-  const getStringArray = (key: string): string[] | undefined => {
-    const raw = get(key);
-    if (!raw) return undefined;
-    const items = raw.split(",").filter(Boolean);
-    return items.length > 0 ? items : undefined;
-  };
-
   const VALID_SORT_DIRS: SortDirection[] = ["asc", "desc"];
 
-  const rawSortBy = get("sortBy");
-  const rawSortDir = get("sortDir");
+  const rawSortBy = getParam(searchParams, "sortBy");
+  const rawSortDir = getParam(searchParams, "sortDir");
 
-  const rawPage = get("page");
-  const rawPageSize = get("pageSize");
+  const rawPage = getParam(searchParams, "page");
+  const rawPageSize = getParam(searchParams, "pageSize");
 
   const { dateFrom, dateTo } = getDateRangeFromParams(searchParams, {
     applyDefault: false,
@@ -68,11 +58,7 @@ function parseSearchParams(
   return {
     dateFrom,
     dateTo,
-    descriptions: getStringArray("descriptions"),
-    amount: get("amount"),
-    accountIds: getNumberArray("accountIds"),
-    typeIds: getNumberArray("typeIds"),
-    categoryIds: getNumberArray("categoryIds"),
+    ...filterParams,
     sortBy: SORTABLE_COLUMN_KEYS.includes(rawSortBy as SortableColumn)
       ? (rawSortBy as SortableColumn)
       : undefined,
@@ -91,9 +77,20 @@ export default async function DashboardTransactionsPage({
 }) {
   const resolvedParams = await searchParams;
 
-  const validation = validateDateRange(resolvedParams);
-  if (!validation.ok) {
-    // Date-independent options still load so the filter bar stays usable to fix the range.
+  const dateRange = validateDateRange(resolvedParams);
+  const filterParams = validateFilterParams(resolvedParams);
+
+  // A rejected filter contributes nothing, so the bar renders with the rest.
+  const safeFilters: FilterParams = filterParams.ok ? filterParams : {};
+
+  const paramError = !dateRange.ok
+    ? { title: "Invalid date range", message: dateRange.error }
+    : !filterParams.ok
+      ? { title: "Invalid filter", message: filterParams.error }
+      : null;
+
+  if (paramError) {
+    // Filter-independent options still load so the bar stays usable to fix it.
     const [{ accounts, types, categories }, descriptions] = await Promise.all([
       getTransactionFormOptions(),
       getUniqueDescriptions(),
@@ -109,16 +106,16 @@ export default async function DashboardTransactionsPage({
               accounts={accounts}
               types={types}
               categories={categories}
-              filters={parseSearchParams(resolvedParams)}
+              filters={parseSearchParams(resolvedParams, safeFilters)}
             />
           }
         />
-        <DateRangeError message={validation.error} />
+        <DateRangeError title={paramError.title} message={paramError.message} />
       </div>
     );
   }
 
-  const filters = parseSearchParams(resolvedParams);
+  const filters = parseSearchParams(resolvedParams, safeFilters);
 
   const cookieStore = await cookies();
   const visibleColumns = parseVisibleColumnsCookie(

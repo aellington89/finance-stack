@@ -204,6 +204,21 @@ like `check-changelog.ts`. Before adding a log call, read the redaction section
 of [docs/observability.md](docs/observability.md) — drizzle puts every bound
 query parameter in the error message, so logging a raw error leaks the row.
 
+**`sql.raw` is banned** over the same four directories (Issue #179). It splices
+its argument into the SQL text unescaped, which is the one way a value can
+reach a query as syntax rather than as a parameter. Bind the value with
+`${…}`, use `sql.identifier()` for an identifier, `valueList()` for an
+`IN (…)` list, or build a static ``sql`` `` fragment — the rule has no
+exceptions because every prior use had one of those equivalents. Note that
+`date_trunc()`, `to_char()` and `generate_series()` all accept their unit,
+format and step as bound parameters.
+
+Adding a server action also means adding a row to the checklist in
+[docs/input-validation.md](docs/input-validation.md) and to the registry in
+`tests/integration/actions/validation-contract.test.ts` — the test parses that
+table and asserts the two match the modules' exports, so an uncovered action
+fails CI.
+
 ## Dependabot PRs
 
 [`.github/dependabot.yml`](.github/dependabot.yml) watches five ecosystems

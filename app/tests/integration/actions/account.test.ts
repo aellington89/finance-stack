@@ -314,4 +314,18 @@ describe("deleteAccount", () => {
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/invalid/i);
   });
+
+  // Issue #179. A non-integer ID passed the old `!id || id <= 0` guard and hit
+  // the in-use pre-check, which ran outside the try — so Postgres' 22P02 left
+  // the action as an unhandled throw instead of an ActionState. Held here as
+  // well as in validation-contract.test.ts so the anchor survives a change to
+  // that file's registry.
+  it("returns a validation error for a non-integer accountId", async () => {
+    const result = await deleteAccount(emptyState, makeFormData({ accountId: "1.5" }));
+    expect(result).toEqual({
+      success: false,
+      errors: {},
+      message: "Invalid account ID",
+    });
+  });
 });

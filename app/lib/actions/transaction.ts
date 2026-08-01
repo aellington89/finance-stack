@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { auditedTransaction } from "@/lib/db/audited";
 import { transactions, accountBalanceHistory } from "@/drizzle/schema";
 import { transactionFormSchema } from "@/lib/validations/transaction";
+import { parseEntityId } from "@/lib/validations/id";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
@@ -88,8 +89,8 @@ export async function updateTransaction(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const transactionId = Number(formData.get("transactionId"));
-  if (!Number.isInteger(transactionId) || transactionId <= 0) {
+  const transactionId = parseEntityId(formData.get("transactionId"));
+  if (transactionId === null) {
     return { success: false, errors: {}, message: "Invalid transaction ID" };
   }
 
@@ -188,8 +189,8 @@ export async function deleteTransaction(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const transactionId = Number(formData.get("transactionId"));
-  if (!Number.isInteger(transactionId) || transactionId <= 0) {
+  const transactionId = parseEntityId(formData.get("transactionId"));
+  if (transactionId === null) {
     return { success: false, errors: {}, message: "Invalid transaction ID" };
   }
 

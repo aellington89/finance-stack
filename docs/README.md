@@ -9,6 +9,7 @@ Finance Stack documentation is split by purpose. The root [README](../README.md)
 - [Authentication](auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](database.md) — schema, views, balance history, first-launch init, and the test database
 - [Audit Log](audit-log.md) — how mutations are recorded, who gets attributed, reading the log, and retention
+- [Input Validation & Error Messages](input-validation.md) — the per-action validation checklist, the SQL parameterization rule, and what a user is allowed to see
 - [Observability](observability.md) — structured JSON logs, where errors are captured, redaction, and wiring an error-tracking backend
 - [Schema Changes](schema-changes.md) — making schema changes and adopting migrations on existing databases
 - [Testing](testing.md) — running tests and the static lookup-table fixtures

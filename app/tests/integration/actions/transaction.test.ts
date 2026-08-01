@@ -454,6 +454,21 @@ describe("deleteTransaction", () => {
     expect(result.success).toBe(false);
     expect(result.message).toBe("Invalid transaction ID");
   });
+
+  // Issue #179. These two clear `Number.isInteger` or `> 0` but not both an
+  // integer check and the int4 ceiling, so before parseEntityId() they bound
+  // into the query and raised 22P02 / 22003 in the driver.
+  it.each(["1.5", "2147483648"])(
+    "rejects %s as a transactionId without touching the DB",
+    async (badId) => {
+      const result = await deleteTransaction(
+        emptyState,
+        makeFormData({ transactionId: badId })
+      );
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Invalid transaction ID");
+    }
+  );
 });
 
 // ─── non-blank CHECK constraint (issue #147) ─────────────────────────────────

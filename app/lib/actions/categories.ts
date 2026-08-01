@@ -13,6 +13,7 @@ import {
 } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categories";
+import { parseEntityId } from "@/lib/validations/id";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
@@ -20,8 +21,10 @@ import { requireActionUser } from "@/lib/auth/guard";
 // Every write below goes through auditedTransaction() even where it is a single
 // statement: that helper is what names the actor for the audit trigger, and a
 // bare db.insert/update/delete runs in an implicit transaction with nowhere to
-// set it (Issue #180). The `inUse` pre-checks stay outside — they are reads, and
-// holding the transaction open across them buys nothing.
+// set it (Issue #180). The `inUse` pre-checks stay outside the *transaction* —
+// they are reads, and holding it open across them buys nothing — but they sit
+// inside the `try` (Issue #179), so a read that fails returns an ActionState
+// rather than escaping the action as an unhandled throw.
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
   revalidatePath("/dashboard/transactions");
@@ -65,8 +68,8 @@ export async function updateTransactionCategory(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("transactionCategoryId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
+  const id = parseEntityId(formData.get("transactionCategoryId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
   const result = parseNameForm(formData);
   if (!result.success) {
@@ -95,24 +98,24 @@ export async function deleteTransactionCategory(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("transactionCategoryId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
-
-  const inUse = await db
-    .select({ id: transactions.transactionId })
-    .from(transactions)
-    .where(eq(transactions.transactionCategoryId, id))
-    .limit(1);
-
-  if (inUse.length > 0) {
-    return {
-      success: false,
-      errors: {},
-      message: "Cannot delete: this category is used by existing transactions.",
-    };
-  }
+  const id = parseEntityId(formData.get("transactionCategoryId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
   try {
+    const inUse = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(eq(transactions.transactionCategoryId, id))
+      .limit(1);
+
+    if (inUse.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message: "Cannot delete: this category is used by existing transactions.",
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx.delete(transactionCategories).where(eq(transactionCategories.transactionCategoryId, id));
     });
@@ -157,8 +160,8 @@ export async function updateTransactionType(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("transactionTypeId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
+  const id = parseEntityId(formData.get("transactionTypeId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid type ID" };
 
   const result = parseNameForm(formData);
   if (!result.success) {
@@ -187,24 +190,24 @@ export async function deleteTransactionType(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("transactionTypeId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
-
-  const inUse = await db
-    .select({ id: transactions.transactionId })
-    .from(transactions)
-    .where(eq(transactions.transactionTypeId, id))
-    .limit(1);
-
-  if (inUse.length > 0) {
-    return {
-      success: false,
-      errors: {},
-      message: "Cannot delete: this type is used by existing transactions.",
-    };
-  }
+  const id = parseEntityId(formData.get("transactionTypeId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid type ID" };
 
   try {
+    const inUse = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(eq(transactions.transactionTypeId, id))
+      .limit(1);
+
+    if (inUse.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message: "Cannot delete: this type is used by existing transactions.",
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx.delete(transactionTypes).where(eq(transactionTypes.transactionTypeId, id));
     });
@@ -249,8 +252,8 @@ export async function updateAccountTypeCategory(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("accountTypeCategoryId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
+  const id = parseEntityId(formData.get("accountTypeCategoryId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid account type category ID" };
 
   const result = parseNameForm(formData);
   if (!result.success) {
@@ -279,24 +282,24 @@ export async function deleteAccountTypeCategory(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("accountTypeCategoryId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
-
-  const inUse = await db
-    .select({ id: accountTypes.accountTypeId })
-    .from(accountTypes)
-    .where(eq(accountTypes.accountTypeCategoryId, id))
-    .limit(1);
-
-  if (inUse.length > 0) {
-    return {
-      success: false,
-      errors: {},
-      message: "Cannot delete: this category has account types assigned to it.",
-    };
-  }
+  const id = parseEntityId(formData.get("accountTypeCategoryId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid account type category ID" };
 
   try {
+    const inUse = await db
+      .select({ id: accountTypes.accountTypeId })
+      .from(accountTypes)
+      .where(eq(accountTypes.accountTypeCategoryId, id))
+      .limit(1);
+
+    if (inUse.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message: "Cannot delete: this category has account types assigned to it.",
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx.delete(accountTypeCategories).where(eq(accountTypeCategories.accountTypeCategoryId, id));
     });
@@ -348,8 +351,8 @@ export async function updateAccountType(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("accountTypeId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
+  const id = parseEntityId(formData.get("accountTypeId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid account type ID" };
 
   const result = accountTypeSchema.safeParse({
     name: formData.get("name") as string,
@@ -385,24 +388,24 @@ export async function deleteAccountType(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const id = Number(formData.get("accountTypeId"));
-  if (!id || id <= 0) return { success: false, errors: {}, message: "Invalid ID" };
-
-  const inUse = await db
-    .select({ id: accounts.accountId })
-    .from(accounts)
-    .where(eq(accounts.accountTypeId, id))
-    .limit(1);
-
-  if (inUse.length > 0) {
-    return {
-      success: false,
-      errors: {},
-      message: "Cannot delete: this account type is used by existing accounts.",
-    };
-  }
+  const id = parseEntityId(formData.get("accountTypeId"));
+  if (id === null) return { success: false, errors: {}, message: "Invalid account type ID" };
 
   try {
+    const inUse = await db
+      .select({ id: accounts.accountId })
+      .from(accounts)
+      .where(eq(accounts.accountTypeId, id))
+      .limit(1);
+
+    if (inUse.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message: "Cannot delete: this account type is used by existing accounts.",
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx.delete(accountTypes).where(eq(accountTypes.accountTypeId, id));
     });

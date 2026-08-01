@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { auditedTransaction } from "@/lib/db/audited";
 import { accounts, accountBalanceHistory, transactions } from "@/drizzle/schema";
 import { accountFormSchema } from "@/lib/validations/account";
+import { parseEntityId } from "@/lib/validations/id";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { eq, or } from "drizzle-orm";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
@@ -103,8 +104,8 @@ export async function updateAccount(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const accountId = Number(formData.get("accountId"));
-  if (!accountId || accountId <= 0) {
+  const accountId = parseEntityId(formData.get("accountId"));
+  if (accountId === null) {
     return { success: false, errors: {}, message: "Invalid account ID" };
   }
 
@@ -168,33 +169,37 @@ export async function deleteAccount(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const accountId = Number(formData.get("accountId"));
-  if (!accountId || accountId <= 0) {
+  const accountId = parseEntityId(formData.get("accountId"));
+  if (accountId === null) {
     return { success: false, errors: {}, message: "Invalid account ID" };
   }
 
-  // Check for transactions referencing this account
-  const txnRows = await db
-    .select({ id: transactions.transactionId })
-    .from(transactions)
-    .where(
-      or(
-        eq(transactions.accountId, accountId),
-        eq(transactions.relatedAccountId, accountId)
-      )
-    )
-    .limit(1);
-
-  if (txnRows.length > 0) {
-    return {
-      success: false,
-      errors: {},
-      message:
-        "Cannot delete an account that has transactions. Close the account instead by setting a closed date.",
-    };
-  }
-
   try {
+    // Check for transactions referencing this account. Inside the try, not
+    // before it (Issue #179): a read that fails here — a dropped connection,
+    // say — used to escape the action as an unhandled throw rather than the
+    // ActionState the form expects. Still outside auditedTransaction, since
+    // holding a transaction open across a read buys nothing.
+    const txnRows = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(
+        or(
+          eq(transactions.accountId, accountId),
+          eq(transactions.relatedAccountId, accountId)
+        )
+      )
+      .limit(1);
+
+    if (txnRows.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message:
+          "Cannot delete an account that has transactions. Close the account instead by setting a closed date.",
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       // Clean up any balance history rows
       await tx
