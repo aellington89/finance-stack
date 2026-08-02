@@ -81,6 +81,18 @@ services:
       FINANCE_APP_DB_PASSWORD: ${FINANCE_APP_DB_PASSWORD}
       FINANCE_IMPORTER_DB_PASSWORD: ${FINANCE_IMPORTER_DB_PASSWORD}
       FINANCE_METABASE_DB_PASSWORD: ${FINANCE_METABASE_DB_PASSWORD}
+      # Metabase's metadata role (#239): this job re-asserts its attributes on
+      # every run, which is what reaches an existing volume. Names only —
+      # migrate does not rotate MB_DB_PASS (that is #189).
+      MB_DB_USER: ${MB_DB_USER}
+      MB_DB_DBNAME: ${MB_DB_DBNAME}
+      # Not used by migrate-and-seed.sh. It is here so the on-demand
+      # scripts/verify-db-roles.sh can *connect* as the metadata role rather
+      # than only reading the catalog back — the half of the check that proves
+      # Metabase can still migrate its own database. The script skips those
+      # cases when this is unset, so this widens where the value lives in
+      # exchange for the verification being runnable with no -e flags.
+      MB_DB_PASS: ${MB_DB_PASS}
     volumes:
       - ./init-db/seeds:/seeds:ro        # Seed SQL files consumed by migrate-and-seed.sh
       - ./init-db/roles:/roles:ro        # Role creation + grant SQL (#130)

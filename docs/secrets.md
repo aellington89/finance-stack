@@ -11,7 +11,7 @@ Seven values. Nothing else in the stack is secret.
 | Variable | Lives in | Consumed by | Generate with |
 |---|---|---|---|
 | `POSTGRES_PASSWORD` | root `.env` | `postgres` (at `initdb`), and `migrate` / `init-script` / `pg-backup` as `PGPASSWORD` | any generator; URL-safe |
-| `MB_DB_PASS` | root `.env` | `init-db/01-create-databases.sh` (creates the role), `metabase` | any generator; URL-safe |
+| `MB_DB_PASS` | root `.env` | `init-db/01-create-databases.sh` (creates the role), `metabase`, `migrate` (verification only) | any generator; URL-safe |
 | `FINANCE_APP_DB_PASSWORD` | root `.env` | `migrate` (creates the role), `finance-app` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_IMPORTER_DB_PASSWORD` | root `.env` | `migrate`, `importer` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_METABASE_DB_PASSWORD` | root `.env` | `migrate` only — then entered by hand in the Metabase admin UI | any generator; URL-safe |
@@ -27,6 +27,20 @@ in the value breaks the URL. Keep them URL-safe or percent-encode them.
 
 The user's own sign-in password is not on this list — it lives scrypt-hashed in
 the `users` table, and nothing outside Postgres ever holds it.
+
+**What each of these is worth to an attacker is not obvious from the table**,
+and `MB_DB_PASS` is the one that was most misread. It authenticates
+`MB_DB_USER`, the role Metabase uses for its own metadata database. Read from
+`init-db/01-create-databases.sh` that is a scoped login; on the live cluster it
+was a **full superuser** with `CREATEDB`, `CREATEROLE`, `REPLICATION` and
+`BYPASSRLS` — so the one variable the repository described as the narrowest of
+the four database credentials was in fact the widest, equivalent to
+`POSTGRES_PASSWORD`. That is fixed in
+[#239](https://github.com/aellington89/finance-stack/issues/239): the role now
+owns its metadata database and holds `CREATE` on that database's schema, has no
+cluster attributes at all, and cannot connect to `Finances`. Its blast radius
+is Metabase's own dashboards and questions — which still includes Metabase's
+user table, so it is not nothing.
 
 ## Production secret sourcing
 
@@ -154,7 +168,20 @@ carry its evidence.
 | `.github/workflows/` | CI-only values, named as such (`ci-app-pw`, `release-smoke-test-only-secret`) |
 | Full git history | `.env` and `app/.env.local` were never tracked. No API keys, tokens, or private keys in any commit |
 
-Two things it did find:
+Three things it did find:
+
+**One credential was far wider than the repository said.** `MB_DB_PASS` reads as
+a scoped metadata-DB login everywhere it appears — the inventory above, the
+`CREATE ROLE … WITH LOGIN PASSWORD` in `init-db/01-create-databases.sh`, and a
+line in `docs/database.md` that stated outright it "was never the superuser."
+The live role carried every attribute Postgres has. Nothing in the repository
+recorded the change, and nothing would have caught it: the grant gate swept a
+hand-maintained list of three role names, and `metabase_user` was not on it.
+Broken out as [#239](https://github.com/aellington89/finance-stack/issues/239)
+and fixed there — the role is de-privileged, the sweep now covers every login
+role in the cluster, and CI asserts the gate fails when one is widened.
+
+Two more:
 
 **The ignore rules were narrower than they read.** The root `.gitignore` listed
 `.env` and `app/.env.local` literally, so `.env.production`, `.env.local` and

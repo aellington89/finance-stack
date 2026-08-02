@@ -33,15 +33,27 @@
 # now enforced by `npm run check:seed-references` rather than by skipping the
 # file — see the header of shared-lookups.sql before editing it (issue #187).
 #
+# It also converges the Metabase metadata role (/roles/03-metabase-role.sql,
+# issue #239). That role is created by init-db/01-create-databases.sh, which
+# runs only on an empty PGDATA — so on an existing volume nothing re-asserted
+# what it was allowed to be, and it had drifted to SUPERUSER unnoticed.
+#
 # Required env vars (set by docker-compose.yml):
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD, FINANCE_APP_DB
 #   FINANCE_APP_DB_PASSWORD, FINANCE_IMPORTER_DB_PASSWORD,
 #   FINANCE_METABASE_DB_PASSWORD  (the three service-role passwords, #130)
+#   MB_DB_USER, MB_DB_DBNAME      (names only — no password; see #189)
 # ------------------------------------------------------------
 set -euo pipefail
 
 FINANCE_APP_DB="${FINANCE_APP_DB:-Finances}"
 TEST_DB="Finances_Test"
+
+# Names, not credentials, so these carry defaults rather than the `:?` guards
+# below: an unset value here is a misconfiguration, not a security fault, and
+# the defaults match .env.example.
+MB_DB_USER="${MB_DB_USER:-metabase_user}"
+MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
 
 # Fail fast and loudly on a missing role password. Compose substitutes an unset
 # variable with the empty string rather than leaving it unset, so without these
@@ -102,6 +114,20 @@ psql -v ON_ERROR_STOP=1 -d postgres \
     -v importer_password="${FINANCE_IMPORTER_DB_PASSWORD}" \
     -v metabase_password="${FINANCE_METABASE_DB_PASSWORD}" \
     -f /roles/01-create-roles.sql
+
+# Metabase's metadata role (#239). Runs against the metadata database rather
+# than `postgres`, because it issues a schema-level GRANT. Skipped rather than
+# failed when that database is absent: a cluster that has never provisioned
+# Metabase is a valid configuration, and init-db creates the database and the
+# role together, so neither exists without the other.
+echo ">>> Converging the Metabase metadata role..."
+if [ -n "$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${MB_DB_DBNAME}'" -d postgres)" ]; then
+    psql -v ON_ERROR_STOP=1 -d "${MB_DB_DBNAME}" \
+        -v mb_user="${MB_DB_USER}" \
+        -f /roles/03-metabase-role.sql
+else
+    echo ">>> No ${MB_DB_DBNAME} database — skipping."
+fi
 
 for db in "${FINANCE_APP_DB}" "${TEST_DB}"; do
     heal_adopted_baseline "${db}"

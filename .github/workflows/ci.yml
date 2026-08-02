@@ -96,6 +96,25 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d "Finances_Test" \
             -v OWNER=postgres -f ../init-db/roles/02-grants.sql
 
+      # Issue #239. Stands up Metabase's metadata role and database the way
+      # init-db/01-create-databases.sh does, then applies the convergence file
+      # the migrate service applies. Without this the cluster holds exactly the
+      # three roles the gate used to name, so a sweep over "every login role"
+      # would be a sweep over the same three and would prove nothing — the
+      # second login role is the whole point.
+      - name: Create the Metabase metadata role and database
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres \
+            -c "CREATE ROLE metabase_user LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+                  NOREPLICATION NOBYPASSRLS PASSWORD 'ci-metabase-meta-pw';" \
+            -c 'CREATE DATABASE metabase OWNER metabase_user;'
+          psql -v ON_ERROR_STOP=1 -d metabase \
+            -v mb_user=metabase_user -f ../init-db/roles/03-metabase-role.sql
+
       # Asserts the grant matrix against the catalog, then connects as each role
       # and runs real statements (see scripts/verify-db-roles.sh). PGHOST is
       # localhost, which reaches the service container through Docker's port
@@ -109,8 +128,61 @@ jobs:
           FINANCE_APP_DB_PASSWORD: ci-app-pw
           FINANCE_IMPORTER_DB_PASSWORD: ci-importer-pw
           FINANCE_METABASE_DB_PASSWORD: ci-metabase-pw
+          MB_DB_USER: metabase_user
+          MB_DB_DBNAME: metabase
+          MB_DB_PASS: ci-metabase-meta-pw
           ROLES_DIR: ../init-db/roles
         run: bash ../scripts/verify-db-roles.sh Finances_Test
+
+      # Issue #239. A green gate proves nothing about a gate that cannot fail,
+      # and the drift this one exists to catch is invisible in a passing run:
+      # metabase_user sat beside the three service roles as a full SUPERUSER for
+      # months while the matrix reported OK, because the sweep iterated a
+      # hand-maintained list of three names. Each case below introduces a real
+      # violation, asserts the gate rejects it, and reverts it.
+      - name: Attribute gate negative check
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          set -euo pipefail
+
+          gate_must_fail() {
+            if psql -q -v ON_ERROR_STOP=1 -d "Finances_Test" \
+                 -f ../init-db/roles/assert-grants.sql >/dev/null 2>&1; then
+              echo "::error::assert-grants.sql passed while $1. The attribute sweep is not covering every login role — see init-db/roles/assert-grants.sql (issue #239)."
+              exit 1
+            fi
+            echo "ok  gate fails when $1"
+          }
+
+          # 1. The exact drift #239 was opened for. Reverted by re-running the
+          #    convergence file, which also proves it repairs a widened role
+          #    rather than only setting attributes on a fresh one.
+          psql -q -v ON_ERROR_STOP=1 -d postgres -c 'ALTER ROLE metabase_user SUPERUSER;'
+          gate_must_fail "metabase_user is a superuser"
+          psql -q -v ON_ERROR_STOP=1 -d metabase \
+            -v mb_user=metabase_user -f ../init-db/roles/03-metabase-role.sql > /dev/null
+
+          # 2. A login role the stack has never heard of, carrying an attribute.
+          psql -q -v ON_ERROR_STOP=1 -d postgres -c 'CREATE ROLE rogue_superuser LOGIN SUPERUSER;'
+          gate_must_fail "an undeclared login role is a superuser"
+          psql -q -v ON_ERROR_STOP=1 -d postgres -c 'DROP ROLE rogue_superuser;'
+
+          # 3. Attribute-free, but reaching a database it was never declared
+          #    for — the half of the sweep that contains rather than de-escalates.
+          psql -q -v ON_ERROR_STOP=1 -d postgres \
+            -c 'CREATE ROLE rogue_analyst LOGIN;' \
+            -c 'GRANT CONNECT ON DATABASE "Finances_Test" TO rogue_analyst;'
+          gate_must_fail "an undeclared login role holds CONNECT"
+          psql -q -v ON_ERROR_STOP=1 -d postgres \
+            -c 'REVOKE ALL ON DATABASE "Finances_Test" FROM rogue_analyst;' \
+            -c 'DROP ROLE rogue_analyst;'
+
+          # Every case above must have been reverted, or the steps after this
+          # one are running against a cluster this step left dirty.
+          psql -v ON_ERROR_STOP=1 -d "Finances_Test" -f ../init-db/roles/assert-grants.sql
 
       - name: Schema drift gate
         env:
