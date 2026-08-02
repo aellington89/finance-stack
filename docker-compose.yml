@@ -1,7 +1,9 @@
-# Defines the five services that make up the finance stack:
-# postgres (data store), init-script (one-shot balance rebuild),
+# Defines the services that make up the finance stack:
+# postgres (data store), migrate (schema migrations + roles/seeds),
+# init-script (one-shot balance rebuild, --profile init),
 # finance-app (Next.js UI), importer (file ingestion),
-# and metabase (BI dashboards, --profile bi).
+# pg-backup (scheduled dumps), metabase (BI dashboards, --profile bi),
+# and caddy (TLS termination, --profile edge).
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
@@ -332,9 +334,65 @@ services:
       com.finance-stack.component: "bi"
       com.finance-stack.description: "Metabase BI dashboards"
 
+  # TLS termination (#182). Not started by default — the stack stays exactly as
+  # it was until you run `docker compose --profile edge up -d`, at which point
+  # Caddy fronts finance-app on 80/443 and obtains a certificate automatically.
+  #
+  # The app is not safe to expose without this: without TLS the session cookie
+  # and every figure on every page cross the network in the clear. See
+  # docs/deployment.md for the exposure posture and the setup walkthrough.
+  #
+  # finance-app deliberately keeps its own "3001:3001" binding so that starting
+  # this profile does not take away the way you reach the app today. When the
+  # host is genuinely internet-facing, rebind it to 127.0.0.1:3001:3001 so the
+  # proxy is the only public listener — the #130 pattern, applied to the app tier.
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: caddy
+    profiles: ["edge"]                 # Not started by default; run with --profile edge
+    restart: unless-stopped
+    ports:
+      - "80:80"                        # Required for the ACME HTTP challenge and the HTTP→HTTPS redirect
+      - "443:443"
+      - "443:443/udp"                  # HTTP/3
+    environment:
+      # Required by this profile, but declared with a plain default rather than
+      # `:?` — Compose interpolates every service before selecting profiles, so
+      # a required-variable marker here would break `docker compose up` for
+      # everyone not using the edge profile. Unset, Caddy refuses to start with
+      # an empty site address, and the failure stays inside this container.
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data               # Certificates and ACME account keys — losing this re-issues on next start
+      - caddy_config:/config
+    depends_on:
+      - finance-app
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://localhost:2019/config/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+    labels:
+      com.finance-stack.component: "edge"
+      com.finance-stack.description: "Caddy reverse proxy / TLS termination"
+
 volumes:
   postgres_data:    # Persists PostgreSQL data across container restarts
   metabase_data:    # Persists Metabase dashboards, questions, and settings
+  caddy_data:       # Persists Caddy's certificates and ACME account keys (--profile edge)
+  caddy_config:     # Persists Caddy's autosaved config (--profile edge)
 
 networks:
   appnet:

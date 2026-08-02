@@ -1,6 +1,6 @@
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { verifyCredentials } from "@/lib/auth/verify-credentials";
+import { authorizeCredentials } from "@/lib/auth/authorize-credentials";
 
 declare module "next-auth" {
   interface User {
@@ -30,13 +30,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         username: { label: "Username" },
         password: { label: "Password", type: "password" },
       },
+      /**
+       * The rate limit and the credential check both live in
+       * `lib/auth/authorize-credentials.ts` (#182), which keeps them testable —
+       * this file is not importable by Vitest. That module is also where the
+       * decision to key the limit on username rather than IP is explained; the
+       * short version is that `proxy.ts` imports this file, so nothing on the
+       * path may reach for `next/headers`.
+       */
       async authorize(credentials) {
         const username =
           typeof credentials?.username === "string" ? credentials.username : "";
         const password =
           typeof credentials?.password === "string" ? credentials.password : "";
 
-        const user = await verifyCredentials(username, password);
+        const user = await authorizeCredentials(username, password);
         if (!user) return null;
 
         return { id: user.id, name: user.username, role: user.role };

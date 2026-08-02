@@ -68,6 +68,17 @@ it("rejects an unauthenticated call", async () => {
 
 See [`tests/integration/actions/account-auth.test.ts`](../app/tests/integration/actions/account-auth.test.ts) for the authed + unauthed pair, and [`tests/integration/auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) for credential verification against the real `users` table (created rows are cleaned up in `afterAll`).
 
+## Rate Limiting in Tests
+
+`requireActionUser()` also applies a per-user mutation limit (Issue [#182](https://github.com/aellington89/finance-stack/issues/182)), and its counters are **module state that outlives a test file** — the integration project runs `fileParallelism: false`, so every action test in the run shares one process, and the session mock above hands them all the same user id.
+
+`vitest-setup.ts` therefore calls `__resetAllLimits()` in a `beforeEach`. Two things follow:
+
+- **Nothing to do in a normal test.** Counts never carry from one test to the next, so a file driving a few dozen actions cannot poison the file that runs after it.
+- **A single test may not exceed the budget** — 120 guarded actions, or 5 failed sign-ins for one username. A test that needs to cross the line should spend the budget by calling the guard directly rather than by running real mutations; see [`tests/integration/actions/account-rate-limit.test.ts`](../app/tests/integration/actions/account-rate-limit.test.ts).
+
+To move past a window instead of resetting it, spy on `Date.now()` rather than reaching for `vi.useFakeTimers()` — the sign-in path does real database I/O and a `scrypt` verification, and faking the whole timer set takes `setImmediate` out from under the `pg` driver. [`tests/integration/auth/login-rate-limit.test.ts`](../app/tests/integration/auth/login-rate-limit.test.ts) shows both.
+
 ## The Server Action Validation Contract
 
 [`tests/integration/actions/validation-contract.test.ts`](../app/tests/integration/actions/validation-contract.test.ts) is the executable form of the [Issue #179](https://github.com/aellington89/finance-stack/issues/179) checklist. For every mutating server action it asserts that an empty payload, and a payload carrying `1.5` / `Infinity` / `2147483648` in each ID field, is rejected with an authored message that contains no driver text.
