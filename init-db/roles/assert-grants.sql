@@ -66,7 +66,7 @@ BEGIN
         -- database at all. This is the assertion that contains the Metabase
         -- metadata role (which owns its own database and needs nothing here) —
         -- and it is what makes a hand-added role fail rather than pass quietly.
-        IF t <> ALL (ARRAY['finance_app', 'finance_importer', 'finance_metabase'])
+        IF t <> ALL (ARRAY['finance_app', 'finance_importer', 'finance_metabase', 'finance_bi'])
            AND has_database_privilege(t, db, 'CONNECT') THEN
             failures := failures || format(
                 'undeclared login role %s has CONNECT on %s', t, db);
@@ -76,7 +76,7 @@ BEGIN
     -- ── The three service roles exist and are scoped to this database ─────
     -- Attributes are covered by the sweep above; what is left here is
     -- existence and the per-database privileges only these three should hold.
-    FOREACH t IN ARRAY ARRAY['finance_app', 'finance_importer', 'finance_metabase']
+    FOREACH t IN ARRAY ARRAY['finance_app', 'finance_importer', 'finance_metabase', 'finance_bi']
     LOOP
         SELECT * INTO r FROM pg_roles WHERE rolname = t;
         IF NOT FOUND THEN
@@ -218,6 +218,34 @@ BEGIN
         END IF;
     END LOOP;
 
+    -- ── finance_bi: the core tables and views, never users or audit_log ───
+    -- The exclusions are the reason this role exists rather than reusing
+    -- finance_app, so they are asserted first and by name (#249).
+    FOREACH t IN ARRAY ARRAY['users', 'audit_log']
+    LOOP
+        IF has_table_privilege('finance_bi', t, 'SELECT') THEN
+            failures := failures || format('finance_bi can SELECT %s', t);
+        END IF;
+    END LOOP;
+
+    FOREACH t IN ARRAY ARRAY['accounts', 'account_types', 'account_type_categories',
+                             'transactions', 'transaction_categories',
+                             'transaction_types', 'account_balance_history',
+                             'v_transactions_full', 'v_account_balances_current',
+                             'v_daily_totals', 'v_audit_log']
+    LOOP
+        IF NOT has_table_privilege('finance_bi', t, 'SELECT') THEN
+            failures := failures || format('finance_bi cannot SELECT %s', t);
+        END IF;
+        -- Read-only in the strong sense: analytics must never write.
+        IF has_table_privilege('finance_bi', t, 'INSERT')
+           OR has_table_privilege('finance_bi', t, 'UPDATE')
+           OR has_table_privilege('finance_bi', t, 'DELETE')
+           OR has_table_privilege('finance_bi', t, 'TRUNCATE') THEN
+            failures := failures || format('finance_bi can write %s', t);
+        END IF;
+    END LOOP;
+
     -- ── PUBLIC holds nothing on this database ─────────────────────────────
     IF has_database_privilege('public', db, 'CONNECT') THEN
         failures := failures || format('PUBLIC still has CONNECT on %s', db);
@@ -231,7 +259,7 @@ BEGIN
             db, array_to_string(failures, E'\n  - ');
     END IF;
 
-    RAISE NOTICE 'grant matrix OK for % (finance_app, finance_importer, finance_metabase); '
+    RAISE NOTICE 'grant matrix OK for % (finance_app, finance_importer, finance_metabase, finance_bi); '
                  'attribute sweep OK for every login role except %', db, current_user;
 END
 $$;

@@ -6,6 +6,9 @@
 --   finance_app       — the Next.js app (DML on core tables, SELECT on users)
 --   finance_importer  — the file importer (INSERT into transactions + lookups)
 --   finance_metabase  — Metabase's Finances connection (SELECT on views only)
+--   finance_bi        — Metabase's Finances connection when questions are built
+--                       on base tables (SELECT on the core tables + views, and
+--                       nothing on users or audit_log). Issue #249.
 --
 -- Roles are cluster-global, so this file runs ONCE per migrate run against the
 -- maintenance database. Per-database privileges live in 02-grants.sql.
@@ -16,7 +19,7 @@
 -- migrate service runs idempotently on every `docker compose up`.
 --
 -- Required psql variables (passed with -v by the caller):
---   app_password, importer_password, metabase_password
+--   app_password, importer_password, metabase_password, bi_password
 --
 -- Passwords are interpolated as psql variables rather than shell-expanded into
 -- the SQL text, and quoted by format(%L) so a password containing a quote can
@@ -54,3 +57,11 @@ WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'finance_metabase')\gexec
 SELECT format(
     'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION'
     ' NOBYPASSRLS PASSWORD %L', 'finance_metabase', :'metabase_password')\gexec
+
+-- ── finance_bi ────────────────────────────────────────────────────────────
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', 'finance_bi', :'bi_password')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'finance_bi')\gexec
+
+SELECT format(
+    'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION'
+    ' NOBYPASSRLS PASSWORD %L', 'finance_bi', :'bi_password')\gexec

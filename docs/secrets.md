@@ -6,7 +6,7 @@ keeps it out of the repository and out of the images. Added in
 
 ## The inventory
 
-Seven values. Nothing else in the stack is secret.
+Eight values. Nothing else in the stack is secret.
 
 | Variable | Lives in | Consumed by | Generate with |
 |---|---|---|---|
@@ -15,10 +15,11 @@ Seven values. Nothing else in the stack is secret.
 | `FINANCE_APP_DB_PASSWORD` | root `.env` | `migrate` (creates the role), `finance-app` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_IMPORTER_DB_PASSWORD` | root `.env` | `migrate`, `importer` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_METABASE_DB_PASSWORD` | root `.env` | `migrate` only — then entered by hand in the Metabase admin UI | any generator; URL-safe |
+| `FINANCE_BI_DB_PASSWORD` | root `.env` | `migrate` only — then entered by hand in the Metabase admin UI (#249) | any generator; URL-safe |
 | `AUTH_SECRET` | root `.env` (Docker), `app/.env.local` (dev) | `finance-app` — signs and encrypts the session JWT | `openssl rand -base64 33` |
 | `DATABASE_URL` | `app/.env.local` | local `npm run dev` and the test suites only | n/a — embeds a password |
 
-`CREATE_USER_PASSWORD` is an eighth, but only ever transiently: it exists so
+`CREATE_USER_PASSWORD` is a ninth, but only ever transiently: it exists so
 `npm run auth:create-user` can run non-interactively ([Authentication](auth.md)).
 Set it for one command, do not put it in a file.
 
@@ -141,7 +142,7 @@ store is part of the platform rather than something to build.
 The procedure is in [Database — Rotating a role password](database.md#rotating-a-role-password),
 and is not repeated here. The one thing to know before you start:
 
-- **The three `FINANCE_*_DB_PASSWORD` values rotate from `.env` alone.**
+- **The four `FINANCE_*_DB_PASSWORD` values rotate from `.env` alone.**
   `init-db/roles/01-create-roles.sql` re-issues an unconditional
   `ALTER ROLE … PASSWORD` on every `migrate` run.
 - **`POSTGRES_PASSWORD` and `MB_DB_PASS` do not.** Both are applied only when

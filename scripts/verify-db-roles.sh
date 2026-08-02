@@ -30,6 +30,7 @@
 #   FINANCE_APP_DB_PASSWORD          finance_app password       (required)
 #   FINANCE_IMPORTER_DB_PASSWORD     finance_importer password  (required)
 #   FINANCE_METABASE_DB_PASSWORD     finance_metabase password  (required)
+#   FINANCE_BI_DB_PASSWORD           finance_bi password        (required)
 #   MB_DB_PASS                       Metabase metadata role pw  (optional — the
 #                                    metadata-role cases are skipped without it)
 #   MB_DB_USER / MB_DB_DBNAME        metadata role + database   (defaulted)
@@ -49,6 +50,7 @@ MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
 : "${FINANCE_APP_DB_PASSWORD:?must be set}"
 : "${FINANCE_IMPORTER_DB_PASSWORD:?must be set}"
 : "${FINANCE_METABASE_DB_PASSWORD:?must be set}"
+: "${FINANCE_BI_DB_PASSWORD:?must be set}"
 
 failed=0
 
@@ -201,6 +203,23 @@ expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table
 expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT users"                   "SELECT count(*) FROM users"
 expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "INSERT a transaction"           "BEGIN; ${INSERT_TXN}; ROLLBACK"
 expect_no_connect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" "$MB_DB_DBNAME"
+
+# ── finance_bi — read-only analytics, never users or audit_log ────────────
+# Metabase's connection when questions are built on base tables (#249). The two
+# deny cases are the reason this role exists instead of reusing finance_app,
+# which holds SELECT on users: a BI credential that can read
+# users.password_hash is one native SQL query away from being read, and hiding
+# the table in Metabase's admin UI is a display setting, not a boundary.
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" allow "SELECT the base tables" \
+  "SELECT (SELECT count(*) FROM transactions) + (SELECT count(*) FROM accounts)
+        + (SELECT count(*) FROM account_balance_history)"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" allow "SELECT the four views"  "$READ_VIEWS"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" deny  "SELECT users"           "SELECT count(*) FROM users"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" deny  "SELECT audit_log"       "SELECT count(*) FROM audit_log"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" deny  "INSERT a transaction"   "BEGIN; ${INSERT_TXN}; ROLLBACK"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" deny  "UPDATE transactions"    "BEGIN; UPDATE transactions SET amount = 0; ROLLBACK"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" deny  "DELETE transactions"    "BEGIN; DELETE FROM transactions; ROLLBACK"
+expect finance_bi "$FINANCE_BI_DB_PASSWORD" deny  "CREATE TABLE"           "CREATE TABLE bi_privilege_smoke (id int)"
 
 # ── MB_DB_USER — owns its metadata DB, and is nothing on the cluster ──────
 # The role Metabase authenticates as against its own metadata database. It was

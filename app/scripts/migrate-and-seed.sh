@@ -41,7 +41,8 @@
 # Required env vars (set by docker-compose.yml):
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD, FINANCE_APP_DB
 #   FINANCE_APP_DB_PASSWORD, FINANCE_IMPORTER_DB_PASSWORD,
-#   FINANCE_METABASE_DB_PASSWORD  (the three service-role passwords, #130)
+#   FINANCE_METABASE_DB_PASSWORD  (the service-role passwords, #130)
+#   FINANCE_BI_DB_PASSWORD        (the read-only BI role, #249)
 #   MB_DB_USER, MB_DB_DBNAME      (names only — no password; see #189)
 # ------------------------------------------------------------
 set -euo pipefail
@@ -61,6 +62,7 @@ MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
 : "${FINANCE_APP_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #130)}"
 : "${FINANCE_IMPORTER_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #130)}"
 : "${FINANCE_METABASE_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #130)}"
+: "${FINANCE_BI_DB_PASSWORD:?must be set — copy the new keys from .env.example into .env (issue #249)}"
 
 # Baseline journal `when` — the value drizzle-kit stores as created_at when it
 # applies 0000_baseline itself. Derived from the journal so it tracks the file
@@ -113,6 +115,7 @@ psql -v ON_ERROR_STOP=1 -d postgres \
     -v app_password="${FINANCE_APP_DB_PASSWORD}" \
     -v importer_password="${FINANCE_IMPORTER_DB_PASSWORD}" \
     -v metabase_password="${FINANCE_METABASE_DB_PASSWORD}" \
+    -v bi_password="${FINANCE_BI_DB_PASSWORD}" \
     -f /roles/01-create-roles.sql
 
 # Metabase's metadata role (#239). Runs against the metadata database rather

@@ -22,6 +22,9 @@
 --   finance_importer  SELECT+INSERT on transactions, SELECT on the three lookup
 --                     tables it resolves FKs against, and nothing else.
 --   finance_metabase  SELECT on the four views. No base-table access at all.
+--   finance_bi        SELECT on the seven core base tables and the four views.
+--                     Nothing on users or audit_log — that exclusion is the
+--                     whole point of the role existing (#249).
 --
 -- Table ownership stays with OWNER, so no service role can ALTER or DROP the
 -- schema, TRUNCATE a table, or touch the `drizzle` migration ledger.
@@ -44,15 +47,15 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 -- Converge: strip every privilege the three roles currently hold in this
 -- database before re-granting, so this file is the single authority. Without
 -- this, narrowing a grant here would leave the old wider grant in place.
-REVOKE ALL ON DATABASE :"DBNAME"          FROM finance_app, finance_importer, finance_metabase;
-REVOKE ALL ON SCHEMA public               FROM finance_app, finance_importer, finance_metabase;
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM finance_app, finance_importer, finance_metabase;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM finance_app, finance_importer, finance_metabase;
+REVOKE ALL ON DATABASE :"DBNAME"          FROM finance_app, finance_importer, finance_metabase, finance_bi;
+REVOKE ALL ON SCHEMA public               FROM finance_app, finance_importer, finance_metabase, finance_bi;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM finance_app, finance_importer, finance_metabase, finance_bi;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM finance_app, finance_importer, finance_metabase, finance_bi;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE :"OWNER" IN SCHEMA public
-    REVOKE ALL ON TABLES FROM finance_app, finance_importer, finance_metabase;
+    REVOKE ALL ON TABLES FROM finance_app, finance_importer, finance_metabase, finance_bi;
 ALTER DEFAULT PRIVILEGES FOR ROLE :"OWNER" IN SCHEMA public
-    REVOKE ALL ON SEQUENCES FROM finance_app, finance_importer, finance_metabase;
+    REVOKE ALL ON SEQUENCES FROM finance_app, finance_importer, finance_metabase, finance_bi;
 
 -- ── finance_app — the Next.js application ─────────────────────────────────
 -- Granted broadly ("all tables, minus explicit revokes") rather than as an
@@ -122,5 +125,32 @@ GRANT USAGE ON SCHEMA public TO finance_metabase;
 GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals,
     v_audit_log
     TO finance_metabase;
+
+-- ── finance_bi — Metabase when questions are built on base tables ─────────
+-- finance_metabase above is the stricter role and stays the right answer when
+-- every question sits on a view. It could not serve this deployment: the
+-- existing questions are built directly on `transactions` and
+-- `account_balance_history`, and `account_balance_history` has no view over it
+-- at all, so there was nothing to point them at (#249).
+--
+-- The alternative on the table was to reuse finance_app, which already holds
+-- SELECT on everything. That is what this role exists to avoid: finance_app can
+-- read `users`, so a BI credential built from it makes `users.password_hash`
+-- reachable from Metabase — and Metabase permits native SQL, so hiding the
+-- table in its admin UI is a display setting, not a privilege boundary.
+--
+-- Enumerated rather than granted ON ALL TABLES, for the reason finance_importer
+-- and finance_metabase are: the exclusions are the point, and `GRANT ... ON ALL
+-- TABLES` followed by a REVOKE would silently re-expose `users` the first time
+-- someone re-ran the grant with the REVOKE removed. A table added by a future
+-- migration must be added here by hand to become visible to BI.
+GRANT CONNECT ON DATABASE :"DBNAME" TO finance_bi;
+GRANT USAGE ON SCHEMA public TO finance_bi;
+GRANT SELECT ON accounts, account_types, account_type_categories, transactions,
+    transaction_categories, transaction_types, account_balance_history
+    TO finance_bi;
+GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals,
+    v_audit_log
+    TO finance_bi;
 
 COMMIT;

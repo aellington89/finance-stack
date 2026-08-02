@@ -81,6 +81,7 @@ services:
       FINANCE_APP_DB_PASSWORD: ${FINANCE_APP_DB_PASSWORD}
       FINANCE_IMPORTER_DB_PASSWORD: ${FINANCE_IMPORTER_DB_PASSWORD}
       FINANCE_METABASE_DB_PASSWORD: ${FINANCE_METABASE_DB_PASSWORD}
+      FINANCE_BI_DB_PASSWORD: ${FINANCE_BI_DB_PASSWORD}
       # Metabase's metadata role (#239): this job re-asserts its attributes on
       # every run, which is what reaches an existing volume. Names only —
       # migrate does not rotate MB_DB_PASS (that is #189).

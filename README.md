@@ -23,7 +23,7 @@ npm run auth:create-user -- <username>
 
 Sign in at http://localhost:3001/login and sign out from the sidebar footer. See [docs/auth.md](docs/auth.md) for the full model, the `AUTH_SECRET` requirement, and password resets.
 
-At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append transactions, and Metabase sees the three views and no base tables. Exactly one login role in the cluster is a superuser — the maintenance identity the one-shot jobs run as — and CI asserts that for *every* role, not a list of the expected ones. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.
+At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append transactions, and Metabase reads through a role that cannot touch `users` or `audit_log` and cannot write. Exactly one login role in the cluster is a superuser — the maintenance identity the one-shot jobs run as — and CI asserts that for *every* role, not a list of the expected ones. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.
 
 At the edge, every response carries a **content security policy** and the usual hardening headers (HSTS, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`), sign-ins are **rate limited** to five failures per username per 15 minutes, and server actions to 120 per user per minute.
 
@@ -44,13 +44,13 @@ Credentials are sourced from a single `.env` file on the deployment host — nev
 cp .env.example .env
 ```
 
-Edit `.env` and replace **every** `changeme` placeholder with your own value — including the three `FINANCE_*_DB_PASSWORD` service-role passwords, which are required (the migrate service aborts rather than create a login role with a blank password). Keep them URL-safe, since they go into connection strings. Generate a real `AUTH_SECRET` (signs the session cookies):
+Edit `.env` and replace **every** `changeme` placeholder with your own value — including the four `FINANCE_*_DB_PASSWORD` service-role passwords, which are required (the migrate service aborts rather than create a login role with a blank password). Keep them URL-safe, since they go into connection strings. Generate a real `AUTH_SECRET` (signs the session cookies):
 
 ```bash
 openssl rand -base64 33
 ```
 
-> **Upgrading an existing stack?** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`, and `FINANCE_METABASE_DB_PASSWORD` are new. Copy them from `.env.example` into your `.env`, then `docker compose up` — the migrate service creates the roles and applies their grants to your existing databases. No manual SQL, no data migration. If you use Metabase, re-point its Finances connection at `finance_metabase` ([docs/database.md](docs/database.md#pointing-metabase-at-finance_metabase)).
+> **Upgrading an existing stack?** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`, `FINANCE_METABASE_DB_PASSWORD` and `FINANCE_BI_DB_PASSWORD` are new. Copy them from `.env.example` into your `.env`, then `docker compose up` — the migrate service creates the roles and applies their grants to your existing databases. No manual SQL, no data migration. If you use Metabase, re-point its Finances connection at a least-privilege role — and check what it is set to first, since that step is manual and easy to have never done ([docs/database.md](docs/database.md#pointing-metabase-at-a-least-privilege-role)).
 
 ### 2. Start the stack
 
