@@ -77,6 +77,7 @@ merges.
 - [#179](https://github.com/aellington89/finance-stack/issues/179) Input validation & error-message conventions audit *(new)*
 - [#180](https://github.com/aellington89/finance-stack/issues/180) Audit logging for financial mutations *(new)*
 - [#181](https://github.com/aellington89/finance-stack/issues/181) Secret management audit & production secret sourcing *(new)*
+- [#239](https://github.com/aellington89/finance-stack/issues/239) `metabase_user` is a superuser; role attributes are never asserted or re-applied *(new — from #181)*
 - [#182](https://github.com/aellington89/finance-stack/issues/182) Edge hardening: TLS, security headers, rate limiting *(new)*
 - [#187](https://github.com/aellington89/finance-stack/issues/187) Backfill `transaction_types` id=12 — `/api/health` seed drift (503) *(new)*
 - [#186](https://github.com/aellington89/finance-stack/issues/186) List all docs/ guides in the docs README Guides section *(new)*
