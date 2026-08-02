@@ -80,7 +80,6 @@ services:
       # rather than creating a login role with a blank password.
       FINANCE_APP_DB_PASSWORD: ${FINANCE_APP_DB_PASSWORD}
       FINANCE_IMPORTER_DB_PASSWORD: ${FINANCE_IMPORTER_DB_PASSWORD}
-      FINANCE_METABASE_DB_PASSWORD: ${FINANCE_METABASE_DB_PASSWORD}
       FINANCE_BI_DB_PASSWORD: ${FINANCE_BI_DB_PASSWORD}
       # Metabase's metadata role (#239): this job re-asserts its attributes on
       # every run, which is what reaches an existing volume. Names only —
@@ -299,7 +298,7 @@ services:
   # The MB_DB_* vars below configure only that internal metadata DB (owned by the
   # non-superuser MB_DB_USER role). Metabase's *analytics* connection to Finances is
   # stored inside its own metadata DB, not in env, so it cannot be set here: point it
-  # at the finance_metabase role (views only, #130) once in the admin UI — see the
+  # at the finance_bi role (read-only, no users/audit_log, #249) once in the admin UI — see the
   # "Roles & privileges" section of docs/database.md.
   #
   # Pinned to the 0.58 LTS line (#213). Metabase supports LTS releases for 14 months

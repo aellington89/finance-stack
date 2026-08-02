@@ -5,10 +5,15 @@
 -- replacing the shared `postgres` superuser:
 --   finance_app       — the Next.js app (DML on core tables, SELECT on users)
 --   finance_importer  — the file importer (INSERT into transactions + lookups)
---   finance_metabase  — Metabase's Finances connection (SELECT on views only)
---   finance_bi        — Metabase's Finances connection when questions are built
---                       on base tables (SELECT on the core tables + views, and
---                       nothing on users or audit_log). Issue #249.
+--   finance_bi        — Metabase's Finances connection: SELECT on the core
+--                       tables and views, nothing on users or audit_log (#249)
+--
+-- A fourth role, finance_metabase, was retired in #250. It held SELECT on the
+-- four views and nothing else — stricter than finance_bi and the better posture
+-- — but it could not serve questions built on base tables, and nothing was ever
+-- pointed at it in the two years it existed. Two near-identical credentials for
+-- one job is how an operator wires up the wrong one. 02-grants.sql drops its
+-- privileges and migrate-and-seed.sh drops the role.
 --
 -- Roles are cluster-global, so this file runs ONCE per migrate run against the
 -- maintenance database. Per-database privileges live in 02-grants.sql.
@@ -19,7 +24,7 @@
 -- migrate service runs idempotently on every `docker compose up`.
 --
 -- Required psql variables (passed with -v by the caller):
---   app_password, importer_password, metabase_password, bi_password
+--   app_password, importer_password, bi_password
 --
 -- Passwords are interpolated as psql variables rather than shell-expanded into
 -- the SQL text, and quoted by format(%L) so a password containing a quote can
@@ -49,14 +54,6 @@ WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'finance_importer')\gexec
 SELECT format(
     'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION'
     ' NOBYPASSRLS PASSWORD %L', 'finance_importer', :'importer_password')\gexec
-
--- ── finance_metabase ──────────────────────────────────────────────────────
-SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', 'finance_metabase', :'metabase_password')
-WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'finance_metabase')\gexec
-
-SELECT format(
-    'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION'
-    ' NOBYPASSRLS PASSWORD %L', 'finance_metabase', :'metabase_password')\gexec
 
 -- ── finance_bi ────────────────────────────────────────────────────────────
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', 'finance_bi', :'bi_password')

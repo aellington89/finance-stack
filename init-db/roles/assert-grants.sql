@@ -33,9 +33,9 @@ DECLARE
     t        text;
 BEGIN
     -- ── Every login role in the cluster, not a list of three ──────────────
-    -- This used to iterate ARRAY['finance_app','finance_importer',
-    -- 'finance_metabase'], which is why a SUPERUSER metabase_user sat beside
-    -- them for months without the gate having an opinion about it (issue #239).
+    -- This used to iterate a hand-maintained list of three role names, which is
+    -- why a SUPERUSER metabase_user sat beside them for months without the gate
+    -- having an opinion about it (issue #239).
     -- A role added later — by a future service, or by hand — now fails here by
     -- default rather than being invisible to the check.
     --
@@ -66,7 +66,7 @@ BEGIN
         -- database at all. This is the assertion that contains the Metabase
         -- metadata role (which owns its own database and needs nothing here) —
         -- and it is what makes a hand-added role fail rather than pass quietly.
-        IF t <> ALL (ARRAY['finance_app', 'finance_importer', 'finance_metabase', 'finance_bi'])
+        IF t <> ALL (ARRAY['finance_app', 'finance_importer', 'finance_bi'])
            AND has_database_privilege(t, db, 'CONNECT') THEN
             failures := failures || format(
                 'undeclared login role %s has CONNECT on %s', t, db);
@@ -76,7 +76,7 @@ BEGIN
     -- ── The three service roles exist and are scoped to this database ─────
     -- Attributes are covered by the sweep above; what is left here is
     -- existence and the per-database privileges only these three should hold.
-    FOREACH t IN ARRAY ARRAY['finance_app', 'finance_importer', 'finance_metabase', 'finance_bi']
+    FOREACH t IN ARRAY ARRAY['finance_app', 'finance_importer', 'finance_bi']
     LOOP
         SELECT * INTO r FROM pg_roles WHERE rolname = t;
         IF NOT FOUND THEN
@@ -197,27 +197,6 @@ BEGIN
         failures := failures || 'finance_importer has USAGE on the accounts sequence';
     END IF;
 
-    -- ── finance_metabase: the four views, nothing else ────────────────────
-    FOREACH t IN ARRAY ARRAY['v_transactions_full', 'v_account_balances_current',
-                             'v_daily_totals', 'v_audit_log']
-    LOOP
-        IF NOT has_table_privilege('finance_metabase', t, 'SELECT') THEN
-            failures := failures || format('finance_metabase cannot SELECT %s', t);
-        END IF;
-        IF has_table_privilege('finance_metabase', t, 'INSERT') THEN
-            failures := failures || format('finance_metabase can INSERT %s', t);
-        END IF;
-    END LOOP;
-    FOREACH t IN ARRAY ARRAY['transactions', 'accounts', 'account_types',
-                             'account_type_categories', 'transaction_categories',
-                             'transaction_types', 'account_balance_history', 'users',
-                             'audit_log']
-    LOOP
-        IF has_table_privilege('finance_metabase', t, 'SELECT') THEN
-            failures := failures || format('finance_metabase can SELECT base table %s', t);
-        END IF;
-    END LOOP;
-
     -- ── finance_bi: the core tables and views, never users or audit_log ───
     -- The exclusions are the reason this role exists rather than reusing
     -- finance_app, so they are asserted first and by name (#249).
@@ -259,7 +238,7 @@ BEGIN
             db, array_to_string(failures, E'\n  - ');
     END IF;
 
-    RAISE NOTICE 'grant matrix OK for % (finance_app, finance_importer, finance_metabase, finance_bi); '
+    RAISE NOTICE 'grant matrix OK for % (finance_app, finance_importer, finance_bi); '
                  'attribute sweep OK for every login role except %', db, current_user;
 END
 $$;

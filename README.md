@@ -44,13 +44,13 @@ Credentials are sourced from a single `.env` file on the deployment host — nev
 cp .env.example .env
 ```
 
-Edit `.env` and replace **every** `changeme` placeholder with your own value — including the four `FINANCE_*_DB_PASSWORD` service-role passwords, which are required (the migrate service aborts rather than create a login role with a blank password). Keep them URL-safe, since they go into connection strings. Generate a real `AUTH_SECRET` (signs the session cookies):
+Edit `.env` and replace **every** `changeme` placeholder with your own value — including the three `FINANCE_*_DB_PASSWORD` service-role passwords, which are required (the migrate service aborts rather than create a login role with a blank password). Keep them URL-safe, since they go into connection strings. Generate a real `AUTH_SECRET` (signs the session cookies):
 
 ```bash
 openssl rand -base64 33
 ```
 
-> **Upgrading an existing stack?** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`, `FINANCE_METABASE_DB_PASSWORD` and `FINANCE_BI_DB_PASSWORD` are new. Copy them from `.env.example` into your `.env`, then `docker compose up` — the migrate service creates the roles and applies their grants to your existing databases. No manual SQL, no data migration. If you use Metabase, re-point its Finances connection at a least-privilege role — and check what it is set to first, since that step is manual and easy to have never done ([docs/database.md](docs/database.md#pointing-metabase-at-a-least-privilege-role)).
+> **Upgrading an existing stack?** `FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD` and `FINANCE_BI_DB_PASSWORD` are new. Copy them from `.env.example` into your `.env`, then `docker compose up` — the migrate service creates the roles and applies their grants to your existing databases. No manual SQL, no data migration. If you use Metabase, re-point its Finances connection at a least-privilege role — and check what it is set to first, since that step is manual and easy to have never done ([docs/database.md](docs/database.md#pointing-metabase-at-a-least-privilege-role)).
 
 ### 2. Start the stack
 

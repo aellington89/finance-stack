@@ -21,7 +21,6 @@
 --                     sequences.
 --   finance_importer  SELECT+INSERT on transactions, SELECT on the three lookup
 --                     tables it resolves FKs against, and nothing else.
---   finance_metabase  SELECT on the four views. No base-table access at all.
 --   finance_bi        SELECT on the seven core base tables and the four views.
 --                     Nothing on users or audit_log — that exclusion is the
 --                     whole point of the role existing (#249).
@@ -36,6 +35,18 @@
 -- running finance-app has no privileges and starts erroring mid-request.
 BEGIN;
 
+-- ── Retire finance_metabase (#250) ────────────────────────────────────────
+-- Removes every privilege it holds in THIS database. The DROP ROLE itself is
+-- cluster-global and happens once, after every database has been cleaned — see
+-- app/scripts/migrate-and-seed.sh. Split that way because a role cannot be
+-- dropped while it still holds a privilege anywhere.
+--
+-- Guarded, and a no-op on a fresh cluster that never had the role. Left in
+-- place rather than deleted after one release: the role is only reachable by
+-- an existing volume, and there is no other mechanism that would clean one up.
+SELECT 'DROP OWNED BY finance_metabase'
+WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = 'finance_metabase')\gexec
+
 -- ── Baseline: nothing is implicit ─────────────────────────────────────────
 -- PUBLIC (i.e. every role, present and future) loses CONNECT/TEMP on the
 -- database and CREATE on the schema. Both are already the default on
@@ -47,15 +58,15 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 -- Converge: strip every privilege the three roles currently hold in this
 -- database before re-granting, so this file is the single authority. Without
 -- this, narrowing a grant here would leave the old wider grant in place.
-REVOKE ALL ON DATABASE :"DBNAME"          FROM finance_app, finance_importer, finance_metabase, finance_bi;
-REVOKE ALL ON SCHEMA public               FROM finance_app, finance_importer, finance_metabase, finance_bi;
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM finance_app, finance_importer, finance_metabase, finance_bi;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM finance_app, finance_importer, finance_metabase, finance_bi;
+REVOKE ALL ON DATABASE :"DBNAME"          FROM finance_app, finance_importer, finance_bi;
+REVOKE ALL ON SCHEMA public               FROM finance_app, finance_importer, finance_bi;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM finance_app, finance_importer, finance_bi;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM finance_app, finance_importer, finance_bi;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE :"OWNER" IN SCHEMA public
-    REVOKE ALL ON TABLES FROM finance_app, finance_importer, finance_metabase, finance_bi;
+    REVOKE ALL ON TABLES FROM finance_app, finance_importer, finance_bi;
 ALTER DEFAULT PRIVILEGES FOR ROLE :"OWNER" IN SCHEMA public
-    REVOKE ALL ON SEQUENCES FROM finance_app, finance_importer, finance_metabase, finance_bi;
+    REVOKE ALL ON SEQUENCES FROM finance_app, finance_importer, finance_bi;
 
 -- ── finance_app — the Next.js application ─────────────────────────────────
 -- Granted broadly ("all tables, minus explicit revokes") rather than as an
@@ -108,30 +119,11 @@ GRANT SELECT ON accounts, transaction_categories, transaction_types TO finance_i
 SELECT format('GRANT USAGE, SELECT ON SEQUENCE %s TO finance_importer',
               pg_get_serial_sequence('transactions', 'transaction_id'))\gexec
 
--- ── finance_metabase — Metabase's Finances connection ─────────────────────
--- Views only, and no base-table access whatsoever. This works because the three
--- views are created without `security_invoker` (see 0000_baseline.sql), so they
--- execute with the view owner's rights: SELECT on the view is sufficient and the
--- underlying tables stay invisible in Metabase's data browser.
---
--- Note this role is NOT wired through docker-compose.yml — Metabase stores its
--- analytics connections in its own metadata DB, so the credentials are entered
--- once in the Metabase admin UI (see docs/database.md). MB_DB_USER remains the
--- separate role for Metabase's internal metadata database.
---
--- A new view added by a future migration must be added here explicitly.
-GRANT CONNECT ON DATABASE :"DBNAME" TO finance_metabase;
-GRANT USAGE ON SCHEMA public TO finance_metabase;
-GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals,
-    v_audit_log
-    TO finance_metabase;
-
 -- ── finance_bi — Metabase when questions are built on base tables ─────────
--- finance_metabase above is the stricter role and stays the right answer when
--- every question sits on a view. It could not serve this deployment: the
--- existing questions are built directly on `transactions` and
--- `account_balance_history`, and `account_balance_history` has no view over it
--- at all, so there was nothing to point them at (#249).
+-- The one role Metabase authenticates as against Finances. A stricter
+-- views-only role (finance_metabase) existed until #250 and was never pointed
+-- at: it could not serve questions built directly on `transactions` or
+-- `account_balance_history`, and the latter has no view over it at all (#249).
 --
 -- The alternative on the table was to reuse finance_app, which already holds
 -- SELECT on everything. That is what this role exists to avoid: finance_app can
@@ -140,7 +132,7 @@ GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals,
 -- table in its admin UI is a display setting, not a privilege boundary.
 --
 -- Enumerated rather than granted ON ALL TABLES, for the reason finance_importer
--- and finance_metabase are: the exclusions are the point, and `GRANT ... ON ALL
+-- is: the exclusions are the point, and `GRANT ... ON ALL
 -- TABLES` followed by a REVOKE would silently re-expose `users` the first time
 -- someone re-ran the grant with the REVOKE removed. A table added by a future
 -- migration must be added here by hand to become visible to BI.

@@ -92,7 +92,7 @@ cd app && npm run check:seed-references
 Fails if the database service roles don't hold exactly the privileges
 `init-db/roles/02-grants.sql` is meant to establish — too few or too many. Most
 often tripped by a migration that adds a table or view the narrow
-`finance_importer` / `finance_metabase` roles need, since those grants are
+`finance_importer` / `finance_bi` roles need, since those grants are
 enumerated by hand (`finance_app` is covered automatically).
 
 A second way to trip it: bringing a table into the audit set

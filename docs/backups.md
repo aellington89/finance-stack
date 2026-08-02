@@ -84,7 +84,7 @@ are created and migrated, then run the restore above.
 
 > **Restoring into a different cluster: create the roles first.** Dumps are taken
 > as the superuser, so they carry the `GRANT` statements for `finance_app`,
-> `finance_importer`, and `finance_metabase`, and `restore.sh` uses
+> `finance_importer`, and `finance_bi`, and `restore.sh` uses
 > `pg_restore --no-owner`, which still applies privileges. Restoring into a
 > cluster where those roles do not exist produces `role "finance_app" does not
 > exist` errors on those statements. Bringing the stack up first (which runs the

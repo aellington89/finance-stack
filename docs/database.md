@@ -23,7 +23,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `v_transactions_full` | Fully joined transaction view with account names, types, categories, and related account info |
 | `v_account_balances_current` | Current balance per account with full classification hierarchy (type, category) |
 | `v_daily_totals` | Daily transaction totals grouped by transaction type (for income/expense line charts) |
-| `v_audit_log` | The audit trail, flattened for reading. The only audit object `finance_metabase` can reach |
+| `v_audit_log` | The audit trail, flattened for reading. The only audit object the BI role can reach |
 
 ## Balance History
 
@@ -98,10 +98,11 @@ The long-running services do **not** connect as the `postgres` superuser (Issue 
 |---|---|---|
 | `finance_app` | `finance-app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table **except `users` and `audit_log`, which are `SELECT`-only**; `SELECT` on the views; `USAGE` on the sequences |
 | `finance_importer` | `importer` | `SELECT` + `INSERT` on `transactions`; `SELECT` on `accounts`, `transaction_categories`, `transaction_types`. No `UPDATE`, no `DELETE` |
-| `finance_metabase` | Metabase's Finances connection, when every question sits on a view | `SELECT` on the four views. **No privilege on any base table** |
-| `finance_bi` | Metabase's Finances connection, when questions are built on base tables | `SELECT` on the seven core base tables and the four views. **Nothing on `users` or `audit_log`**, and no write anywhere |
+| `finance_bi` | Metabase's Finances connection | `SELECT` on the seven core base tables and the four views. **Nothing on `users` or `audit_log`**, and no write anywhere |
 
-**Two BI roles, and which one you want depends on your questions.** `finance_metabase` is the stricter and preferred choice, but it can only serve questions built on the four views. `finance_bi` exists because that was not this deployment's situation — its questions are built directly on `transactions` and `account_balance_history`, and the latter has no view over it at all (Issue #249). What `finance_bi` deliberately does *not* get is `users` and `audit_log`: reusing `finance_app` would have served the same questions, but it can read `users.password_hash`, and Metabase permits native SQL — so hiding a table in its admin UI is a display setting, not a privilege boundary.
+**What `finance_bi` deliberately does *not* get is `users` and `audit_log`.** Reusing `finance_app` would have served the same questions — it already holds `SELECT` on everything — but it can read `users.password_hash`, and Metabase permits native SQL, so hiding a table in its admin UI is a display setting rather than a privilege boundary (Issue #249).
+
+A stricter role, `finance_metabase`, held `SELECT` on the four views and nothing else. It was retired in Issue #250: it could not serve questions built directly on `transactions` or `account_balance_history` — and the latter has no view over it at all — so in the whole time it existed nothing was ever pointed at it. Two near-identical credentials for one job is how an operator wires up the wrong one. Getting back to a views-only posture means writing the missing views first; that is the #249 follow-up.
 
 None of them is a superuser, none can create databases or roles, and none has `CREATE` on schema `public` — so no service can add, alter, drop, or truncate a table, and none can reach the `drizzle` migration ledger. Tables stay owned by `POSTGRES_USER`, which is what makes that true.
 
@@ -111,7 +112,7 @@ Those three are not the whole story, and describing only them is how a **superus
 
 | Role | Used by | Privilege level |
 |---|---|---|
-| `finance_app`, `finance_importer`, `finance_metabase`, `finance_bi` | the long-running services and the BI connection | the matrix above |
+| `finance_app`, `finance_importer`, `finance_bi` | the long-running services and the BI connection | the matrix above |
 | `MB_DB_USER` (default `metabase_user`) | Metabase, for its **own metadata database** | Owns `MB_DB_DBNAME` and holds `USAGE`+`CREATE` on its `public` schema — it runs its own schema migrations there. **No cluster attributes, and no `CONNECT` on `Finances`** |
 | `POSTGRES_USER` (default `postgres`) | `migrate`, `init-script`, `pg-backup` | Superuser, deliberately — these are maintenance jobs that need DDL and cluster-wide reads, and none has a network-facing surface |
 
@@ -134,7 +135,7 @@ Order matters if you ever change this: **establish ownership first, strip attrib
 
 Two details worth knowing before you change any of this:
 
-- **`finance_metabase` works without base-table access** because the four views are created without `security_invoker`, so they execute with the view *owner's* rights. `SELECT` on the view is sufficient, and the underlying tables stay invisible in Metabase's data browser. Add `security_invoker` to a view and this role stops being able to read it.
+- **The views work without base-table access** because they are created without `security_invoker`, so they execute with the view *owner's* rights. `SELECT` on the view is sufficient on its own. This is what made the retired views-only `finance_metabase` possible, and it still matters: add `security_invoker` to a view and any role reading it needs privileges on the base tables too.
 - **`finance_app` is granted broadly and then revoked** (`GRANT … ON ALL TABLES`, then `REVOKE … ON users` and `REVOKE … ON audit_log`) plus `ALTER DEFAULT PRIVILEGES`, so a table added by a future migration is covered automatically. The `audit_log` revoke is what makes the audit trail worth having: the app still *causes* audit rows, because the trigger that writes them is `SECURITY DEFINER` and runs with the table owner's rights, but it cannot forge or delete one ([Audit Log](audit-log.md)). The two narrow roles are enumerated instead — if a migration adds a table or view they need, [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) must be updated by hand.
 
 ### How the roles are applied
@@ -175,7 +176,7 @@ docker compose up -d --force-recreate finance-app importer
 
 Passwords are interpolated into URL-form connection strings, so keep them URL-safe or percent-encode them.
 
-> **This works for the four `FINANCE_*_DB_PASSWORD` values only.** `POSTGRES_PASSWORD` and `MB_DB_PASS` are *not* rotatable from `.env`: the Postgres image applies `POSTGRES_PASSWORD` solely via `initdb` on an empty data directory, and the Metabase role is created by `init-db/01-create-databases.sh`, which the entrypoint skips once `PGDATA` is initialized. Editing either value on an existing volume leaves the stored password unchanged and breaks every service that authenticates with the new one (loudly — `migrate` fails on `password authentication failed`). To change them, alter the role first, then update `.env`:
+> **This works for the three `FINANCE_*_DB_PASSWORD` values only.** `POSTGRES_PASSWORD` and `MB_DB_PASS` are *not* rotatable from `.env`: the Postgres image applies `POSTGRES_PASSWORD` solely via `initdb` on an empty data directory, and the Metabase role is created by `init-db/01-create-databases.sh`, which the entrypoint skips once `PGDATA` is initialized. Editing either value on an existing volume leaves the stored password unchanged and breaks every service that authenticates with the new one (loudly — `migrate` fails on `password authentication failed`). To change them, alter the role first, then update `.env`:
 >
 > ```bash
 > docker compose exec postgres psql -U postgres    # then: \password postgres   (or \password metabase_user)
@@ -198,16 +199,9 @@ docker compose exec postgres psql -U postgres -d metabase \
   -c "SELECT id, name, details::json ->> 'user' AS db_user FROM metabase_database;"
 ```
 
-Which role to use depends on what your questions are built on:
+Use **`finance_bi`**, with `FINANCE_BI_DB_PASSWORD`. It is the one role for this job (Issue #250) — it cannot read `users` or `audit_log`, and cannot write.
 
-| Your questions | Use | Password |
-|---|---|---|
-| All built on the four views | `finance_metabase` | `FINANCE_METABASE_DB_PASSWORD` |
-| Any built directly on a base table | `finance_bi` | `FINANCE_BI_DB_PASSWORD` |
-
-`finance_metabase` is the stricter choice and worth moving toward. Under it, anything built directly on a base table stops working — which is the intended outcome, but only actionable if an equivalent view exists. `account_balance_history` currently has none, so a deployment with balance-history questions needs `finance_bi` until that is written.
-
-Neither role can read `users` or `audit_log`, and neither can write. **Do not use `finance_app` here**, tempting though it is when a question fails on a missing table: it can read `users.password_hash`, and Metabase permits native SQL, so hiding the table in the admin UI does not contain it.
+**Do not use `finance_app` here**, tempting though it is when a question fails on a missing table: it can read `users.password_hash`, and Metabase permits native SQL, so hiding the table in the admin UI does not contain it.
 
 `MB_DB_USER` is a different role and is not what you are editing here — it owns Metabase's *internal* metadata database and has no access to `Finances`. This page used to add "and was never the superuser," which was **wrong**: on the live cluster it carried `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION` and `BYPASSRLS`, widened out-of-band with nothing in the repository recording it. See [Every login role in the cluster](#every-login-role-in-the-cluster) for what it holds now and what asserts it (Issue #239).
 

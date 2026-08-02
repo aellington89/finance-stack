@@ -9,12 +9,11 @@
 #   2. Behavioural smoke — connects as each role over a password-authenticated
 #      TCP connection and runs real statements, asserting the allowed ones
 #      succeed and the forbidden ones fail. This is what proves the mechanic the
-#      matrix cannot: finance_metabase reads the views while having no privilege
-#      whatsoever on their base tables (the views are not security_invoker, so
-#      they execute with the view owner's rights); and, since #239, that the
+#      matrix cannot: finance_bi reads every core table while `users` and
+#      `audit_log` stay refused — the boundary that role exists for — and the
 #      de-privileged Metabase metadata role can still create and drop tables in
-#      its own database — the thing Metabase does at startup, and the failure
-#      mode no catalog assertion would ever see.
+#      its own database, which is what Metabase does at startup and the failure
+#      mode no catalog assertion would ever see (#239).
 #
 # Writes are wrapped in BEGIN … ROLLBACK, so this is safe to run against a
 # populated database — but point it at Finances_Test by default.
@@ -29,7 +28,6 @@
 #   PGHOST/PGPORT/PGUSER/PGPASSWORD  superuser connection (for the catalog gate)
 #   FINANCE_APP_DB_PASSWORD          finance_app password       (required)
 #   FINANCE_IMPORTER_DB_PASSWORD     finance_importer password  (required)
-#   FINANCE_METABASE_DB_PASSWORD     finance_metabase password  (required)
 #   FINANCE_BI_DB_PASSWORD           finance_bi password        (required)
 #   MB_DB_PASS                       Metabase metadata role pw  (optional — the
 #                                    metadata-role cases are skipped without it)
@@ -49,7 +47,6 @@ MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
 
 : "${FINANCE_APP_DB_PASSWORD:?must be set}"
 : "${FINANCE_IMPORTER_DB_PASSWORD:?must be set}"
-: "${FINANCE_METABASE_DB_PASSWORD:?must be set}"
 : "${FINANCE_BI_DB_PASSWORD:?must be set}"
 
 failed=0
@@ -195,14 +192,6 @@ expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT users"    
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT audit_log"     "SELECT count(*) FROM audit_log"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT a view"        "SELECT count(*) FROM v_transactions_full"
 
-# ── finance_metabase — the four views and nothing else ───────────────────
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" allow "SELECT the four views"        "$READ_VIEWS"
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table transactions" "SELECT count(*) FROM transactions"
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table accounts"     "SELECT count(*) FROM accounts"
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT base table audit_log"    "SELECT count(*) FROM audit_log"
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "SELECT users"                   "SELECT count(*) FROM users"
-expect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" deny  "INSERT a transaction"           "BEGIN; ${INSERT_TXN}; ROLLBACK"
-expect_no_connect finance_metabase "$FINANCE_METABASE_DB_PASSWORD" "$MB_DB_DBNAME"
 
 # ── finance_bi — read-only analytics, never users or audit_log ────────────
 # Metabase's connection when questions are built on base tables (#249). The two

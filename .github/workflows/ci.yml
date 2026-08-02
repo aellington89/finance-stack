@@ -91,7 +91,6 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d postgres \
             -v app_password=ci-app-pw \
             -v importer_password=ci-importer-pw \
-            -v metabase_password=ci-metabase-pw \
             -v bi_password=ci-bi-pw \
             -f ../init-db/roles/01-create-roles.sql
           psql -v ON_ERROR_STOP=1 -d "Finances_Test" \
@@ -128,7 +127,6 @@ jobs:
           PGPASSWORD: changeme
           FINANCE_APP_DB_PASSWORD: ci-app-pw
           FINANCE_IMPORTER_DB_PASSWORD: ci-importer-pw
-          FINANCE_METABASE_DB_PASSWORD: ci-metabase-pw
           FINANCE_BI_DB_PASSWORD: ci-bi-pw
           MB_DB_USER: metabase_user
           MB_DB_DBNAME: metabase
