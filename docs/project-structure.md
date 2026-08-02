@@ -16,7 +16,7 @@ finance-stack/
 │   ├── README.md                         # App-specific development notes and scripts reference
 │   ├── package.json                      # Node.js dependencies and scripts
 │   ├── tsconfig.json                     # TypeScript compiler config
-│   ├── next.config.ts                    # Next.js config (standalone output for Docker)
+│   ├── next.config.ts                    # Next.js config — standalone output for Docker, security headers + CSP (#182)
 │   ├── auth.ts                           # Auth.js (NextAuth v5) config — Credentials provider, JWT sessions (#120)
 │   ├── proxy.ts                          # Next 16 proxy (renamed middleware) — redirects unauthenticated requests to /login
 │   ├── instrumentation.ts                # onRequestError — captures unhandled server throws as structured logs (#129)
@@ -147,7 +147,10 @@ finance-stack/
 │   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
 │   │   ├── auth/verify-credentials.ts    # Username/password check against the users table
-│   │   ├── auth/guard.ts                 # requireActionUser() — session gate at the top of every server action
+│   │   ├── auth/authorize-credentials.ts # Rate limit + credential check — the authorize() body, kept testable (#182)
+│   │   ├── auth/guard.ts                 # requireActionUser() — session gate + per-user mutation rate limit at the top of every server action
+│   │   ├── security/rate-limit.ts        # Zero-dependency in-memory fixed-window counter (#182)
+│   │   ├── security/login-limit.ts       # Sign-in rate-limit policy — key derivation and budget (#182)
 │   │   ├── actions/utils.ts              # Shared ActionState type and buildFieldErrors() helper
 │   │   ├── actions/failure.ts            # actionFailure() — reports a caught action error with its actor, returns the ActionState (#129)
 │   │   ├── actions/auth.ts               # Server actions for sign-in (authenticate) and sign-out
@@ -182,8 +185,10 @@ finance-stack/
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
 │   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
 │   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
+│   │   │   ├── next-config-headers.test.ts  #   Security-header + CSP contract — the CI gate for #182
 │   │   │   └── lib/                      #   Library utility tests
 │   │   │       ├── utils.test.ts         #     cn() class-merge helper
+│   │   │       ├── security/             #     Rate limiter (window, eviction) and sign-in key normalization (#182)
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
 │   │   │       ├── db/                   #     auditedTransaction() actor plumbing
@@ -192,9 +197,9 @@ finance-stack/
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
-│   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session)
-│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, audit trail, failure logging, validation contract)
-│   │       ├── auth/                     #   Credential verification against the real users table
+│   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session, resets rate-limit counters)
+│   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, rate limiting, audit trail, failure logging, validation contract)
+│   │       ├── auth/                     #   Credential verification and sign-in rate limiting against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
 │   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance, drilldowns)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
@@ -204,8 +209,11 @@ finance-stack/
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
 ├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests
+├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
 ├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122)
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
+├── caddy/
+│   └── Caddyfile                         # Reverse proxy / automatic TLS for exposed deployments (--profile edge, #182)
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
 │   ├── roles/                            # Least-privilege service roles (#130), applied by the `migrate` service

@@ -1,6 +1,7 @@
-import { vi, beforeAll } from "vitest";
+import { vi, beforeAll, beforeEach } from "vitest";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
+import { __resetAllLimits } from "@/lib/security/rate-limit";
 
 // Mock Next.js server functions that require the Next.js runtime
 vi.mock("next/cache", () => ({
@@ -30,6 +31,16 @@ vi.mock("@/auth", () => ({
   signOut: vi.fn(),
   handlers: { GET: vi.fn(), POST: vi.fn() },
 }));
+
+// requireActionUser() rate limits per user (Issue #182), and the session mock
+// above hands every action test the *same* user id. The rate-limit map is
+// module state that outlives a test file, and this project runs
+// fileParallelism: false — so without this reset the counts from account.test.ts
+// and transaction.test.ts would accumulate into whatever file ran next and
+// eventually start failing it with "Too many requests".
+beforeEach(() => {
+  __resetAllLimits();
+});
 
 // Drift-correction for the static lookup tables. The init-db seed files
 // (init-db/seeds/shared-lookups.sql + finances-test-mock-data.sql) populate

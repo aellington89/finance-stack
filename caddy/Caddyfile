@@ -1,0 +1,42 @@
+# TLS termination for the finance stack (Issue #182).
+#
+# Only used when the stack is started with --profile edge. See docs/deployment.md.
+#
+# PUBLIC_HOSTNAME must be set in .env before starting that profile. Unset, this
+# file has no site address and Caddy refuses to start, reporting
+# `unrecognized global option: reverse_proxy` — the failure stays inside the
+# caddy container and no other service is affected.
+#
+# Caddy obtains and renews a certificate automatically. That needs a real DNS
+# name resolving to this host and ports 80 and 443 reachable from the internet,
+# because the ACME challenge is served over them. For a LAN name, or to try the
+# proxy without a public name, add `tls internal` inside the site block below to
+# issue from Caddy's own local CA instead — browsers will warn until that CA is
+# trusted on the client, which is why it is not the default.
+#
+# There is deliberately no global options block setting an ACME `email`. Caddy
+# registers fine without one, and `email {$SOME_VAR}` fails to parse outright
+# when the variable is unset — an optional setting that breaks the config by
+# being omitted is worse than no setting. To receive expiry notices, add a
+# literal block at the top of this file:
+#
+#     {
+#         email you@example.com
+#     }
+
+{$PUBLIC_HOSTNAME} {
+	# reverse_proxy sets X-Forwarded-For, X-Forwarded-Proto and X-Forwarded-Host
+	# by default. The app's Auth.js config runs with trustHost: true, so those
+	# are what let it build correct absolute URLs behind an arbitrary hostname —
+	# which is also why nothing untrusted may be allowed to reach :3001 directly
+	# once this is the front door.
+	reverse_proxy finance-app:3001
+
+	# Security headers come from the app itself (app/next.config.ts), so they are
+	# present whether or not this proxy is in front. Nothing to add here.
+
+	log {
+		output stderr
+		format json
+	}
+}

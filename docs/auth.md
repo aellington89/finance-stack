@@ -15,9 +15,19 @@ Enforcement is layered, following Auth.js's own guidance to never rely on middle
 
 1. **Proxy** ([`app/proxy.ts`](../app/proxy.ts), Next.js 16's renamed `middleware.ts`) — redirects unauthenticated requests on `/dashboard`, `/accounts`, `/settings`, and `/test-ui` to `/login`, preserving the original destination via `callbackUrl`. First line of defense and the best UX, but bypassable in principle (cf. CVE-2025-29927), so never the only check.
 2. **Layout gate** ([`app/app/(app)/layout.tsx`](../app/app/(app)/layout.tsx)) — calls `auth()` and redirects to `/login` when there is no session. Covers every authenticated page and the queries they render.
-3. **Per-action guard** (`requireActionUser()` in [`app/lib/auth/guard.ts`](../app/lib/auth/guard.ts)) — the first statement of every server action under `app/lib/actions/`. Server actions are directly POST-able regardless of which page renders them, so this is the real boundary for the mutation surface. Unauthenticated calls get an unauthorized `ActionState`, never a DB write.
+3. **Per-action guard** (`requireActionUser()` in [`app/lib/auth/guard.ts`](../app/lib/auth/guard.ts)) — the first statement of every server action under `app/lib/actions/`. Server actions are directly POST-able regardless of which page renders them, so this is the real boundary for the mutation surface. Unauthenticated calls get an unauthorized `ActionState`, never a DB write. The same guard also applies the per-user mutation rate limit ([#182](https://github.com/aellington89/finance-stack/issues/182)), so every guarded action is covered by construction — including ones added later.
 
 Deliberately public: the landing page (`/`), `/login`, Auth.js's own `/api/auth/*` routes, and `/api/health` — the Docker healthcheck and the release smoke test poll it unauthenticated.
+
+## Sign-in rate limiting
+
+Five failed sign-ins per username per 15 minutes ([#182](https://github.com/aellington89/finance-stack/issues/182)). Only failures count and a success clears the tally, so a legitimate user is only ever limited by their own mistakes.
+
+Enforcement lives in [`app/lib/auth/authorize-credentials.ts`](../app/lib/auth/authorize-credentials.ts) rather than in a route or the proxy, because that is the one path every credential attempt reaches: the login form posts to `/login` as a **server action**, not to `/api/auth/*`, while `/api/auth/callback/credentials` is directly POST-able. Limiting either route alone would leave the other open. The check runs before the password is verified, so a blocked attempt never pays for a `scrypt` comparison — which makes it a denial-of-service control as much as a brute-force one.
+
+`authenticate()` in `app/lib/actions/auth.ts` peeks at the same budget before calling `signIn`, purely so a locked-out user sees "Too many sign-in attempts. Try again in N minutes." instead of the generic failure. That module is also why the logic sits in `lib/auth/` — `auth.ts` cannot be imported by the test suite, so keeping it separate is what makes the enforcement path testable, the same reasoning that put `verifyCredentials` there.
+
+The limit is keyed on **username, not IP**, and the counters live in process memory. Both are deliberate trades with real consequences — see [Deployment & Exposure](deployment.md#limitations-stated-plainly).
 
 ## Creating the first user (and resetting passwords)
 
@@ -55,4 +65,4 @@ The NextAuth config sets `trustHost: true` in code (`app/auth.ts`), so `AUTH_TRU
 
 ## Scope and follow-ups
 
-Authentication ≠ internet-ready: TLS, rate limiting, and deployment hardening are tracked under the security epic [#100](https://github.com/aellington89/finance-stack/issues/100). Phase 2 of [#120](https://github.com/aellington89/finance-stack/issues/120) (per-user `user_id` columns + Postgres RLS) and role-gated lookup-table CRUD ([#81](https://github.com/aellington89/finance-stack/issues/81)/[#87](https://github.com/aellington89/finance-stack/issues/87)) build on this foundation.
+Authentication ≠ internet-ready. Rate limiting and security headers landed in [#182](https://github.com/aellington89/finance-stack/issues/182), and a TLS-terminating proxy ships switched off — but the default posture is still a trusted network, and going public has a checklist. See [Deployment & Exposure](deployment.md). Secret management remains open in [#181](https://github.com/aellington89/finance-stack/issues/181), under the security epic [#100](https://github.com/aellington89/finance-stack/issues/100). Phase 2 of [#120](https://github.com/aellington89/finance-stack/issues/120) (per-user `user_id` columns + Postgres RLS) and role-gated lookup-table CRUD ([#81](https://github.com/aellington89/finance-stack/issues/81)/[#87](https://github.com/aellington89/finance-stack/issues/87)) build on this foundation.

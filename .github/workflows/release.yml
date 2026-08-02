@@ -145,6 +145,47 @@ jobs:
 
           echo "✓ /api/health: version=$GOT_VER  gitSha=${GOT_SHA:0:12}…"
 
+          # Security headers (#182), asserted against the real image rather than
+          # the config. tests/unit/next-config-headers.test.ts covers the values
+          # on every push; this covers the thing the acceptance criterion names —
+          # that they survive the standalone build and reach the wire. Checked on
+          # "/" and "/login", which sit outside the proxy's matcher.
+          echo "Checking security headers…"
+          for PATH_UNDER_TEST in / /login; do
+            HEADERS="$(curl -sSI "http://localhost:3001${PATH_UNDER_TEST}")"
+
+            for HEADER in \
+              "Content-Security-Policy" \
+              "Strict-Transport-Security" \
+              "X-Frame-Options" \
+              "X-Content-Type-Options" \
+              "Referrer-Policy" \
+              "Permissions-Policy" \
+              "Cross-Origin-Opener-Policy"
+            do
+              if ! grep -qi "^${HEADER}:" <<<"$HEADERS"; then
+                echo "::error::${HEADER} missing on ${PATH_UNDER_TEST}"
+                echo "$HEADERS"
+                exit 1
+              fi
+            done
+
+            if grep -qi '^X-Powered-By:' <<<"$HEADERS"; then
+              echo "::error::X-Powered-By present on ${PATH_UNDER_TEST} — poweredByHeader should be false"
+              exit 1
+            fi
+
+            # 'unsafe-eval' and ws: are Turbopack dev relaxations. Their presence
+            # here means the image was built with NODE_ENV !== production.
+            CSP="$(grep -i '^Content-Security-Policy:' <<<"$HEADERS")"
+            if grep -qE "unsafe-eval|ws:" <<<"$CSP"; then
+              echo "::error::development CSP relaxations present on ${PATH_UNDER_TEST}: $CSP"
+              exit 1
+            fi
+
+            echo "✓ security headers on ${PATH_UNDER_TEST}"
+          done
+
       - name: Tear down stack
         working-directory: .
         if: always()

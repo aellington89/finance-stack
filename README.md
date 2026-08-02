@@ -10,6 +10,7 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 | Next.js 16 | Custom finance application | 3001 |
 | importer | File ingestion (polls `imports/` subfolders) | — |
 | Metabase | BI dashboards and analytics (`--profile bi`) | 3000 (loopback only) |
+| Caddy | TLS termination for exposed deployments (`--profile edge`) | 80, 443 |
 
 ## Security
 
@@ -24,7 +25,9 @@ Sign in at http://localhost:3001/login and sign out from the sidebar footer. See
 
 At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append transactions, and Metabase sees the three views and no base tables. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.
 
-Authentication alone does not make the app safe for the public internet: transport encryption, rate limiting, and deployment hardening are still tracked in [#100](https://github.com/aellington89/finance-stack/issues/100) (see [#130](https://github.com/aellington89/finance-stack/issues/130), [#181](https://github.com/aellington89/finance-stack/issues/181), [#182](https://github.com/aellington89/finance-stack/issues/182)). Keep it on a trusted network — localhost, a VPN, Tailscale, or similar — until those land.
+At the edge, every response carries a **content security policy** and the usual hardening headers (HSTS, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`), sign-ins are **rate limited** to five failures per username per 15 minutes, and server actions to 120 per user per minute.
+
+**The default posture is still a trusted network** — localhost, a LAN, a VPN, Tailscale or similar — because the app speaks plain HTTP and nothing else encrypts it. Exposing it to the internet means putting TLS in front: a `caddy` service ships for exactly this, switched off, and starts with `docker compose --profile edge up -d` once `PUBLIC_HOSTNAME` is set. See [docs/deployment.md](docs/deployment.md) for the two postures, the full checklist for going public, and what each control does and does not cover. Secret management remains open in [#181](https://github.com/aellington89/finance-stack/issues/181).
 
 ## Prerequisites
 
@@ -141,6 +144,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Contributing](CONTRIBUTING.md) — dev workflow, conventions, and the release process
 - [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
+- [Deployment & Exposure](docs/deployment.md) — trusted-network vs public-internet posture, TLS termination, security headers, and rate limits
 - [Backups](docs/backups.md) — the scheduled backup service, retention, and disaster recovery
 - [Observability](docs/observability.md) — structured JSON logs, where errors are captured, redaction, and wiring an error-tracking backend
 - [Schema Changes](docs/schema-changes.md) — making schema changes and adopting migrations on existing databases

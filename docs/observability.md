@@ -53,6 +53,8 @@ Next's built-in fallback and were recorded nowhere.
 | `user_id` | action failures | `users.user_id` — the same value `audit_log.actor_user_id` uses |
 | `digest` | client boundaries | React's error digest; joins a browser record to a server one |
 | `err` | error records | Serialized cause — see [Redaction](#redaction) |
+| `scope` | rate-limit rejections | `login` \| `action` — which budget was spent ([#182](https://github.com/aellington89/finance-stack/issues/182)) |
+| `entry_point` | `scope: "login"` | `authorize` (enforced) \| `action` (the login form's message peek) |
 
 Field names are **snake_case**, matching `audit_log`'s columns rather than the
 TypeScript camelCase used elsewhere. The two are most useful grepped together,
@@ -103,6 +105,15 @@ denylist** — a future pg release adding a field cannot start leaking by defaul
 
 What is kept identifies *which* rule was violated without reproducing the row
 that violated it.
+
+### Rate-limit records carry no credential material
+
+The sign-in limiter ([#182](https://github.com/aellington89/finance-stack/issues/182))
+logs `scope` and `entry_point` and nothing else — in particular **not** the
+attempted username. The username field is exactly where a mistyped password
+lands, so recording it would put a credential in the log on precisely the
+attempts worth logging. The cost is that these lines cannot be grouped by
+account; the count and the timing are what matter.
 
 ### The residual risk, stated honestly
 
@@ -188,6 +199,12 @@ docker compose logs finance-app | jq -c 'select(.user_id == "c0ffee00-…")'
 
 # Group by SQLSTATE
 docker compose logs finance-app | jq -r '.err.cause.code // .err.code // empty' | sort | uniq -c
+
+# Sign-ins refused by the rate limiter — a run of these is someone guessing
+docker compose logs finance-app | jq -c 'select(.scope == "login")'
+
+# Server actions refused by the rate limiter, by user
+docker compose logs finance-app | jq -r 'select(.scope == "action") | .user_id' | sort | uniq -c
 
 # Anything that is not valid JSON — i.e. not from lib/log.ts
 docker compose logs --no-log-prefix finance-app | grep -v '^{'
