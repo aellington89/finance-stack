@@ -29,7 +29,9 @@ Going public means all of the following are true, not just the first:
    ([Issue #130](https://github.com/aellington89/finance-stack/issues/130), see
    [Database](database.md#roles--privileges)).
 3. `AUTH_SECRET` is a real generated secret, not the `.env.example` placeholder
-   ([Authentication](auth.md)).
+   ([Authentication](auth.md)), and so is every other credential in `.env`
+   ([Secrets](secrets.md)). Nothing enforces this at boot — it is a checklist
+   item precisely because the stack starts happily without it.
 4. The account password is strong. The sign-in limit below slows an online
    guessing attack; it does nothing about a weak password.
 

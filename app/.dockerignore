@@ -1,7 +1,12 @@
 node_modules
 .next
-.env.local
-.env*.local
+# Credentials — this is the .dockerignore that governs the finance-app image,
+# since compose sets the build context to ./app. `.env.local` / `.env*.local`
+# alone let a bare `.env` or `.env.production` through, and Next.js copies every
+# .env* file it finds into .next/standalone — which the runner stage copies
+# wholesale, so the file ships inside the image verbatim (#181).
+# Nothing under app/ is needed in the image, so the glob has no exception.
+.env*
 *.md
 .gitignore
 .git

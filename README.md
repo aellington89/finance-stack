@@ -27,7 +27,9 @@ At the data tier, Postgres and Metabase publish their host ports on **loopback o
 
 At the edge, every response carries a **content security policy** and the usual hardening headers (HSTS, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`), sign-ins are **rate limited** to five failures per username per 15 minutes, and server actions to 120 per user per minute.
 
-**The default posture is still a trusted network** — localhost, a LAN, a VPN, Tailscale or similar — because the app speaks plain HTTP and nothing else encrypts it. Exposing it to the internet means putting TLS in front: a `caddy` service ships for exactly this, switched off, and starts with `docker compose --profile edge up -d` once `PUBLIC_HOSTNAME` is set. See [docs/deployment.md](docs/deployment.md) for the two postures, the full checklist for going public, and what each control does and does not cover. Secret management remains open in [#181](https://github.com/aellington89/finance-stack/issues/181).
+**The default posture is still a trusted network** — localhost, a LAN, a VPN, Tailscale or similar — because the app speaks plain HTTP and nothing else encrypts it. Exposing it to the internet means putting TLS in front: a `caddy` service ships for exactly this, switched off, and starts with `docker compose --profile edge up -d` once `PUBLIC_HOSTNAME` is set. See [docs/deployment.md](docs/deployment.md) for the two postures, the full checklist for going public, and what each control does and does not cover.
+
+Credentials are sourced from a single `.env` file on the deployment host — never committed, never baked into an image, and enforced by ignore-rule tests plus a full-history secret scan in CI. See [docs/secrets.md](docs/secrets.md) for the inventory, the production sourcing model, and rotation.
 
 ## Prerequisites
 
