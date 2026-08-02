@@ -27,8 +27,11 @@ app/next-env.d.ts
 .vs
 .claude
 
-# Credentials
-.env
+# Credentials — every .env variant at any depth, not just the root file this
+# stack reads today (#181). Only CHANGELOG.md is copied out of this context (it
+# is the `changelog` additional_contexts entry), so this is defence in depth;
+# app/.dockerignore is what governs the image build itself.
+**/.env*
 secrets/
 
 # Documentation
@@ -41,7 +44,6 @@ secrets/
 # Next.js development artifacts
 app/node_modules
 app/.next
-app/.env.local
 
 # Test files and output
 app/tests

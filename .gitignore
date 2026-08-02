@@ -11,8 +11,12 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
-# Credentials — never commit
-.env
+# Credentials — never commit. The glob covers every variant (.env.local,
+# .env.production, .env.bak, .env.save, …), not just the one file this stack
+# reads today; `.env` alone left a stray copy stageable by `git add .` (#181).
+# The committed template is the single exception. See docs/secrets.md.
+.env*
+!.env.example
 
 # Database backups — contain financial data, never commit
 /backups/*
@@ -21,7 +25,6 @@ __pycache__/
 # Next.js application (app/ directory)
 app/node_modules
 app/.next
-app/.env.local
 app/out
 app/.claude
 

@@ -219,6 +219,18 @@ Adding a server action also means adding a row to the checklist in
 table and asserts the two match the modules' exports, so an uncovered action
 fails CI.
 
+**Real credentials only ever live in `.env` and `app/.env.local`** (Issue #181).
+Both are gitignored by a `.env*` glob and excluded from the Docker build
+contexts; the committed templates carry `changeme` placeholders and nothing
+else. Never put a working value in `.env.example`, `app/.env.local.example`,
+`docker-compose.yml`, or a workflow — a CI-only value is fine, but name it as
+one (`ci-app-pw`, `release-smoke-test-only-secret`) so the next reader does not
+have to guess. Two gates enforce this: `tests/unit/ignore-coverage.test.ts`
+asserts the ignore rules still cover every `.env*` variant, and
+[`secret-scan.yml`](.github/workflows/secret-scan.yml) runs gitleaks over the
+commits you push and over the full history weekly. See
+[docs/secrets.md](docs/secrets.md).
+
 ## Dependabot PRs
 
 [`.github/dependabot.yml`](.github/dependabot.yml) watches five ecosystems
