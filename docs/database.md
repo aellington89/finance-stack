@@ -23,7 +23,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `v_transactions_full` | Fully joined transaction view with account names, types, categories, and related account info |
 | `v_account_balances_current` | Current balance per account with full classification hierarchy (type, category) |
 | `v_daily_totals` | Daily transaction totals grouped by transaction type (for income/expense line charts) |
-| `v_audit_log` | The audit trail, flattened for reading. The only audit object `finance_metabase` can reach |
+| `v_audit_log` | The audit trail, flattened for reading. The only audit object the BI role can reach |
 
 ## Balance History
 
@@ -98,15 +98,44 @@ The long-running services do **not** connect as the `postgres` superuser (Issue 
 |---|---|---|
 | `finance_app` | `finance-app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table **except `users` and `audit_log`, which are `SELECT`-only**; `SELECT` on the views; `USAGE` on the sequences |
 | `finance_importer` | `importer` | `SELECT` + `INSERT` on `transactions`; `SELECT` on `accounts`, `transaction_categories`, `transaction_types`. No `UPDATE`, no `DELETE` |
-| `finance_metabase` | Metabase's Finances connection | `SELECT` on the four views. **No privilege on any base table** |
+| `finance_bi` | Metabase's Finances connection | `SELECT` on the seven core base tables and the four views. **Nothing on `users` or `audit_log`**, and no write anywhere |
+
+**What `finance_bi` deliberately does *not* get is `users` and `audit_log`.** Reusing `finance_app` would have served the same questions — it already holds `SELECT` on everything — but it can read `users.password_hash`, and Metabase permits native SQL, so hiding a table in its admin UI is a display setting rather than a privilege boundary (Issue #249).
+
+A stricter role, `finance_metabase`, held `SELECT` on the four views and nothing else. It was retired in Issue #250: it could not serve questions built directly on `transactions` or `account_balance_history` — and the latter has no view over it at all — so in the whole time it existed nothing was ever pointed at it. Two near-identical credentials for one job is how an operator wires up the wrong one. Getting back to a views-only posture means writing the missing views first; that is the #249 follow-up.
 
 None of them is a superuser, none can create databases or roles, and none has `CREATE` on schema `public` — so no service can add, alter, drop, or truncate a table, and none can reach the `drizzle` migration ledger. Tables stay owned by `POSTGRES_USER`, which is what makes that true.
 
-The superuser is still used, deliberately, by the jobs that need DDL or cluster-wide reads: `migrate`, `init-script`, and `pg-backup`. Those are maintenance jobs with no network-facing surface.
+### Every login role in the cluster
+
+Those three are not the whole story, and describing only them is how a **superuser `metabase_user` went unnoticed** (Issue #239). The full set of roles that can log in:
+
+| Role | Used by | Privilege level |
+|---|---|---|
+| `finance_app`, `finance_importer`, `finance_bi` | the long-running services and the BI connection | the matrix above |
+| `MB_DB_USER` (default `metabase_user`) | Metabase, for its **own metadata database** | Owns `MB_DB_DBNAME` and holds `USAGE`+`CREATE` on its `public` schema — it runs its own schema migrations there. **No cluster attributes, and no `CONNECT` on `Finances`** |
+| `POSTGRES_USER` (default `postgres`) | `migrate`, `init-script`, `pg-backup` | Superuser, deliberately — these are maintenance jobs that need DDL and cluster-wide reads, and none has a network-facing surface |
+
+**Exactly one login role is a superuser, and it is the maintenance identity.** That is now an assertion rather than a description: [`assert-grants.sql`](../init-db/roles/assert-grants.sql) sweeps *every* login role in `pg_roles`, exempting only `current_user` — the identity running the gate. A role added later, by a future service or by hand, fails the gate by default instead of being invisible to it, and a role the stack does not declare must additionally hold no `CONNECT` on the database under test.
+
+> Because the exemption is `current_user`, the gate **must be run as the maintenance superuser** or it asserts something subtly different. Every caller already does: CI sets `PGUSER=postgres`, and `verify-db-roles.sh` inherits the `migrate` service's.
+
+### The Metabase metadata database
+
+`MB_DB_USER` is not one of the `finance_*` service roles and is easy to overlook, because it never touches `Finances`. It exists so Metabase can store its own state — questions, dashboards, users, its Quartz job scheduler — in a separate database, and Metabase runs **its own Liquibase migrations against that database at startup**.
+
+That is the whole of what it needs, and it is not superuser:
+
+- **ownership of `MB_DB_DBNAME`**, plus `USAGE` and `CREATE` on its `public` schema, so its startup migrations can create and alter its tables;
+- **nothing else** — no `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION` or `BYPASSRLS`, and no access to `Finances` at all.
+
+`PUBLIC` also lost the default `CONNECT`/`TEMPORARY` on that database, which every role in the cluster held until #239 — the same revoke `02-grants.sql` has always applied on the `Finances` side. It holds Metabase's own user table, so it is not a database other services should be able to open a session on.
+
+Order matters if you ever change this: **establish ownership first, strip attributes last**. A role de-privileged before it owns its metadata database cannot migrate it, and the failure surfaces at Metabase's next start rather than in any catalog check — which is why [`verify-db-roles.sh`](../scripts/verify-db-roles.sh) connects as the role and creates a table, and why the change was verified against a running Metabase under `--profile bi`.
 
 Two details worth knowing before you change any of this:
 
-- **`finance_metabase` works without base-table access** because the four views are created without `security_invoker`, so they execute with the view *owner's* rights. `SELECT` on the view is sufficient, and the underlying tables stay invisible in Metabase's data browser. Add `security_invoker` to a view and this role stops being able to read it.
+- **The views work without base-table access** because they are created without `security_invoker`, so they execute with the view *owner's* rights. `SELECT` on the view is sufficient on its own. This is what made the retired views-only `finance_metabase` possible, and it still matters: add `security_invoker` to a view and any role reading it needs privileges on the base tables too.
 - **`finance_app` is granted broadly and then revoked** (`GRANT … ON ALL TABLES`, then `REVOKE … ON users` and `REVOKE … ON audit_log`) plus `ALTER DEFAULT PRIVILEGES`, so a table added by a future migration is covered automatically. The `audit_log` revoke is what makes the audit trail worth having: the app still *causes* audit rows, because the trigger that writes them is `SECURITY DEFINER` and runs with the table owner's rights, but it cannot forge or delete one ([Audit Log](audit-log.md)). The two narrow roles are enumerated instead — if a migration adds a table or view they need, [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) must be updated by hand.
 
 ### How the roles are applied
@@ -117,9 +146,12 @@ Roles and grants are applied by the **`migrate` service** on every `docker compo
 |---|---|
 | [`init-db/roles/01-create-roles.sql`](../init-db/roles/01-create-roles.sql) | Creates the three login roles (cluster-global, so it runs once per migrate run) |
 | [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) | Applies the matrix above to one database; run against `Finances` and `Finances_Test` |
+| [`init-db/roles/03-metabase-role.sql`](../init-db/roles/03-metabase-role.sql) | Converges the Metabase metadata role; run against `MB_DB_DBNAME` (Issue #239) |
 | [`init-db/roles/assert-grants.sql`](../init-db/roles/assert-grants.sql) | Asserts the matrix against the catalog — the CI grant gate |
 
-`02-grants.sql` **revokes before it grants**, inside a transaction, so it converges: a privilege widened by hand is removed on the next `up`, and there is no window in which a running app has no access.
+`02-grants.sql` **revokes before it grants**, inside a transaction, so it converges: a privilege widened by hand is removed on the next `up`, and there is no window in which a running app has no access. `01-create-roles.sql` and `03-metabase-role.sql` converge the same way, with an unconditional `ALTER ROLE`.
+
+**One story about out-of-band changes, applied everywhere:** the stack silently converges what it *declares* — the three service roles and the Metabase metadata role — and refuses to be silent about anything else. A login role the stack does not declare is never rewritten by `migrate`; it fails `assert-grants.sql` instead, so an operator who added one deliberately gets told rather than quietly overruled. This is the same tension #189 raises for `POSTGRES_PASSWORD`, resolved the same way.
 
 ### Verifying the roles
 
@@ -129,7 +161,9 @@ Roles and grants are applied by the **`migrate` service** on every `docker compo
 docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh Finances
 ```
 
-The `migrate` service already carries every variable the script needs, so no `-e` flags are required. CI runs the same script against `Finances_Test` on every PR.
+The `migrate` service already carries every variable the script needs, so no `-e` flags are required. CI runs the same script against `Finances_Test` on every PR, and follows it with a **negative check** that widens a role on purpose and asserts the gate rejects it — a gate that cannot fail proves nothing, and this one reported OK for months while a superuser sat beside the roles it was checking.
+
+The metadata-role cases need `MB_DB_PASS` and are skipped with a `skip` line without it; the catalog gate still covers that role's attributes either way. They are also what keeps the rest honest: a connection that never opens now fails the case it appears in, so a wrong password can no longer pass an `allow` case by simply never reaching the statement.
 
 ### Rotating a role password
 
@@ -151,12 +185,25 @@ Passwords are interpolated into URL-form connection strings, so keep them URL-sa
 > ```
 >
 > The service roles avoid this trap because `01-create-roles.sql` re-issues `ALTER ROLE … PASSWORD` on every migrate run.
+>
+> Since Issue #239 the two halves of `metabase_user` diverge, and the distinction is worth holding onto: its **attributes** are re-asserted on every migrate run by `03-metabase-role.sql`, so a widened role is corrected automatically. Its **password** still is not, and stays a `\password` operation until #189.
 
-### Pointing Metabase at `finance_metabase`
+### Pointing Metabase at a least-privilege role
 
-Metabase stores its analytics connections in its own metadata database, not in environment variables, so this one role cannot be wired through `docker-compose.yml` — it is a one-time manual step. In Metabase, go to **Settings → Admin → Databases → your Finances database**, change the username to `finance_metabase` and the password to `FINANCE_METABASE_DB_PASSWORD`, and save. Existing questions built on the three views keep working; anything built directly on a base table will stop, which is the intended outcome.
+Metabase stores its analytics connections in its own metadata database, not in environment variables, so this cannot be wired through `docker-compose.yml` — it is a one-time manual step. In Metabase, go to **Settings → Admin → Databases → your Finances database**, change the username and password, and save.
 
-`MB_DB_USER` is unrelated and unchanged — it owns Metabase's *internal* metadata database and was never the superuser.
+**Check what it is set to before assuming.** Being a manual step, it is the one part of the least-privilege work that a `docker compose up` cannot apply and no gate can see — and on this deployment it had never been performed. The connection was still the `postgres` superuser long after #130 landed, while this page said otherwise (Issue #249). To read the current value:
+
+```bash
+docker compose exec postgres psql -U postgres -d metabase \
+  -c "SELECT id, name, details::json ->> 'user' AS db_user FROM metabase_database;"
+```
+
+Use **`finance_bi`**, with `FINANCE_BI_DB_PASSWORD`. It is the one role for this job (Issue #250) — it cannot read `users` or `audit_log`, and cannot write.
+
+**Do not use `finance_app` here**, tempting though it is when a question fails on a missing table: it can read `users.password_hash`, and Metabase permits native SQL, so hiding the table in the admin UI does not contain it.
+
+`MB_DB_USER` is a different role and is not what you are editing here — it owns Metabase's *internal* metadata database and has no access to `Finances`. This page used to add "and was never the superuser," which was **wrong**: on the live cluster it carried `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION` and `BYPASSRLS`, widened out-of-band with nothing in the repository recording it. See [Every login role in the cluster](#every-login-role-in-the-cluster) for what it holds now and what asserts it (Issue #239).
 
 ## Test Database
 
