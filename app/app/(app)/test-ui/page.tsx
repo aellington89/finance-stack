@@ -4,11 +4,14 @@ import { notFound } from "next/navigation"
 import { useState } from "react"
 import {
   createColumnHelper,
+  createSortedRowModel,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_text,
+  tableFeatures,
   type SortingState,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table"
 import { Bar, BarChart, Line, LineChart, XAxis, YAxis } from "recharts"
 import {
@@ -126,9 +129,16 @@ const transactions: Transaction[] = [
   { date: "2026-03-05", description: "Restaurant", category: "Dining", amount: -62.8 },
 ]
 
-const columnHelper = createColumnHelper<Transaction>()
+// v9 requires features to be registered explicitly; sorting is all this table uses.
+const features = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+  sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
+})
 
-const columns = [
+const columnHelper = createColumnHelper<typeof features, Transaction>()
+
+const columns = columnHelper.columns([
   columnHelper.accessor("date", {
     header: "Date",
     cell: (info) => info.getValue(),
@@ -152,7 +162,7 @@ const columns = [
       )
     },
   }),
-]
+])
 
 // -- Page component --
 
@@ -161,14 +171,12 @@ export default function TestUIPage() {
 
   const [sorting, setSorting] = useState<SortingState>([])
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoizable functions by design
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data: transactions,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   })
 
   return (
@@ -389,7 +397,7 @@ export default function TestUIPage() {
               <TableBody>
                 {table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
+                    {row.getAllCells().map((cell) => (
                       <TableCell key={cell.id}>
                         {flexRender(
                           cell.column.columnDef.cell,
