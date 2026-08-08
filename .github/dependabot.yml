@@ -29,6 +29,31 @@ updates:
       production-minor-patch:
         dependency-type: production
         update-types: [minor, patch]
+    ignore:
+      # TypeScript is held on the 6.x line. 7.x is the native port and does not
+      # expose the JS compiler API that `next build` drives for its type-check
+      # pass, so Next 16.2.12 refuses it outright ("TypeScript 7.0.2 does not
+      # provide the compiler API required by Next.js"); it is also outside
+      # typescript-eslint 8.66's peer range of `>=4.8.4 <6.1.0`. Two independent
+      # blockers, neither of which this repo can resolve on its own.
+      #
+      # This is ignored rather than left to fail because 7.0.2 is `latest` on
+      # npm: without the rule Dependabot re-raises the same unmergeable PR every
+      # week (PR #246 was the first), and a permanently-red Dependabot PR is how
+      # a real regression on some *other* bump gets waved through as "the usual
+      # red". The `~6.0` pin in app/package.json is the matching half — see the
+      # `//typescript` note there for why the ceiling is a tilde.
+      #
+      # Lift this once Next ships support (or `experimental.useTypeScriptCli`
+      # stops being experimental) AND typescript-eslint widens its peer range.
+      # Minor and patch updates within 6.x still arrive normally. Note that a
+      # future 6.1 is a *minor*, so it will arrive as a PR moving `~6.0` ->
+      # `~6.1` — and that crosses typescript-eslint's `<6.1.0` ceiling. Check
+      # its peer range before merging that one rather than assuming a minor is
+      # routine; this pair is the reason the tilde is there.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
 
   # Importer service Python dependencies (importer/requirements.txt).
   - package-ecosystem: pip
