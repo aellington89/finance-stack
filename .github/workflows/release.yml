@@ -107,7 +107,7 @@ jobs:
           # 200 if the roles were created and granted correctly.
           FINANCE_APP_DB_PASSWORD: release-smoke-app-pw
           FINANCE_IMPORTER_DB_PASSWORD: release-smoke-importer-pw
-          FINANCE_METABASE_DB_PASSWORD: release-smoke-metabase-pw
+          FINANCE_BI_DB_PASSWORD: release-smoke-bi-pw
         run: |
           docker compose up -d
 

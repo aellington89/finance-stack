@@ -109,7 +109,7 @@ Indexed on `(table_name, row_pk, occurred_at)` for row history and on
 ## Reading the log
 
 `v_audit_log` is the read surface and is the only audit object granted to
-`finance_metabase`, so the log is browsable in Metabase alongside the other three
+`finance_bi`, so the log is browsable in Metabase alongside the other three
 views (see [Roles & Privileges](database.md#roles--privileges)).
 
 The full history of one transaction, newest first:

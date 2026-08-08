@@ -217,7 +217,7 @@ finance-stack/
 ├── init-db/
 │   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
 │   ├── roles/                            # Least-privilege service roles (#130), applied by the `migrate` service
-│   │   ├── 01-create-roles.sql           # finance_app / finance_importer / finance_metabase (cluster-global)
+│   │   ├── 01-create-roles.sql           # finance_app / finance_importer / finance_bi (cluster-global)
 │   │   ├── 02-grants.sql                 # Per-database grant matrix; revokes then grants, so it converges
 │   │   └── assert-grants.sql             # Catalog assertions for the matrix — the CI grant gate
 │   └── seeds/                            # Applied by the `migrate` Compose service after migrations
