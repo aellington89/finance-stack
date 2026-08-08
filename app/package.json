@@ -95,6 +95,27 @@
     "range. Both have to move before 7 is reachable; .github/dependabot.yml",
     "ignores the major in the meantime."
   ],
+  "//eslint": [
+    "Held on 9.x. Unlike the `~6.0` typescript pin above, the range needs no",
+    "tightening — `^9` already means >=9.0.0 <10.0.0, which is the ceiling we",
+    "want — so this note is the whole of the constraint: it records that the",
+    "caret is load-bearing rather than incidental, and must not be widened to",
+    "`>=9` or bumped to `^10` on the assumption that a lint bump is routine.",
+    "ESLint 10 removed the deprecated rule-context accessors (context.getFilename()",
+    "and friends, superseded by context.filename in 8.40) and the plugins",
+    "eslint-config-next vendors still call them, so 10.x crashes at rule-load",
+    "time before linting a single file. eslint-plugin-react peers at ^9.7,",
+    "eslint-plugin-import and eslint-plugin-jsx-a11y at ^9, eslint-plugin-react-hooks",
+    "at ^9.0.0; eslint-config-next 16.3.0 still requires eslint-plugin-react",
+    "^7.37.0, whose only satisfying release is the same 7.37.5. There is no",
+    "version of the Next lint config that runs on ESLint 10 (PR #247).",
+    "9.39.5 carries npm's `maintenance` dist-tag, so this is a supported line,",
+    "not a stale one. Issue #194 is the tracker — the same crash is why the",
+    "build-time `npm audit` gate is still non-blocking, so lifting that gate and",
+    "lifting this pin are the same upstream event. Lift once eslint-config-next",
+    "ships ESLint 10-compatible plugins; .github/dependabot.yml ignores the",
+    "major in the meantime."
+  ],
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^26",

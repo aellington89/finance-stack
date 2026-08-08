@@ -54,6 +54,42 @@ updates:
       - dependency-name: "typescript"
         update-types:
           - "version-update:semver-major"
+      # ESLint is held on the 9.x line. 10.x removed the deprecated rule-context
+      # accessors (`context.getFilename()` and friends, superseded by
+      # `context.filename` in 8.40), and the plugins `eslint-config-next`
+      # vendors still call them: ESLint 10 crashes at rule-load time with
+      # "Error while loading rule 'react/display-name':
+      # contextOrFilename.getFilename is not a function" before it lints a
+      # single file (PR #247).
+      #
+      # This is not one stale plugin. Of the four eslint-config-next 16.2.12
+      # vendors, only @next/eslint-plugin-next accepts ESLint 10 —
+      # eslint-plugin-react caps its peer at ^9.7, eslint-plugin-import and
+      # eslint-plugin-jsx-a11y at ^9, eslint-plugin-react-hooks at ^9.0.0. Nor
+      # is a config bump the way out: eslint-config-next 16.3.0 still depends on
+      # `eslint-plugin-react: ^7.37.0`, and 7.37.5 — still `latest` — is the only
+      # release satisfying it. No version of the Next lint config runs on
+      # ESLint 10 today.
+      #
+      # Ignored rather than left to fail for the same reason as typescript
+      # above: 10.8.1 is `latest`, so Dependabot re-raises the identical
+      # unmergeable PR every week. Staying on 9 is not drift — 9.39.5 carries
+      # npm's `maintenance` dist-tag. The alternative, disabling the react,
+      # import and a11y rule sets, would trade real lint coverage for a
+      # dev-dependency bump.
+      #
+      # Issue #194 is the tracker: this same crash is what keeps the build-time
+      # `npm audit` gate non-blocking, since npm's only offered fix for the ~10
+      # HIGH advisories in the eslint 9 dev tree is eslint@10. Lifting that gate
+      # and lifting this rule are the same upstream event.
+      #
+      # Lift this once eslint-config-next ships plugins whose peers accept
+      # ESLint 10 — eslint-plugin-react > 7.37.5 is the one to watch. Minor and
+      # patch updates within 9.x still arrive normally. The `^9` in
+      # app/package.json is the matching half.
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
 
   # Importer service Python dependencies (importer/requirements.txt).
   - package-ecosystem: pip
