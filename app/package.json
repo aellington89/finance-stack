@@ -49,6 +49,11 @@
     "carrying HIGH advisories with no fixed next release. Lifting them here is",
     "what makes `npm audit --omit=dev` clean (Issue #131). Drop these once next",
     "ships them itself.",
+    "The postcss floor is ^8.5.26 rather than the ^8.5.23 that first cleared the",
+    "postcss advisory because postcss is also how nanoid reaches the runtime tree:",
+    "8.5.23 ranges on nanoid ^3.3.16, and 3.3.16 carries GHSA-2v37-7h3g-55p8 (HIGH).",
+    "8.5.26 is the first release to require nanoid ^3.3.17. Keep the floor at or",
+    "above 8.5.26 so a fresh resolve cannot land back on a vulnerable nanoid.",
     "eslint-plugin-react-hooks: eslint-config-next floats this on a caret range;",
     "7.1.x adds react-hooks/set-state-in-effect, which flags pre-existing",
     "hydration patterns in hooks/use-mobile.ts and components/ui/date-range-picker.tsx.",
@@ -56,7 +61,7 @@
     "its own PR with the refactor, not bundled into unrelated work."
   ],
   "overrides": {
-    "postcss": "^8.5.23",
+    "postcss": "^8.5.26",
     "sharp": "^0.35.3",
     "eslint-plugin-react-hooks": "7.0.1"
   },
