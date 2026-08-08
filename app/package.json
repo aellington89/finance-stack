@@ -110,8 +110,11 @@
     "^7.37.0, whose only satisfying release is the same 7.37.5. There is no",
     "version of the Next lint config that runs on ESLint 10 (PR #247).",
     "9.39.5 carries npm's `maintenance` dist-tag, so this is a supported line,",
-    "not a stale one. Lift once eslint-config-next ships ESLint 10-compatible",
-    "plugins; .github/dependabot.yml ignores the major in the meantime."
+    "not a stale one. Issue #194 is the tracker — the same crash is why the",
+    "build-time `npm audit` gate is still non-blocking, so lifting that gate and",
+    "lifting this pin are the same upstream event. Lift once eslint-config-next",
+    "ships ESLint 10-compatible plugins; .github/dependabot.yml ignores the",
+    "major in the meantime."
   ],
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

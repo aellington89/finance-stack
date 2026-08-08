@@ -78,6 +78,11 @@ updates:
       # import and a11y rule sets, would trade real lint coverage for a
       # dev-dependency bump.
       #
+      # Issue #194 is the tracker: this same crash is what keeps the build-time
+      # `npm audit` gate non-blocking, since npm's only offered fix for the ~10
+      # HIGH advisories in the eslint 9 dev tree is eslint@10. Lifting that gate
+      # and lifting this rule are the same upstream event.
+      #
       # Lift this once eslint-config-next ships plugins whose peers accept
       # ESLint 10 — eslint-plugin-react > 7.37.5 is the one to watch. Minor and
       # patch updates within 9.x still arrive normally. The `^9` in
