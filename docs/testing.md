@@ -16,7 +16,9 @@ docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh Fi
 
 The integration test `beforeAll` (in [`app/tests/integration/vitest-setup.ts`](../app/tests/integration/vitest-setup.ts)) upserts the full production row set for `account_type_categories` (6 rows) and `transaction_types` (12 rows) before any test runs. This is a drift-correction safety net — the seed files already populate these tables on first launch. No manual seed step is required.
 
-At runtime, [`/api/health`](../app/app/api/health/route.ts) performs the equivalent check live: it verifies every ID referenced from [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts) still resolves to its canonical seed-row name, and returns 503 with a `drift[]` array if any row is missing or renamed. See the Issue #123 changelog entry for the response shape.
+At runtime, [`/api/health/seed-data`](../app/app/api/health/seed-data/route.ts) performs the equivalent check live: it verifies every ID referenced from [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts) still resolves to its canonical seed-row name, and returns 503 with a `drift[]` array if any row is missing or renamed. It requires a session and answers 401 without one. Its sibling [`/api/health`](../app/app/api/health/route.ts) is liveness only — one `SELECT 1` plus the build stamp — and is the endpoint the Docker healthcheck and the release smoke test poll (Issue #191). See the Issue #123 changelog entry for the drift response shape.
+
+The two are covered by [`tests/integration/api/health.test.ts`](../app/tests/integration/api/health.test.ts) and [`tests/integration/api/health-seed-data.test.ts`](../app/tests/integration/api/health-seed-data.test.ts), which share their row-restoring fixture via [`tests/integration/api/seed-rows.ts`](../app/tests/integration/api/seed-rows.ts) — a plain module, not a `*.test.ts`, so the project's include glob does not collect it twice. The liveness suite asserts the split holds in both directions: a drifted seed row must still return 200, and the endpoint must issue exactly one query.
 
 ## Running Tests
 

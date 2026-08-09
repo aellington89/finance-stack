@@ -129,7 +129,8 @@ curl -sI http://localhost:3001/ | grep -iE \
 
 # Also covered — these sit outside the proxy's matcher
 curl -sI http://localhost:3001/login
-curl -sI http://localhost:3001/api/health
+curl -sI http://localhost:3001/api/health          # public liveness probe
+curl -sI http://localhost:3001/api/health/seed-data # outside the matcher, but 401 without a session
 
 # Should print nothing: poweredByHeader is off
 curl -sI http://localhost:3001/ | grep -i x-powered-by
@@ -176,7 +177,11 @@ Neither limit is configurable by environment variable. Both are constants in
   knows the username can hold the legitimate user out for up to 15 minutes by
   failing five sign-ins. Restarting `finance-app` clears it immediately.
 - **`/api/health` is deliberately not limited.** The Docker healthcheck polls it
-  every 10 seconds and the release smoke test polls it in a loop.
+  every 10 seconds and the release smoke test polls it in a loop. Since Issue #191
+  it costs one `SELECT 1`, so it is not much of an amplifier; the seed-row check
+  that used to ride along on it — three indexed lookups per request — moved to
+  `/api/health/seed-data`, which requires a session, so an anonymous caller cannot
+  drive those queries at all.
 
 ### Observing them
 

@@ -25,7 +25,8 @@ finance-stack/
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
 │   ├── .env.local.example                # Template for app env vars (copy to .env.local)
 │   ├── app/                              # App Router — pages and layouts
-│   │   ├── api/health/route.ts           # Health check endpoint (Docker liveness + seed-row drift detection against SEED_REFERENCES; public)
+│   │   ├── api/health/route.ts           # Liveness probe — one SELECT 1 + BUILD_INFO; target of the Docker healthcheck and release smoke test (public, #191)
+│   │   ├── api/health/seed-data/route.ts # Seed-row drift check against SEED_REFERENCES — 503 + drift[] (session-gated, 401 without one; #191)
 │   │   ├── api/auth/[...nextauth]/route.ts # Auth.js sign-in/sign-out/session endpoints
 │   │   ├── layout.tsx                    # Root layout (fonts, ThemeProvider, Toaster)
 │   │   ├── globals.css                   # Global styles and Tailwind CSS theme variables
@@ -141,7 +142,7 @@ finance-stack/
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
-│   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health drift check
+│   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health/seed-data drift check
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
