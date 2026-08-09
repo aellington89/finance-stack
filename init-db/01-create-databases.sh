@@ -20,13 +20,16 @@
 # All credentials are read from environment variables passed
 # through docker-compose.yml (sourced from .env).
 #
-# This file is NOT the authority on what MB_DB_USER may do. It runs
-# once, on an empty PGDATA, and never again — so nothing here can
-# correct a role on an existing volume. That is exactly how the live
-# cluster ended up with a SUPERUSER metabase_user while this script
-# still read like it created a scoped login (issue #239). The
-# convergent authority is init-db/roles/03-metabase-role.sql, applied
-# by the migrate service on every `docker compose up`.
+# This file is NOT the authority on what MB_DB_USER may do, nor on
+# what it authenticates with. It runs once, on an empty PGDATA, and
+# never again — so nothing here can correct a role on an existing
+# volume. That is exactly how the live cluster ended up with a
+# SUPERUSER metabase_user while this script still read like it created
+# a scoped login (issue #239), and why the CREATE ROLE below is
+# guarded with no matching ALTER: editing MB_DB_PASS in .env once left
+# the stored password untouched (issue #189). The convergent authority
+# for both is init-db/roles/03-metabase-role.sql, applied by the
+# migrate service on every `docker compose up`.
 # ------------------------------------------------------------
 set -euo pipefail
 
