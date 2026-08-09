@@ -48,7 +48,7 @@ merges.
 | Version | Milestone | Theme | Bump |
 |---|---|---|---|
 | **v0.1.5** ✅ | Phase 0 — Quick wins + the migration refactor | Finish the 0.1.x tech-debt cleanup — **released 2026-07-10** | Patch |
-| **v0.2.0** | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost | Minor |
+| **v0.2.0** ✅ | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost — **released 2026-08-09** | Minor |
 | **v0.3.0** | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity. **This is the 1.0 release candidate** | Minor |
 | **v1.0.0** | *(stabilization of 0.2.0–0.3.0)* | **The safety/stability commitment: trustworthy & exposable** | **Major** |
 | **v1.1.0** | Phase 3 — DX compounding | Importer hardening, E2E tests, tooling | Minor |
@@ -70,6 +70,9 @@ merges.
 **✅ Released 2026-07-10** — see [CHANGELOG](../CHANGELOG.md#015---2026-07-10).
 
 ### v0.2.0 — Phase 1 (Pre-exposure gates)
+**✅ Released 2026-08-09** — see [CHANGELOG](../CHANGELOG.md#020---2026-08-09).
+The milestone shipped whole rather than sliced; all 23 issues below are in it.
+
 - [#120](https://github.com/aellington89/finance-stack/issues/120) Authentication & authorization
 - [#130](https://github.com/aellington89/finance-stack/issues/130) Lock down Postgres surface area
 - [#122](https://github.com/aellington89/finance-stack/issues/122) Backup & disaster recovery
@@ -94,9 +97,10 @@ merges.
 - [#217](https://github.com/aellington89/finance-stack/issues/217) Remove the dead `table` classNames key from `calendar.tsx` (blocks react-day-picker v10) *(new — from #131)*
 - [#219](https://github.com/aellington89/finance-stack/issues/219) Re-derive `chart.tsx` tooltip/legend props from the default content components (blocks recharts v3) *(new — from #131)*
 
-> Phase 1 is large; it can be sliced (e.g. auth core as v0.2.0, the heavier
-> security items trailing into v0.2.x/v0.3.0). The milestone maps to a version
-> *band*, and you cut when ready.
+> Phase 1 was large enough to have been sliced (e.g. auth core as v0.2.0, the
+> heavier security items trailing into v0.2.x/v0.3.0), and was not — everything
+> in the milestone went out together. The general rule still stands for the
+> phases below: a milestone maps to a version *band*, and you cut when ready.
 
 ### v0.3.0 — Phase 2 (1.0 release candidate)
 - [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users
