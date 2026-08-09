@@ -28,12 +28,14 @@ milestone.
 
 ## What v1.0.0 means here
 
-This is a **personal-finance data store that today has no authentication** — the
-[README](../README.md) warns that anyone who can reach the port can read and delete
-all financial data. For an app like this, `1.0.0` is a **safety and stability
-commitment** ("log in, don't lose your data, expose it safely"), *not* a
-feature-completeness claim. Budgets, forecasting, search, receipts, and the rest
-are additive — textbook `1.x` minor releases.
+This is a **personal-finance data store**, and until v0.2.0 it had no
+authentication at all — anyone who could reach the port could read and delete
+every record. Phase 1 closed that, and the remaining gap is the one the
+[README](../README.md) still warns about: the app speaks plain HTTP, so the
+default posture is a trusted network. For an app like this, `1.0.0` is a
+**safety and stability commitment** ("log in, don't lose your data, expose it
+safely"), *not* a feature-completeness claim. Budgets, forecasting, search,
+receipts, and the rest are additive — textbook `1.x` minor releases.
 
 **v1.0.0 is cut once Phases 0–2 have shipped and stabilized in real use**, which
 includes closing out the remaining security-epic
@@ -46,7 +48,7 @@ merges.
 | Version | Milestone | Theme | Bump |
 |---|---|---|---|
 | **v0.1.5** ✅ | Phase 0 — Quick wins + the migration refactor | Finish the 0.1.x tech-debt cleanup — **released 2026-07-10** | Patch |
-| **v0.2.0** | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost | Minor |
+| **v0.2.0** ✅ | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost — **released 2026-08-09** | Minor |
 | **v0.3.0** | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity. **This is the 1.0 release candidate** | Minor |
 | **v1.0.0** | *(stabilization of 0.2.0–0.3.0)* | **The safety/stability commitment: trustworthy & exposable** | **Major** |
 | **v1.1.0** | Phase 3 — DX compounding | Importer hardening, E2E tests, tooling | Minor |
@@ -68,6 +70,9 @@ merges.
 **✅ Released 2026-07-10** — see [CHANGELOG](../CHANGELOG.md#015---2026-07-10).
 
 ### v0.2.0 — Phase 1 (Pre-exposure gates)
+**✅ Released 2026-08-09** — see [CHANGELOG](../CHANGELOG.md#020---2026-08-09).
+The milestone shipped whole rather than sliced; all 23 issues below are in it.
+
 - [#120](https://github.com/aellington89/finance-stack/issues/120) Authentication & authorization
 - [#130](https://github.com/aellington89/finance-stack/issues/130) Lock down Postgres surface area
 - [#122](https://github.com/aellington89/finance-stack/issues/122) Backup & disaster recovery
@@ -84,11 +89,18 @@ merges.
 - [#189](https://github.com/aellington89/finance-stack/issues/189) Make `POSTGRES_PASSWORD` and `MB_DB_PASS` rotatable from `.env` *(new)*
 - [#191](https://github.com/aellington89/finance-stack/issues/191) Split `/api/health` into a liveness probe + seed-data check *(new)*
 - [#194](https://github.com/aellington89/finance-stack/issues/194) Make the build-time `npm audit` gate blocking *(new — from #131)*
-- [#263](https://github.com/aellington89/finance-stack/issues/263) Bump to eslint 10 once `eslint-config-next` ships plugins that support it *(new — split from #194; blocked upstream)*
+- [#249](https://github.com/aellington89/finance-stack/issues/249) Metabase's `Finances` connection is the `postgres` superuser; add a read-only BI role *(new — from #181)*
+- [#250](https://github.com/aellington89/finance-stack/issues/250) Retire `finance_metabase`: two near-identical BI credentials for one job *(new — from #249)*
+- [#210](https://github.com/aellington89/finance-stack/issues/210) Move the Node base image and CI toolchain to 24 (LTS) *(new — from #131)*
+- [#213](https://github.com/aellington89/finance-stack/issues/213) Track Metabase on the LTS line: bump to v0.58.21 and ignore non-LTS bumps *(new — from #131)*
+- [#215](https://github.com/aellington89/finance-stack/issues/215) Tighten the `typescript` devDependency floor *(new — from #131)*
+- [#217](https://github.com/aellington89/finance-stack/issues/217) Remove the dead `table` classNames key from `calendar.tsx` (blocks react-day-picker v10) *(new — from #131)*
+- [#219](https://github.com/aellington89/finance-stack/issues/219) Re-derive `chart.tsx` tooltip/legend props from the default content components (blocks recharts v3) *(new — from #131)*
 
-> Phase 1 is large; it can be sliced (e.g. auth core as v0.2.0, the heavier
-> security items trailing into v0.2.x/v0.3.0). The milestone maps to a version
-> *band*, and you cut when ready.
+> Phase 1 was large enough to have been sliced (e.g. auth core as v0.2.0, the
+> heavier security items trailing into v0.2.x/v0.3.0), and was not — everything
+> in the milestone went out together. The general rule still stands for the
+> phases below: a milestone maps to a version *band*, and you cut when ready.
 
 ### v0.3.0 — Phase 2 (1.0 release candidate)
 - [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users
@@ -105,6 +117,7 @@ merges.
 - [#185](https://github.com/aellington89/finance-stack/issues/185) Audit docker-compose services: necessity & profile gating *(new)*
 - [#193](https://github.com/aellington89/finance-stack/issues/193) Adopt `react-hooks/set-state-in-effect`; drop the `eslint-plugin-react-hooks` pin *(new — from #131)*
 - [#195](https://github.com/aellington89/finance-stack/issues/195) Run `npm run typecheck` in CI *(new — from #131)*
+- [#263](https://github.com/aellington89/finance-stack/issues/263) Bump to eslint 10 once `eslint-config-next` ships plugins that support it *(new — split from #194; blocked upstream)*
 - [#232](https://github.com/aellington89/finance-stack/issues/232) Wire an error-tracking backend into `reportError()` *(new — from #129)*
 - [#237](https://github.com/aellington89/finance-stack/issues/237) Nonce-based CSP: remove `'unsafe-inline'` from `script-src` and `style-src` *(new — from #182)*
 

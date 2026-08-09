@@ -428,6 +428,14 @@ jobs:
       - name: Changelog gate
         run: npm run check:changelog
 
+      # Issue #186. Two hand-maintained lists index one directory — "## Guides"
+      # in docs/README.md and "## Documentation" in README.md — and both had
+      # silently fallen behind it. Scoped to the list sections, because the root
+      # README links guides from prose too and a whole-file search reports those
+      # as indexed.
+      - name: Docs index gate
+        run: npm run check:docs
+
       - name: Lint
         run: npm run lint
 
