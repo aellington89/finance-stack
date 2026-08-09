@@ -45,19 +45,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Issue #131. Runtime dependencies are the blocking gate: everything here
-      # ships inside the image. `overrides` in package.json lift next's vendored
-      # postcss/sharp, which is what keeps this green.
+      # Issue #131. Runtime dependencies: everything here ships inside the image.
+      # `overrides` in package.json lift next's vendored postcss/sharp, which is
+      # what keeps this green.
       - name: Dependency audit (runtime)
         run: npm audit --omit=dev --audit-level=high
 
-      # Build-time dependencies are reported but do not block. The eslint 9
-      # toolchain currently carries HIGH advisories whose only fix is eslint 10,
-      # which eslint-config-next does not yet support (its vendored
-      # eslint-plugin-react crashes on eslint 10's rule API). Flip this to a
-      # blocking step once that lands upstream.
-      - name: Dependency audit (build-time, advisory only)
-        continue-on-error: true
+      # Issue #194. The full tree, dev dependencies included. This step spent
+      # its first months as `continue-on-error` because the eslint 9 dev
+      # tree carried HIGH advisories whose only npm-offered fix was
+      # eslint 10, which eslint-config-next still cannot host. That turned out
+      # not to be the constraint it looked like: every one of those advisories
+      # has since been patched *within* the range the lockfile already resolved
+      # (brace-expansion 1.1.18/5.0.9, js-yaml 4.3.1, picomatch 2.3.2, fast-uri
+      # 3.1.5), so the gate closed on eslint 9 and the eslint pin outlived it.
+      # See the `//eslint` note in app/package.json for what still holds that.
+      #
+      # This step subsumes the runtime one above, which is kept anyway: which of
+      # the two goes red is the whole diagnosis. Runtime red means the finding
+      # ships to users and usually needs an `overrides` entry; build-time red
+      # means it is a dev-tree bump. Merging them would cost a local re-run with
+      # --omit=dev to learn the same thing. CONTRIBUTING.md carries the fix
+      # procedure, including what to do about an advisory with no fix at all —
+      # npm audit has no per-advisory allowlist, so unlike .trivyignore there is
+      # no escape hatch here yet.
+      - name: Dependency audit (build-time)
         run: npm audit --audit-level=high
 
       - name: Create test database

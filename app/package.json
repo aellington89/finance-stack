@@ -110,11 +110,18 @@
     "^7.37.0, whose only satisfying release is the same 7.37.5. There is no",
     "version of the Next lint config that runs on ESLint 10 (PR #247).",
     "9.39.5 carries npm's `maintenance` dist-tag, so this is a supported line,",
-    "not a stale one. Issue #194 is the tracker — the same crash is why the",
-    "build-time `npm audit` gate is still non-blocking, so lifting that gate and",
-    "lifting this pin are the same upstream event. Lift once eslint-config-next",
-    "ships ESLint 10-compatible plugins; .github/dependabot.yml ignores the",
-    "major in the meantime."
+    "not a stale one. Issue #263 is the tracker. It used to be #194, on the",
+    "reading that this pin and the non-blocking build-time `npm audit` gate were",
+    "one upstream event: npm's only offered fix for the HIGH advisories in the",
+    "eslint 9 dev tree was eslint@10, so the gate could not close until this",
+    "moved. That reading was wrong, and worth recording because it is the easy",
+    "one to reach again — those advisories were patched *within* the ranges the",
+    "lockfile already resolved (brace-expansion 1.1.18/5.0.9, js-yaml 4.3.1,",
+    "picomatch 2.3.2, fast-uri 3.1.5), the gate is blocking as of #194, and this",
+    "pin outlived it. The plugin peer ranges above are now the whole of the",
+    "constraint. Lift once eslint-config-next ships ESLint 10-compatible plugins",
+    "— eslint-plugin-react > 7.37.5 is the one to watch; .github/dependabot.yml",
+    "ignores the major in the meantime."
   ],
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

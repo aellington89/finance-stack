@@ -83,7 +83,8 @@ merges.
 - [#186](https://github.com/aellington89/finance-stack/issues/186) List all docs/ guides in the docs README Guides section *(new)*
 - [#189](https://github.com/aellington89/finance-stack/issues/189) Make `POSTGRES_PASSWORD` and `MB_DB_PASS` rotatable from `.env` *(new)*
 - [#191](https://github.com/aellington89/finance-stack/issues/191) Split `/api/health` into a liveness probe + seed-data check *(new)*
-- [#194](https://github.com/aellington89/finance-stack/issues/194) Make the build-time `npm audit` blocking once `eslint-config-next` supports eslint 10 *(new — from #131; blocked upstream)*
+- [#194](https://github.com/aellington89/finance-stack/issues/194) Make the build-time `npm audit` gate blocking *(new — from #131)*
+- [#263](https://github.com/aellington89/finance-stack/issues/263) Bump to eslint 10 once `eslint-config-next` ships plugins that support it *(new — split from #194; blocked upstream)*
 
 > Phase 1 is large; it can be sliced (e.g. auth core as v0.2.0, the heavier
 > security items trailing into v0.2.x/v0.3.0). The milestone maps to a version

@@ -127,23 +127,42 @@ If you're not cutting a release, simply ensure you haven't accidentally bumped
 
 ### Dependency audit gate
 
-Fails if any **runtime** dependency carries a HIGH or CRITICAL advisory.
-
-**Fix:** run locally, then bump whatever it names:
+Two steps, **both blocking**. Either fails if a dependency carries a HIGH or
+CRITICAL advisory:
 
 ```sh
-cd app && npm audit --omit=dev --audit-level=high
+cd app
+npm audit --omit=dev --audit-level=high   # runtime — ships inside the image
+npm audit --audit-level=high              # the full tree, dev deps included
 ```
 
-`npm audit fix` handles most cases. If the only fix is a major bump, or the
-advisory is in a package vendored by a dependency (as with next's bundled
-`postcss` and `sharp`), add an entry to `overrides` in `app/package.json` and
-explain it in the `//overrides` note alongside it.
+The second subsumes the first, and the split is kept because *which one* goes
+red is the diagnosis. Runtime red means the advisory ships to users; build-time
+red means it is confined to the toolchain. Same fix procedure, different urgency.
 
-A second, **non-blocking** audit covers build-time dependencies. It is advisory
-only because the eslint 9 toolchain currently has HIGH advisories whose sole fix
-is eslint 10, which `eslint-config-next` does not yet support. Once that lands
-upstream, make it blocking.
+**Fix**, in order of preference:
+
+1. **Bump it** — `npm update <pkg>`, then re-run the audit. This is the common
+   case even for transitives, because most advisories are patched within a range
+   the lockfile already resolves. Check `npm view <pkg> versions` against the
+   advisory's affected range before assuming a bump is unavailable: Issue #194
+   was open for months on the belief that the eslint dev tree needed `eslint@10`,
+   when four of its HIGH advisories were cleared by a plain lockfile refresh.
+2. **Override it** — if the only fix is a major bump, or the package is vendored
+   by a dependency (as with next's bundled `postcss` and `sharp`), add an entry
+   to `overrides` in `app/package.json` **and** explain it in the `//overrides`
+   note alongside. The note is not optional; an unexplained override is
+   indistinguishable from a stale one.
+3. **There is no third option yet.** If an advisory has no fix at all — `npm
+   audit` says a fix requires a breaking downgrade, or names no fix — the gate
+   goes red and stays red. `npm audit` has no per-advisory allowlist, so there
+   is no equivalent of [`.trivyignore`](.trivyignore) here. Raise it rather than
+   working around it: the answer is either dropping the dependency or building
+   that allowlist, and both are decisions worth making deliberately.
+
+Run the audits before pushing. A red gate on `master` is inherited by every open
+Dependabot PR, which is exactly the state in which a real regression on one of
+them gets waved through as "the usual red".
 
 ### Image scan gate
 
