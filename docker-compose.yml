@@ -26,6 +26,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}           # Default system DB; the Finances DB is created by the backup restore
       MB_DB_USER: ${MB_DB_USER}             # Passed through so init-db script can create the Metabase role
+      # First-run seeding only — init-db runs once, on an empty PGDATA. Not the
+      # authority on this password: migrate re-syncs it on every up (#189).
       MB_DB_PASS: ${MB_DB_PASS}
       MB_DB_DBNAME: ${MB_DB_DBNAME}
     ports:
@@ -82,16 +84,17 @@ services:
       FINANCE_IMPORTER_DB_PASSWORD: ${FINANCE_IMPORTER_DB_PASSWORD}
       FINANCE_BI_DB_PASSWORD: ${FINANCE_BI_DB_PASSWORD}
       # Metabase's metadata role (#239): this job re-asserts its attributes on
-      # every run, which is what reaches an existing volume. Names only —
-      # migrate does not rotate MB_DB_PASS (that is #189).
+      # every run, which is what reaches an existing volume.
       MB_DB_USER: ${MB_DB_USER}
       MB_DB_DBNAME: ${MB_DB_DBNAME}
-      # Not used by migrate-and-seed.sh. It is here so the on-demand
-      # scripts/verify-db-roles.sh can *connect* as the metadata role rather
-      # than only reading the catalog back — the half of the check that proves
-      # Metabase can still migrate its own database. The script skips those
-      # cases when this is unset, so this widens where the value lives in
-      # exchange for the verification being runnable with no -e flags.
+      # Since #189 this job also syncs the metadata role's password from here,
+      # which is what makes MB_DB_PASS rotatable from .env. Required whenever
+      # the metadata database exists — migrate-and-seed.sh guards it inside that
+      # branch rather than globally, so a stack that never provisioned Metabase
+      # is unaffected. It doubles as the credential the on-demand
+      # scripts/verify-db-roles.sh needs to *connect* as the role rather than
+      # only read the catalog back — the half of that check which proves
+      # Metabase can still migrate its own database.
       MB_DB_PASS: ${MB_DB_PASS}
     volumes:
       - ./init-db/seeds:/seeds:ro        # Seed SQL files consumed by migrate-and-seed.sh

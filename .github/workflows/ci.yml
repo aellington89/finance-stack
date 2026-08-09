@@ -113,7 +113,8 @@ jobs:
                   NOREPLICATION NOBYPASSRLS PASSWORD 'ci-metabase-meta-pw';" \
             -c 'CREATE DATABASE metabase OWNER metabase_user;'
           psql -v ON_ERROR_STOP=1 -d metabase \
-            -v mb_user=metabase_user -f ../init-db/roles/03-metabase-role.sql
+            -v mb_user=metabase_user -v mb_password=ci-metabase-meta-pw \
+            -f ../init-db/roles/03-metabase-role.sql
 
       # Asserts the grant matrix against the catalog, then connects as each role
       # and runs real statements (see scripts/verify-db-roles.sh). PGHOST is
@@ -163,7 +164,8 @@ jobs:
           psql -q -v ON_ERROR_STOP=1 -d postgres -c 'ALTER ROLE metabase_user SUPERUSER;'
           gate_must_fail "metabase_user is a superuser"
           psql -q -v ON_ERROR_STOP=1 -d metabase \
-            -v mb_user=metabase_user -f ../init-db/roles/03-metabase-role.sql > /dev/null
+            -v mb_user=metabase_user -v mb_password=ci-metabase-meta-pw \
+            -f ../init-db/roles/03-metabase-role.sql > /dev/null
 
           # 2. A login role the stack has never heard of, carrying an attribute.
           psql -q -v ON_ERROR_STOP=1 -d postgres -c 'CREATE ROLE rogue_superuser LOGIN SUPERUSER;'
@@ -183,6 +185,107 @@ jobs:
           # Every case above must have been reverted, or the steps after this
           # one are running against a cluster this step left dirty.
           psql -v ON_ERROR_STOP=1 -d "Finances_Test" -f ../init-db/roles/assert-grants.sql
+
+      # Issue #189, acceptance criterion 1. Proves the mechanic rather than the
+      # intent: MB_DB_PASS was un-rotatable for the same reason POSTGRES_PASSWORD
+      # still is — the only file that set it (init-db/01-create-databases.sh) runs
+      # once, on an empty PGDATA. 03-metabase-role.sql now carries an unconditional
+      # ALTER ROLE … PASSWORD, and the assertion that matters is the negative one:
+      # the OLD credential must stop working. A gate that only checked the new
+      # password would pass against a role whose password had never changed.
+      - name: Password rotation gate
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          set -euo pipefail
+
+          # `psql -U metabase_user` inherits PGHOST=localhost, which reaches the
+          # service container through port forwarding and so authenticates with a
+          # password. A `trust` path would make every case here vacuous.
+          connects_as() {
+            PGPASSWORD="$1" psql -w -U metabase_user -d metabase -qtAc 'SELECT 1' >/dev/null 2>&1
+          }
+
+          rotate_to() {
+            psql -q -v ON_ERROR_STOP=1 -d metabase \
+              -v mb_user=metabase_user -v mb_password="$1" \
+              -f ../init-db/roles/03-metabase-role.sql >/dev/null
+          }
+
+          # A password carrying a quote and a backslash, because the value is
+          # interpolated through format(%L) rather than shell-expanded — the
+          # property that keeps a legal password from breaking the statement.
+          ROTATED="ci-rotated'pw\\with-quotes"
+
+          rotate_to "$ROTATED"
+
+          if connects_as 'ci-metabase-meta-pw'; then
+            echo "::error::the pre-rotation MB_DB_PASS still authenticates — 03-metabase-role.sql did not apply the new password, so MB_DB_PASS is not rotatable from .env (issue #189)."
+            exit 1
+          fi
+          echo "ok  the pre-rotation MB_DB_PASS is refused"
+
+          if ! connects_as "$ROTATED"; then
+            echo "::error::the rotated MB_DB_PASS does not authenticate — 03-metabase-role.sql set something other than the value it was given (issue #189)."
+            exit 1
+          fi
+          echo "ok  the rotated MB_DB_PASS connects"
+
+          # Restore, or every later step runs against a cluster this one moved.
+          rotate_to 'ci-metabase-meta-pw'
+          connects_as 'ci-metabase-meta-pw'
+          echo "ok  restored"
+
+      # Issue #189, acceptance criterion 2. POSTGRES_PASSWORD is the one
+      # credential the stack cannot rotate for you: migrate authenticates AS that
+      # role, so a .env that disagrees with the stored value locks it out before
+      # any ALTER it would have issued could run. What is gated here is therefore
+      # the quality of the failure, not a mechanism — the message has to survive,
+      # or this degrades back to a bare `password authentication failed` from
+      # whichever psql happened to run first.
+      #
+      # A failure between the ALTER and the restore leaves this cluster's
+      # superuser password rotated for the remaining steps. Acceptable: CI has
+      # already failed by then, and the runner is torn down.
+      - name: Superuser preflight gate
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          set -euo pipefail
+
+          bash scripts/preflight-superuser.sh
+          echo "ok  preflight passes when .env matches the volume"
+
+          # Exactly the drift an operator causes by editing POSTGRES_PASSWORD on
+          # an existing volume: the stored password moves, .env does not.
+          psql -q -v ON_ERROR_STOP=1 -d postgres \
+            -c "ALTER ROLE postgres PASSWORD 'ci-rotated-superuser-pw';"
+
+          if out="$(bash scripts/preflight-superuser.sh 2>&1)"; then
+            echo "::error::preflight-superuser.sh passed while POSTGRES_PASSWORD did not match the stored password (issue #189)."
+            exit 1
+          fi
+
+          # Assert on the message, not just the exit code. Both of these are what
+          # make the failure actionable rather than merely loud.
+          for needle in '\password postgres' 'docs/database.md#rotating-a-role-password'; do
+            if ! grep -qF -- "$needle" <<<"$out"; then
+              echo "::error::the preflight failure no longer names '${needle}'. It is the operator's only pointer to the rotation procedure (issue #189)."
+              echo "$out"
+              exit 1
+            fi
+          done
+          echo "ok  preflight fails actionably on a superuser mismatch"
+
+          PGPASSWORD=ci-rotated-superuser-pw psql -q -v ON_ERROR_STOP=1 -d postgres \
+            -c "ALTER ROLE postgres PASSWORD 'changeme';"
+          bash scripts/preflight-superuser.sh
+          echo "ok  restored"
 
       - name: Schema drift gate
         env:

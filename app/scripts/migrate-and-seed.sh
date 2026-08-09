@@ -34,16 +34,25 @@
 # file — see the header of shared-lookups.sql before editing it (issue #187).
 #
 # It also converges the Metabase metadata role (/roles/03-metabase-role.sql,
-# issue #239). That role is created by init-db/01-create-databases.sh, which
-# runs only on an empty PGDATA — so on an existing volume nothing re-asserted
-# what it was allowed to be, and it had drifted to SUPERUSER unnoticed.
+# issues #239 and #189). That role is created by init-db/01-create-databases.sh,
+# which runs only on an empty PGDATA — so on an existing volume nothing
+# re-asserted what it was allowed to be, and it had drifted to SUPERUSER
+# unnoticed. The same file now syncs its password, which is what makes MB_DB_PASS
+# rotatable from .env.
+#
+# Before any of that it runs preflight-superuser.sh, which is the other half of
+# #189: POSTGRES_PASSWORD is the one credential this job cannot rotate, because
+# it authenticates AS that role and a .env that disagrees with the stored value
+# locks it out first. The preflight turns that into an actionable failure rather
+# than a bare `password authentication failed` from whichever psql ran first.
 #
 # Required env vars (set by docker-compose.yml):
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD, FINANCE_APP_DB
 #   FINANCE_APP_DB_PASSWORD, FINANCE_IMPORTER_DB_PASSWORD,
 #   FINANCE_APP_DB_PASSWORD etc.  (the service-role passwords, #130)
 #   FINANCE_BI_DB_PASSWORD        (the read-only BI role, #249)
-#   MB_DB_USER, MB_DB_DBNAME      (names only — no password; see #189)
+#   MB_DB_USER, MB_DB_DBNAME      (the metadata role + its database)
+#   MB_DB_PASS                    (required only when that database exists, #189)
 # ------------------------------------------------------------
 set -euo pipefail
 
@@ -108,6 +117,13 @@ apply_grants() {
     psql -v ON_ERROR_STOP=1 -d "${db}" -v OWNER="${PGUSER}" -f /roles/02-grants.sql
 }
 
+# Before anything that needs a connection. A superuser password that no longer
+# matches the volume is the one failure this job cannot repair (#189), so it is
+# worth naming precisely rather than letting the next psql report it raw.
+# Resolved relative to this file so it works both in the image (/app/scripts)
+# and from a checkout.
+bash "$(dirname "${BASH_SOURCE[0]}")/preflight-superuser.sh"
+
 # Roles are cluster-global, so create them once, before the per-database loop.
 echo ">>> Creating least-privilege service roles..."
 psql -v ON_ERROR_STOP=1 -d postgres \
@@ -123,8 +139,15 @@ psql -v ON_ERROR_STOP=1 -d postgres \
 # role together, so neither exists without the other.
 echo ">>> Converging the Metabase metadata role..."
 if [ -n "$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${MB_DB_DBNAME}'" -d postgres)" ]; then
+    # Scoped to this branch on purpose. A cluster that never provisioned
+    # Metabase is a valid configuration and must not be forced to carry the
+    # variable; one that HAS the database also has the role, and an empty value
+    # there would quietly set a blank password. Same fail-fast reasoning as the
+    # service-role guards above (#189).
+    : "${MB_DB_PASS:?must be set — the ${MB_DB_DBNAME} database exists, so migrate syncs its role password from .env (issue #189)}"
     psql -v ON_ERROR_STOP=1 -d "${MB_DB_DBNAME}" \
         -v mb_user="${MB_DB_USER}" \
+        -v mb_password="${MB_DB_PASS}" \
         -f /roles/03-metabase-role.sql
 else
     echo ">>> No ${MB_DB_DBNAME} database — skipping."

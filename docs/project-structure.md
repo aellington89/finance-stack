@@ -80,6 +80,7 @@ finance-stack/
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
 │   ├── scripts/
 │   │   ├── migrate-and-seed.sh           # Entrypoint for the `migrate` Compose service (drizzle-kit migrate + seed)
+│   │   ├── preflight-superuser.sh        # Runs first in that job: names a POSTGRES_PASSWORD/volume mismatch (#189)
 │   │   ├── check-seed-references.ts       # CI gate: SEED_REFERENCES (id, name) must match shared-lookups.sql (#155), which must stay additive (#187)
 │   │   ├── create-user.ts                 # First-user CLI / password reset (npm run auth:create-user -- <username>)
 │   │   └── seed-reference-check.ts        # Pure parse + diff helpers backing the gate (unit-tested)

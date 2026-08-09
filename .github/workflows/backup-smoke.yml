@@ -15,6 +15,11 @@ on:
     paths:
       - 'scripts/backup.sh'
       - 'scripts/restore.sh'
+      # Not exercised by the round-trip below, but this job owns the only
+      # shellcheck step in the repo, so a shell file it lints has to be able to
+      # trigger it — verify-db-roles.sh was listed there and could not.
+      - 'scripts/verify-db-roles.sh'
+      - 'app/scripts/*.sh'
       - '.github/workflows/backup-smoke.yml'
 
 jobs:
@@ -50,8 +55,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Every shell script in the repo that is not a one-liner. app/scripts/ is
+      # included because migrate-and-seed.sh gates the whole stack's startup and
+      # preflight-superuser.sh is the failure path an operator sees when a
+      # rotation goes wrong (#189) — both are worth linting even though neither
+      # takes part in the backup round-trip below.
       - name: Shellcheck scripts/
-        run: shellcheck scripts/backup.sh scripts/restore.sh scripts/verify-db-roles.sh
+        run: |
+          shellcheck scripts/backup.sh scripts/restore.sh scripts/verify-db-roles.sh \
+                     app/scripts/migrate-and-seed.sh app/scripts/preflight-superuser.sh
 
       - name: Install PostgreSQL 18 client
         # pg_dump must be >= the server major version (18); the runner's default

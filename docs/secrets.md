@@ -11,7 +11,7 @@ Seven values. Nothing else in the stack is secret.
 | Variable | Lives in | Consumed by | Generate with |
 |---|---|---|---|
 | `POSTGRES_PASSWORD` | root `.env` | `postgres` (at `initdb`), and `migrate` / `init-script` / `pg-backup` as `PGPASSWORD` | any generator; URL-safe |
-| `MB_DB_PASS` | root `.env` | `init-db/01-create-databases.sh` (creates the role), `metabase`, `migrate` (verification only) | any generator; URL-safe |
+| `MB_DB_PASS` | root `.env` | `init-db/01-create-databases.sh` (creates the role), `migrate` (syncs the role's password), `metabase` | any generator; URL-safe |
 | `FINANCE_APP_DB_PASSWORD` | root `.env` | `migrate` (creates the role), `finance-app` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_IMPORTER_DB_PASSWORD` | root `.env` | `migrate`, `importer` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_BI_DB_PASSWORD` | root `.env` | `migrate` only — then entered by hand in the Metabase admin UI (#249) | any generator; URL-safe |
@@ -141,15 +141,17 @@ store is part of the platform rather than something to build.
 The procedure is in [Database — Rotating a role password](database.md#rotating-a-role-password),
 and is not repeated here. The one thing to know before you start:
 
-- **The three `FINANCE_*_DB_PASSWORD` values rotate from `.env` alone.**
-  `init-db/roles/01-create-roles.sql` re-issues an unconditional
-  `ALTER ROLE … PASSWORD` on every `migrate` run.
-- **`POSTGRES_PASSWORD` and `MB_DB_PASS` do not.** Both are applied only when
-  the Postgres data directory is first initialized, so editing them on an
-  existing volume changes nothing and desynchronizes every service that
-  authenticates with the new value. Alter the role first, then update `.env`.
-  Closing that inconsistency is
-  [#189](https://github.com/aellington89/finance-stack/issues/189).
+- **Four of the five database passwords rotate from `.env` alone** — the three
+  `FINANCE_*_DB_PASSWORD` values and `MB_DB_PASS`.
+  `init-db/roles/01-create-roles.sql` and `init-db/roles/03-metabase-role.sql`
+  re-issue an unconditional `ALTER ROLE … PASSWORD` on every `migrate` run.
+- **`POSTGRES_PASSWORD` does not, and no future change will make it.** It is
+  applied only when the Postgres data directory is first initialized, so editing
+  it on an existing volume changes nothing. `migrate` cannot repair that the way
+  it repairs the others, because it authenticates *as* that role and is locked
+  out before any `ALTER` could run. Alter the role first, then update `.env`;
+  get it backwards and `app/scripts/preflight-superuser.sh` says so and names the
+  procedure ([#189](https://github.com/aellington89/finance-stack/issues/189)).
 - **Rotating `AUTH_SECRET` signs everyone out.** There is no server-side session
   revocation, so this is also the only way to invalidate an outstanding session
   ([Authentication](auth.md)).
@@ -203,8 +205,10 @@ large, permanent cost for no reduction in risk.
 Rotation is what closes an exposure like this, and it is an operator action on
 a running stack rather than something a commit can do: follow
 [Rotating a role password](database.md#rotating-a-role-password) for
-`POSTGRES_PASSWORD` and `MB_DB_PASS`, both of which need the `\password` route
-rather than an edit to `.env`. **Treat any deployment whose `.env` still carries
+`POSTGRES_PASSWORD` and `MB_DB_PASS`. Since #189 they take different routes —
+`MB_DB_PASS` is an edit to `.env` plus a `migrate` run, `POSTGRES_PASSWORD` still
+needs `\password` first — so do not assume one procedure covers both.
+**Treat any deployment whose `.env` still carries
 a value that appears in this repository's history as holding a public
 credential.** More generally, if a real secret is ever committed the order is:
 rotate first, treat the value as burned, and only then decide whether purging

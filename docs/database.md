@@ -146,12 +146,12 @@ Roles and grants are applied by the **`migrate` service** on every `docker compo
 |---|---|
 | [`init-db/roles/01-create-roles.sql`](../init-db/roles/01-create-roles.sql) | Creates the three login roles (cluster-global, so it runs once per migrate run) |
 | [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) | Applies the matrix above to one database; run against `Finances` and `Finances_Test` |
-| [`init-db/roles/03-metabase-role.sql`](../init-db/roles/03-metabase-role.sql) | Converges the Metabase metadata role; run against `MB_DB_DBNAME` (Issue #239) |
+| [`init-db/roles/03-metabase-role.sql`](../init-db/roles/03-metabase-role.sql) | Converges the Metabase metadata role — attributes, ownership, and its password; run against `MB_DB_DBNAME` (Issues #239, #189) |
 | [`init-db/roles/assert-grants.sql`](../init-db/roles/assert-grants.sql) | Asserts the matrix against the catalog — the CI grant gate |
 
 `02-grants.sql` **revokes before it grants**, inside a transaction, so it converges: a privilege widened by hand is removed on the next `up`, and there is no window in which a running app has no access. `01-create-roles.sql` and `03-metabase-role.sql` converge the same way, with an unconditional `ALTER ROLE`.
 
-**One story about out-of-band changes, applied everywhere:** the stack silently converges what it *declares* — the three service roles and the Metabase metadata role — and refuses to be silent about anything else. A login role the stack does not declare is never rewritten by `migrate`; it fails `assert-grants.sql` instead, so an operator who added one deliberately gets told rather than quietly overruled. This is the same tension #189 raises for `POSTGRES_PASSWORD`, resolved the same way.
+**One story about out-of-band changes, applied everywhere:** the stack silently converges what it *declares* — the three service roles and the Metabase metadata role, attributes and passwords alike — and refuses to be silent about anything else. A login role the stack does not declare is never rewritten by `migrate`; it fails `assert-grants.sql` instead, so an operator who added one deliberately gets told rather than quietly overruled. `POSTGRES_PASSWORD` sits in that second category by necessity rather than by choice: `migrate` cannot converge the credential it authenticates with, so it detects the divergence and reports it instead (Issue #189).
 
 ### Verifying the roles
 
@@ -165,9 +165,21 @@ The `migrate` service already carries every variable the script needs, so no `-e
 
 The metadata-role cases need `MB_DB_PASS` and are skipped with a `skip` line without it; the catalog gate still covers that role's attributes either way. They are also what keeps the rest honest: a connection that never opens now fails the case it appears in, so a wrong password can no longer pass an `allow` case by simply never reaching the statement.
 
+That this script *skips* without `MB_DB_PASS` while `migrate` *requires* it is not a contradiction. `migrate` requires it only when the metadata database exists, because at that point it is setting the password rather than using it; this script can be pointed at any cluster by hand, and refusing to run at all would be worse than covering one role less.
+
 ### Rotating a role password
 
-Edit the relevant `FINANCE_*_DB_PASSWORD` in `.env`, then re-run the migrate service — `01-create-roles.sql` issues an unconditional `ALTER ROLE … PASSWORD`, so the new value takes effect with no manual SQL:
+**Four of the five rotate from `.env` alone. One does not, and cannot.**
+
+| Credential | Rotate by | Then restart |
+|---|---|---|
+| `FINANCE_APP_DB_PASSWORD` | editing `.env` | `finance-app` |
+| `FINANCE_IMPORTER_DB_PASSWORD` | editing `.env` | `importer` |
+| `FINANCE_BI_DB_PASSWORD` | editing `.env` | nothing — re-enter it by hand in the Metabase admin UI |
+| `MB_DB_PASS` | editing `.env` | `metabase` (`--profile bi`) |
+| `POSTGRES_PASSWORD` | **`\password` first, then `.env`** — see below | everything |
+
+For the first four, edit the value and re-run the migrate service. `01-create-roles.sql` and `03-metabase-role.sql` both issue an unconditional `ALTER ROLE … PASSWORD`, so the new value takes effect with no manual SQL:
 
 ```bash
 docker compose run --rm migrate
@@ -176,17 +188,19 @@ docker compose up -d --force-recreate finance-app importer
 
 Passwords are interpolated into URL-form connection strings, so keep them URL-safe or percent-encode them.
 
-> **This works for the three `FINANCE_*_DB_PASSWORD` values only.** `POSTGRES_PASSWORD` and `MB_DB_PASS` are *not* rotatable from `.env`: the Postgres image applies `POSTGRES_PASSWORD` solely via `initdb` on an empty data directory, and the Metabase role is created by `init-db/01-create-databases.sh`, which the entrypoint skips once `PGDATA` is initialized. Editing either value on an existing volume leaves the stored password unchanged and breaks every service that authenticates with the new one (loudly — `migrate` fails on `password authentication failed`). To change them, alter the role first, then update `.env`:
->
-> ```bash
-> docker compose exec postgres psql -U postgres    # then: \password postgres   (or \password metabase_user)
-> # update POSTGRES_PASSWORD / MB_DB_PASS in .env to the same value
-> docker compose up -d --force-recreate
-> ```
->
-> The service roles avoid this trap because `01-create-roles.sql` re-issues `ALTER ROLE … PASSWORD` on every migrate run.
->
-> Since Issue #239 the two halves of `metabase_user` diverge, and the distinction is worth holding onto: its **attributes** are re-asserted on every migrate run by `03-metabase-role.sql`, so a widened role is corrected automatically. Its **password** still is not, and stays a `\password` operation until #189.
+#### Why `POSTGRES_PASSWORD` is different
+
+Not an oversight, and not something a future change can fix by adding another `ALTER ROLE`. The Postgres image applies `POSTGRES_PASSWORD` only through `initdb --pwfile`, inside a branch the entrypoint skips once `$PGDATA/PG_VERSION` exists — so editing it on an existing volume changes nothing. The service roles escape that trap because `migrate` re-asserts them, but **`migrate` authenticates *as* the superuser**. The moment `.env` and the stored password disagree, it cannot connect, so an `ALTER` it would have issued never runs. Re-asserting the superuser password on every `up` would be dead code on the one occasion it mattered (Issue #189).
+
+So the order is inverted: alter the role **first**, then update `.env`.
+
+```bash
+docker compose exec postgres psql -U postgres    # then: \password postgres
+# set POSTGRES_PASSWORD in .env to the same value
+docker compose up -d --force-recreate
+```
+
+Get it backwards and the stack fails loudly rather than subtly. [`app/scripts/preflight-superuser.sh`](../app/scripts/preflight-superuser.sh) runs before anything else in the migrate job and turns what used to be a bare `password authentication failed` into the procedure above. `init-script` and `pg-backup` authenticate with the same credential, so they fail alongside it.
 
 ### Pointing Metabase at a least-privilege role
 
