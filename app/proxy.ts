@@ -10,6 +10,11 @@ export const config = {
   // "/login", "/api/auth/*" (NextAuth's own routes), "/api/health" (polled
   // unauthenticated by the Docker healthcheck and the release smoke test),
   // and Next.js static assets.
+  //
+  // "/api/health/seed-data" is excluded on purpose too, but it is not public:
+  // it gates itself with auth() and answers 401 (#191). Matching it here would
+  // redirect a denied caller to /login, so a monitor would read a 200 HTML page
+  // as success — the wrong answer for a JSON endpoint.
   matcher: [
     "/dashboard/:path*",
     "/accounts/:path*",

@@ -52,14 +52,16 @@ Schema and seeding then come from the `migrate` Compose service, which runs afte
 
 ### Repairing seed drift
 
-`GET /api/health` returns `503` with `"seedData": "drift"` when a row the application depends on by ID is missing or renamed:
+`GET /api/health/seed-data` returns `503` with `"seedData": "drift"` when a row the application depends on by ID is missing or renamed:
 
 ```json
 {"status":"error","db":"connected","seedData":"drift",
  "drift":[{"table":"transaction_types","id":12,"expected":"Opening Balance","actual":null}]}
 ```
 
-`actual: null` means the row is **absent**; a string means it was **renamed**. Docker reports `finance-app` as `unhealthy` for as long as this persists.
+`actual: null` means the row is **absent**; a string means it was **renamed**.
+
+This endpoint **requires sign-in** — open it in a browser where you already have a session, or it answers `401`. It is a diagnostic you reach for, not a probe: it was split out of `/api/health` in Issue #191, so **seed drift no longer marks the `finance-app` container unhealthy**. Container health now follows liveness alone, because drift is a data problem that restarting cannot fix. Drift still matters — the affected code paths misbehave until you repair it — but you will learn about it from this endpoint rather than from Docker.
 
 For any row that ships in `shared-lookups.sql`, re-running the migrate service is the fix — it re-applies the seed and backfills whatever is missing, without touching your data:
 
@@ -73,7 +75,7 @@ Until Issue #187 this could not self-heal: the Finances seed was skipped wheneve
 Two cases the re-run does *not* cover:
 
 - **A renamed row.** The seed is `ON CONFLICT DO NOTHING`, so it will not rename a row back. Rename it in the UI, or `UPDATE` it to the name in [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts).
-- **`transaction_categories` id 6 `"Other"`.** It is health-checked but deliberately not in `shared-lookups.sql` — categories are user-created in `Finances`. A brand-new empty `Finances` therefore trips the drift check until that category exists. Tracked in Issue #178.
+- **`transaction_categories` id 6 `"Other"`.** It is checked but deliberately not in `shared-lookups.sql` — categories are user-created in `Finances`. A brand-new empty `Finances` therefore reports drift here until that category exists. Since Issue #191 that is a cosmetic-until-you-need-it condition rather than a broken install: the container starts healthy and the app serves normally. Tracked in Issue #178.
 
 If you need to repair a database you cannot restart the stack for, the seed's own statement is safe to run by hand:
 

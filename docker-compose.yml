@@ -188,8 +188,18 @@ services:
     networks:
       - appnet
     logging: *default-logging
+    # Targets the liveness probe deliberately (#191). /api/health is one query and
+    # the build stamp; seed-row drift lives at /api/health/seed-data and is NOT
+    # checked here, because drift is a data problem a restart cannot fix — and a
+    # fresh Finances, whose transaction_categories are user-created, would otherwise
+    # report unhealthy from first boot while serving perfectly (#178).
+    # 127.0.0.1, not localhost: /etc/hosts maps localhost to both 127.0.0.1 and ::1,
+    # BusyBox wget tries the IPv6 address first, and the Next standalone server binds
+    # HOSTNAME=0.0.0.0 — IPv4 only. The probe therefore failed with "Connection
+    # refused" on every run and finance-app was permanently unhealthy, whatever the
+    # route actually answered.
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --spider http://localhost:3001/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://127.0.0.1:3001/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

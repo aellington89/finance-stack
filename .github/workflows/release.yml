@@ -1,6 +1,6 @@
 # Triggered on every vX.Y.Z annotated tag push. Runs the version/tag-consistency gate
 # (check:changelog), builds the Docker image with GIT_SHA + BUILD_TIME baked in, asserts
-# /api/health reports the correct version + SHA, then publishes a GitHub Release whose
+# /api/health reports the correct version + SHA on a fresh install, then publishes a GitHub Release whose
 # body is the matching CHANGELOG.md section. The gate runs before any Docker work so a
 # mismatched tag (tag ≠ package.json/CHANGELOG) fails fast without burning build time.
 # See docs/releases.md and Issue #175.
@@ -77,26 +77,29 @@ jobs:
           docker tag finance-app:latest "finance-app:$GIT_SHA"
 
       # Boot the full stack (postgres → migrate → finance-app) and assert /api/health
-      # reports the expected version + SHA. We poll /api/health directly (rather than the
-      # container's own wget healthcheck) so the assertion doesn't depend on the runner's
-      # wget flavour and so the response body + service logs are captured on failure.
+      # reports the expected version + SHA, then that Docker itself reports the container
+      # healthy. We poll /api/health directly (rather than the container's own wget
+      # healthcheck) so the assertion doesn't depend on the runner's wget flavour and so
+      # the response body + service logs are captured on failure; the container verdict is
+      # then checked separately, since that is the signal #191 was about.
       - name: Boot stack and verify /api/health
         working-directory: .
         # The postgres init script (init-db/01-create-databases.sh, run on first start
         # under `set -euo pipefail`) needs POSTGRES_DB and the Metabase role vars to be
         # non-empty, or `CREATE ROLE`/`--dbname ""` aborts and postgres never goes healthy.
         # Metabase itself is profile-gated (bi) so it never starts here; only the role is created.
-        # Point the app at Finances_Test, the fully-seeded fixture DB. A fresh Finances
-        # DB is intentionally seeded with only account_type_categories + transaction_types
-        # (shared-lookups.sql); transaction_categories rows — including the "Other" row the
-        # /api/health drift check requires — are user-created in Finances but fixture-seeded
-        # in Finances_Test. So a brand-new Finances legitimately trips the drift 503; the
-        # release smoke test verifies against the complete, drift-free test dataset instead.
+        # FINANCE_APP_DB is deliberately unset, so the app runs against a brand-new, empty
+        # `Finances` — the real first-install path. Until #191 split the endpoints this job
+        # had to point at the fully-seeded `Finances_Test` fixture instead, because the
+        # bundled /api/health also asserted seed rows and a fresh Finances legitimately
+        # tripped its drift 503 (transaction_categories are user-created — #178). Liveness
+        # no longer inspects seed rows, so the smoke test can verify what a first-time
+        # installer actually gets. Code↔seed agreement is gated separately, on every push,
+        # by `npm run check:seed-references` (#155).
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
           POSTGRES_DB: postgres
-          FINANCE_APP_DB: Finances_Test
           MB_DB_USER: metabase
           MB_DB_PASS: changeme
           MB_DB_DBNAME: metabase
@@ -114,8 +117,8 @@ jobs:
           echo "Polling http://localhost:3001/api/health for a 200…"
           TIMEOUT=180
           ELAPSED=0
-          # curl -fsS: non-zero exit on any non-2xx (e.g. the 503 the route returns on
-          # DB-disconnect or seed drift), so the loop keeps waiting until a real 200.
+          # curl -fsS: non-zero exit on any non-2xx (e.g. the 503 the route returns when
+          # the DB is unreachable), so the loop keeps waiting until a real 200.
           until HEALTH="$(curl -fsS http://localhost:3001/api/health 2>/dev/null)"; do
             if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
               echo "::error::/api/health did not return 200 within ${TIMEOUT}s"
@@ -144,6 +147,31 @@ jobs:
           fi
 
           echo "✓ /api/health: version=$GOT_VER  gitSha=${GOT_SHA:0:12}…"
+
+          # Docker's own verdict on the container, which is the thing #191 fixed: on a
+          # fresh, empty Finances the bundled endpoint returned 503 for seed drift and
+          # finance-app sat `unhealthy` while serving fine. The poll above cannot catch a
+          # regression here — it reads the route directly, bypassing the healthcheck — so
+          # this asserts the wired-up result. Its own retry window exists because the
+          # healthcheck has start_period 15s / interval 10s and may still read `starting`
+          # the moment the route first answers.
+          echo "Waiting for the finance-app container healthcheck…"
+          APP_CID="$(docker compose ps -q finance-app)"
+          HEALTH_TIMEOUT=60
+          HEALTH_ELAPSED=0
+          until [ "$(docker inspect -f '{{.State.Health.Status}}' "$APP_CID")" = "healthy" ]; do
+            STATE="$(docker inspect -f '{{.State.Health.Status}}' "$APP_CID")"
+            if [ "$HEALTH_ELAPSED" -ge "$HEALTH_TIMEOUT" ]; then
+              echo "::error::finance-app reported '$STATE', expected 'healthy', after ${HEALTH_TIMEOUT}s"
+              docker inspect -f '{{json .State.Health}}' "$APP_CID" | jq . || true
+              echo "--- finance-app logs ---"; docker compose logs --no-color finance-app || true
+              exit 1
+            fi
+            sleep 5
+            HEALTH_ELAPSED=$((HEALTH_ELAPSED + 5))
+          done
+
+          echo "✓ finance-app container reports healthy on a fresh, empty Finances"
 
           # Security headers (#182), asserted against the real image rather than
           # the config. tests/unit/next-config-headers.test.ts covers the values
