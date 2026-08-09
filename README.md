@@ -34,7 +34,7 @@ Credentials are sourced from a single `.env` file on the deployment host — nev
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Node.js 22+](https://nodejs.org/) (for the Next.js application)
+- [Node.js 24+](https://nodejs.org/) (for the Next.js application)
 
 ## Getting Started
 
@@ -147,6 +147,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
 - [Deployment & Exposure](docs/deployment.md) — trusted-network vs public-internet posture, TLS termination, security headers, and rate limits
+- [Secrets](docs/secrets.md) — every credential, how production sources them, rotation, and what keeps them out of the repo and the images
+- [Audit Log](docs/audit-log.md) — how mutations are recorded, who gets attributed, reading the log, and retention
+- [Input Validation & Error Messages](docs/input-validation.md) — the per-action validation checklist, the SQL parameterization rule, and what a user is allowed to see
 - [Backups](docs/backups.md) — the scheduled backup service, retention, and disaster recovery
 - [Observability](docs/observability.md) — structured JSON logs, where errors are captured, redaction, and wiring an error-tracking backend
 - [Schema Changes](docs/schema-changes.md) — making schema changes and adopting migrations on existing databases

@@ -11,6 +11,7 @@
     "auth:create-user": "tsx scripts/create-user.ts",
     "check:seed-references": "tsx scripts/check-seed-references.ts",
     "check:changelog": "tsx scripts/check-changelog.ts",
+    "check:docs": "tsx scripts/check-docs.ts",
     "release:notes": "tsx scripts/release-notes.ts",
     "test": "vitest run",
     "test:watch": "vitest",

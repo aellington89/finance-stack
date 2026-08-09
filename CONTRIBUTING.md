@@ -125,6 +125,26 @@ cd app && npm run check:changelog
 If you're not cutting a release, simply ensure you haven't accidentally bumped
 `package.json` without also closing the `CHANGELOG.md` section.
 
+### Docs index gate
+
+Every guide in `docs/` is indexed in two hand-maintained lists — `## Guides` in
+[docs/README.md](docs/README.md) and `## Documentation` in
+[README.md](README.md) — and this fails if either list has fallen behind the
+directory, in either direction: a guide nothing links to, or a link to a guide
+that no longer exists.
+
+**Fix:** add or remove the entry in **both** lists, following the existing
+`- [Title](path) — description` format, then:
+
+```sh
+cd app && npm run check:docs
+```
+
+Only links inside the list sections count. The root README links several guides
+from its prose as well, and a prose link does not make a guide indexed — that is
+exactly how `docs/secrets.md` came to be linked twice from the README body while
+missing from its Documentation list entirely (Issue #186).
+
 ### Dependency audit gate
 
 Two steps, **both blocking**. Either fails if a dependency carries a HIGH or
@@ -177,7 +197,7 @@ Trivy. Fails on HIGH/CRITICAL findings **that have a fix available**.
    standalone server runs `node server.js` and never installs a package, and
    npm's vendored dependencies were contributing 1 CRITICAL and 5 HIGH findings
    that no application-level bump could clear.
-2. **Rebuild on a patched base image** (bump `node:22-alpine` in
+2. **Rebuild on a patched base image** (bump `node:24-alpine` in
    `app/Dockerfile`).
 3. **Suppress, with an expiry.** Add a dated, justified entry to
    [`.trivyignore`](.trivyignore) — the file documents the required format.
@@ -303,10 +323,13 @@ SQL, and adopting migrations on an existing database — is in
 
 ## Releases
 
-Releasing creates an annotated `vX.Y.Z` git tag, closes the `CHANGELOG.md`
-section, and publishes a GitHub Release manually. **There is no automated
-Docker publish or registry push** — CI on a tag push only validates the gates,
-lint, and tests.
+Releasing closes the `CHANGELOG.md` section, bumps the version, and pushes an
+annotated `vX.Y.Z` git tag. **Pushing that tag is the release** — it fires
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which runs the
+version/tag-consistency gate, builds the stamped image, boots the full stack and
+verifies `/api/health`, then slices the `CHANGELOG.md` section and publishes the
+GitHub Release. **There is still no registry push** — the image is built and
+verified in CI, and never pushed anywhere.
 
 **Brief sequence** (full steps and tagging rules are in [docs/releases.md](docs/releases.md)):
 
@@ -327,20 +350,24 @@ lint, and tests.
    `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh empty
    `## [Unreleased]` above it. Update the reference links at the bottom.
 
-3. **Bump the version.** Set `"version": "X.Y.Z"` in `app/package.json`.
+3. **Bump the version.** `cd app && npm version X.Y.Z --no-git-tag-version` —
+   this keeps `package-lock.json` in step, which editing `app/package.json` by
+   hand does not. The tag is created separately, in step 5.
 
 4. **Commit.** E.g. `git commit -m "Release vX.Y.Z"`.
 
-5. **Tag and push** (annotated):
+5. **Tag and push** (annotated), once the release commit is on `master`:
 
    ```sh
    git tag -a vX.Y.Z -m "vX.Y.Z — <one-line summary>"
    git push origin vX.Y.Z
    ```
 
-   CI validates the changelog gate and all other checks. If they pass, cut the
-   GitHub Release manually from the `CHANGELOG.md` section.
+   `release.yml` takes it from here and publishes the Release. Watch the run;
+   if the gate rejects the tag, nothing is published and the tag can be
+   deleted and re-pushed.
 
 See [docs/releases.md](docs/releases.md) for the complete procedure, tagging
-rules (`vX.Y.Z` — annotated, `v` prefix, no stray dots), and the `awk` snippet
-for slicing the release body out of `CHANGELOG.md`.
+rules (`vX.Y.Z` — annotated, `v` prefix, no stray dots), and the local-fallback
+`awk` snippet for slicing the release body out of `CHANGELOG.md` by hand if the
+workflow is unavailable.
