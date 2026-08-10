@@ -12,10 +12,9 @@ Two rules govern everything below:
   to `master` and a bullet under `## [Unreleased]` in [`CHANGELOG.md`](../CHANGELOG.md).
   Until a release is cut, the build still reports the last released version with a
   `(dev)` marker and the current git SHA (via `BUILD_INFO` / `/api/health`).
-  Example: when [#147](https://github.com/aellington89/finance-stack/issues/147)
-  lands but [#149](https://github.com/aellington89/finance-stack/issues/149) has
-  not, the app is **still `v0.1.4`** (`0.1.4 (dev)` at a `master` SHA), with #147
-  sitting in `[Unreleased]`.
+  Example: when [#81](https://github.com/aellington89/finance-stack/issues/81)
+  lands but the rest of Phase 2 has not, the app is **still `v0.2.0`**
+  (`0.2.0 (dev)` at a `master` SHA), with #81 sitting in `[Unreleased]`.
 - **A milestone completing is what triggers cutting a release.** The version number
   is chosen at tag time from everything accumulated since the last tag — breaking →
   major, new feature → minor, fixes/chores → patch.
@@ -37,8 +36,16 @@ default posture is a trusted network. For an app like this, `1.0.0` is a
 safely"), *not* a feature-completeness claim. Budgets, forecasting, search,
 receipts, and the rest are additive — textbook `1.x` minor releases.
 
-**v1.0.0 is cut once Phases 0–2 have shipped and stabilized in real use**, which
-includes closing out the remaining security-epic
+"Expose it safely" is why **Phase 2.5 is a 1.0 gate rather than tooling polish**.
+Today the deploy root *is* the git checkout: `docker-compose.yml` builds from
+`./app` and bind-mounts the scripts, so deploying means cloning the repo onto the
+target and building there, and the image that runs is not the image CI verified
+([#223](https://github.com/aellington89/finance-stack/issues/223)). A release
+process that stops before producing a deployable artifact cannot make a promise
+about how the thing behaves once deployed.
+
+**v1.0.0 is cut once Phases 0–2.5 have shipped and stabilized in real use**,
+which includes closing out the remaining security-epic
 ([#100](https://github.com/aellington89/finance-stack/issues/100)) scope. It is a
 commitment made *after* the risky auth work has proven stable, not the moment it
 merges.
@@ -49,8 +56,9 @@ merges.
 |---|---|---|---|
 | **v0.1.5** ✅ | Phase 0 — Quick wins + the migration refactor | Finish the 0.1.x tech-debt cleanup — **released 2026-07-10** | Patch |
 | **v0.2.0** ✅ | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost — **released 2026-08-09** | Minor |
-| **v0.3.0** | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity. **This is the 1.0 release candidate** | Minor |
-| **v1.0.0** | *(stabilization of 0.2.0–0.3.0)* | **The safety/stability commitment: trustworthy & exposable** | **Major** |
+| **v0.3.0** | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity | Minor |
+| **v0.4.0** | Phase 2.5 — Deployment & upgrade | GHCR images + deploy bundle: a verified artifact and a backup-gated, health-checked upgrade. **This is the 1.0 release candidate** | Minor |
+| **v1.0.0** | *(stabilization of 0.2.0–0.4.0)* | **The safety/stability commitment: trustworthy & exposable** | **Major** |
 | **v1.1.0** | Phase 3 — DX compounding | Importer hardening, E2E tests, tooling | Minor |
 | **v1.2.0** | Phase 4 — Performance polish | Caching, materialized views, chart consolidation | Minor |
 | **v1.3.0** | Phase 5 — Small UX fixes | Accessibility, mobile, UX debt | Minor |
@@ -58,7 +66,7 @@ merges.
 
 > **Judgment call.** An *aggressive* 1.0 could fire the moment Phase 1 ships (auth =
 > 1.0). This roadmap takes the conservative path: 1.0 is a promise best made after
-> auth has shaken out across a 0.2/0.3 line. Testing gates
+> auth has shaken out across a 0.2/0.3/0.4 line. Testing gates
 > [#141](https://github.com/aellington89/finance-stack/issues/141) and
 > [#142](https://github.com/aellington89/finance-stack/issues/142) (nominally
 > Phase 3 / v1.1.0) are **recommended before cutting v1.0.0** for release
@@ -102,11 +110,20 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > in the milestone went out together. The general rule still stands for the
 > phases below: a milestone maps to a version *band*, and you cut when ready.
 
-### v0.3.0 — Phase 2 (1.0 release candidate)
+### v0.3.0 — Phase 2 (Auth-gated lookup-table protection)
 - [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users
 - [#87](https://github.com/aellington89/finance-stack/issues/87) Restrict user-level editing of static lookup tables
 - [#109](https://github.com/aellington89/finance-stack/issues/109) Protect pinned transaction_categories rows
 - [#178](https://github.com/aellington89/finance-stack/issues/178) Define the seed-data taxonomy
+
+### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
+- [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*
+- [#224](https://github.com/aellington89/finance-stack/issues/224) Containerize the importer and backup services; bake code out of bind mounts
+- [#225](https://github.com/aellington89/finance-stack/issues/225) Fold database creation into the migrate service
+- [#226](https://github.com/aellington89/finance-stack/issues/226) Publish versioned images to GHCR from `release.yml`
+- [#227](https://github.com/aellington89/finance-stack/issues/227) Deployment bundle: production compose, systemd unit, release asset
+- [#228](https://github.com/aellington89/finance-stack/issues/228) `deploy.sh`: pre-upgrade backup gate and health-gated rollback
+- [#229](https://github.com/aellington89/finance-stack/issues/229) Deployment docs and the migration-reversibility marker
 
 ### v1.1.0 — Phase 3 (DX compounding)
 - [#124](https://github.com/aellington89/finance-stack/issues/124) Importer idempotency + dead-letter handling
@@ -120,6 +137,10 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#263](https://github.com/aellington89/finance-stack/issues/263) Bump to eslint 10 once `eslint-config-next` ships plugins that support it *(new — split from #194; blocked upstream)*
 - [#232](https://github.com/aellington89/finance-stack/issues/232) Wire an error-tracking backend into `reportError()` *(new — from #129)*
 - [#237](https://github.com/aellington89/finance-stack/issues/237) Nonce-based CSP: remove `'unsafe-inline'` from `script-src` and `style-src` *(new — from #182)*
+- [#260](https://github.com/aellington89/finance-stack/issues/260) `release.yml` uses `MB_DB_USER: metabase`, diverging from the shipped `metabase_user` *(new — from #250)*
+- [#211](https://github.com/aellington89/finance-stack/issues/211) Re-take `node:26-alpine` once it reaches LTS *(after 2026-10-28; from #210)*
+- [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
+- [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx
@@ -133,11 +154,13 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#144](https://github.com/aellington89/finance-stack/issues/144) Accessibility: keyboard nav, color+icon, chart SVG titles
 - [#145](https://github.com/aellington89/finance-stack/issues/145) Mobile form layout
 - [#148](https://github.com/aellington89/finance-stack/issues/148) Replace window.confirm() in transaction-list.tsx
+- [#251](https://github.com/aellington89/finance-stack/issues/251) Debt Waterfall: axis scale dominated by total balance makes period changes unreadable
 
 ### v1.4.0 onward — Phase 6 (Features, one minor each)
 - [#136](https://github.com/aellington89/finance-stack/issues/136) Budgets + spending caps
 - [#135](https://github.com/aellington89/finance-stack/issues/135) Recurring transactions / scheduled entries
 - [#137](https://github.com/aellington89/finance-stack/issues/137) Transaction search + CSV export
+- [#241](https://github.com/aellington89/finance-stack/issues/241) Duplicate a transaction with field modifications
 - [#138](https://github.com/aellington89/finance-stack/issues/138) Forecasting + savings-rate KPIs
 - [#139](https://github.com/aellington89/finance-stack/issues/139) Receipt attachments + transaction tagging
 - [#140](https://github.com/aellington89/finance-stack/issues/140) Settings: theme, currency, profile
@@ -146,6 +169,13 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 
 ## Notes
 
+- **Every open issue carries a milestone, and every milestone's issues are listed
+  above.** This is the invariant that keeps the two views honest — GitHub is where
+  work is filed, this file is where it maps to a version. An issue with no
+  milestone is invisible to the release plan, which is how the deployment epic
+  (#223) grew to seven issues before appearing here at all. When filing, assign
+  the milestone and add the bullet in the same pass; to audit, compare
+  `gh issue list --state open --json number,milestone` against the sections above.
 - **DB integrity** (from #100) is covered by
   [#147](https://github.com/aellington89/finance-stack/issues/147) (NOT NULL) and
   [#130](https://github.com/aellington89/finance-stack/issues/130) (Postgres
