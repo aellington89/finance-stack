@@ -18,12 +18,13 @@
 
 import type { SeedReferenceGroup } from "@/lib/constants/reference-ids";
 
-// Tables referenced by SEED_REFERENCES that are deliberately NOT in
-// shared-lookups.sql. transaction_categories is seeded per-database elsewhere
-// (finances-test-mock-data.sql for the test DB; production has no seed for it),
-// so it has no row in the shared file — its row-level protection is tracked in
-// #109. Any other absent table is treated as a bug and fails the gate.
-export const TABLES_ALLOWED_ABSENT = new Set<string>(["transaction_categories"]);
+// Escape hatch for a table referenced by SEED_REFERENCES that is deliberately
+// NOT in shared-lookups.sql. Empty, and meant to stay that way: issue #178
+// settled that "referenced by code but shipped nowhere" is a defect rather than
+// a configuration, and transaction_categories — its only ever member — now
+// ships its one app-owned row (id 6 'Other') in the shared seed like every
+// other reference row. Any absent table is a bug and fails the gate.
+export const TABLES_ALLOWED_ABSENT = new Set<string>([]);
 
 export type MismatchReason = "name" | "missing-row" | "missing-table";
 
@@ -99,6 +100,79 @@ export function findSeedReferenceMismatches(
   }
 
   return mismatches;
+}
+
+// ── Fixture agreement ─────────────────────────────────────────────────────
+// The third half of the gate (issue #178). transaction_categories has three
+// definitions in this repo and they had drifted apart:
+//
+//   1. init-db/seeds/shared-lookups.sql       — the one app-owned row, id 6
+//   2. init-db/seeds/finances-test-mock-data.sql — the Finances_Test fixture
+//   3. app/tests/integration/vitest-setup.ts  — a beforeAll upsert that
+//      re-converges rows a previous test mutated
+//
+// (2) is the source of truth for fixture rows, because it is what the migrate
+// service actually applies. The two checks below make the other consumers
+// agree with it rather than quietly diverging:
+//
+//   * every ID pinned by liability-categories.ts must exist in (2) with a
+//     matching name — ids 7/8/75/76 were pinned by shipping queries and absent
+//     from the fixture, so tests asserted debt totals over a short set;
+//   * (3) must be a subset of (2) with matching names — it is what hid the gap,
+//     by upserting a superset at test-suite startup.
+//
+// (3)'s SQL is a template literal in a .ts file, but it is the same
+// hand-authored INSERT shape, so parseSeedRows reads it without special-casing.
+
+export type FixtureGapReason =
+  | "pin-missing"
+  | "pin-name"
+  | "setup-missing"
+  | "setup-name";
+
+export interface FixtureGap {
+  reason: FixtureGapReason;
+  id: number;
+  expected: string;
+  // The fixture-side name for a "*-name" gap; null when the row is absent.
+  actual: string | null;
+}
+
+const FIXTURE_TABLE = "transaction_categories";
+
+// pins: the (id, name) pairs liability-categories.ts filters on.
+// fixtureSql / setupSql: finances-test-mock-data.sql and vitest-setup.ts.
+export function findFixtureGaps(
+  pins: ReadonlyArray<{ id: number; name: string }>,
+  fixtureSql: string,
+  setupSql: string,
+): FixtureGap[] {
+  const gaps: FixtureGap[] = [];
+  const fixture = parseSeedRows(fixtureSql).get(FIXTURE_TABLE) ?? new Map<number, string>();
+
+  for (const { id, name } of pins) {
+    const actual = fixture.get(id);
+    if (actual === undefined) {
+      gaps.push({ reason: "pin-missing", id, expected: name, actual: null });
+    } else if (actual !== name) {
+      gaps.push({ reason: "pin-name", id, expected: name, actual });
+    }
+  }
+
+  // Directional, like findSeedReferenceMismatches: the fixture may hold rows the
+  // setup hook does not bother re-converging, but never the other way round.
+  const setup = parseSeedRows(setupSql).get(FIXTURE_TABLE) ?? new Map<number, string>();
+
+  for (const [id, name] of setup) {
+    const actual = fixture.get(id);
+    if (actual === undefined) {
+      gaps.push({ reason: "setup-missing", id, expected: name, actual: null });
+    } else if (actual !== name) {
+      gaps.push({ reason: "setup-name", id, expected: name, actual });
+    }
+  }
+
+  return gaps;
 }
 
 // ── Seed safety contract ──────────────────────────────────────────────────

@@ -4,7 +4,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SeedReferenceGroup } from "@/lib/constants/reference-ids";
 import {
+  DEBT_INTEREST_CATEGORIES,
+  DEBT_PAYMENT_CATEGORIES,
+} from "@/lib/queries/liability-categories";
+import {
   parseSeedRows,
+  findFixtureGaps,
   findSeedReferenceMismatches,
   findUnsafeSeedStatements,
   TABLES_ALLOWED_ABSENT,
@@ -87,10 +92,26 @@ describe("findSeedReferenceMismatches", () => {
     ]);
   });
 
+  // The allowlist is empty as shipped (issue #178 retired its only member,
+  // transaction_categories, by seeding id 6 'Other' in shared-lookups.sql), so
+  // the mechanism has to be exercised against a synthetic entry or it would
+  // sit here untested until the next time someone needs it.
+  it("is shipped with an empty allowlist — an absent table is a defect, not a config", () => {
+    expect([...TABLES_ALLOWED_ABSENT]).toEqual([]);
+  });
+
   it("skips a table that is intentionally absent from shared-lookups.sql", () => {
-    expect(TABLES_ALLOWED_ABSENT.has("transaction_categories")).toBe(true);
-    const refs = [group("transaction_categories", [{ id: 6, name: "Other" }])];
-    expect(findSeedReferenceMismatches(refs, SEED)).toEqual([]);
+    const refs = [group("user_preferences", [{ id: 1, name: "Theme" }])];
+    expect(findSeedReferenceMismatches(refs, SEED)).toEqual([
+      { table: "user_preferences", id: null, expected: null, actual: null, reason: "missing-table" },
+    ]);
+
+    TABLES_ALLOWED_ABSENT.add("user_preferences");
+    try {
+      expect(findSeedReferenceMismatches(refs, SEED)).toEqual([]);
+    } finally {
+      TABLES_ALLOWED_ABSENT.delete("user_preferences");
+    }
   });
 
   it("fails closed when a referenced table is missing and not allowlisted", () => {
@@ -207,5 +228,81 @@ DELETE FROM d WHERE id = 1;`;
     expect(violation.reason).toBe("unguarded-update");
     expect(violation.snippet.length).toBeLessThanOrEqual(80);
     expect(violation.snippet.endsWith("...")).toBe(true);
+  });
+});
+
+// The third source-of-truth check (issue #178). transaction_categories is
+// defined in three places; the fixture seed is the one the migrate service
+// actually applies, so the other two are checked against it.
+describe("findFixtureGaps", () => {
+  const FIXTURE = `
+INSERT INTO transaction_categories (transaction_category_id, transaction_category)
+OVERRIDING SYSTEM VALUE VALUES
+    (6,  'Other'),
+    (7,  'HELOC Principle'),
+    (13, 'Mortgage Interest')
+ON CONFLICT (transaction_category_id) DO NOTHING;`;
+
+  // vitest-setup.ts writes the same INSERT shape in a template literal, with
+  // DO UPDATE rather than DO NOTHING. parseSeedRows reads it unchanged.
+  const setup = (rows: string) => `
+  await db.execute(sql\`
+    INSERT INTO transaction_categories (transaction_category_id, transaction_category)
+    OVERRIDING SYSTEM VALUE VALUES
+${rows}
+    ON CONFLICT (transaction_category_id) DO UPDATE
+      SET transaction_category = EXCLUDED.transaction_category
+  \`);`;
+
+  const IN_SYNC = setup(`      (6,  'Other'),\n      (7,  'HELOC Principle')`);
+
+  it("returns nothing when the pins and the setup hook both agree with the fixture", () => {
+    const pins = [{ id: 7, name: "HELOC Principle" }];
+    expect(findFixtureGaps(pins, FIXTURE, IN_SYNC)).toEqual([]);
+  });
+
+  it("flags a pinned category the fixture does not provide — the 7/8/75/76 regression", () => {
+    const pins = [{ id: 75, name: "Student Loan Principle" }];
+    expect(findFixtureGaps(pins, FIXTURE, IN_SYNC)).toEqual([
+      { reason: "pin-missing", id: 75, expected: "Student Loan Principle", actual: null },
+    ]);
+  });
+
+  it("flags a pinned id whose fixture row carries a different name", () => {
+    const pins = [{ id: 13, name: "Mortgage Principle" }];
+    expect(findFixtureGaps(pins, FIXTURE, IN_SYNC)).toEqual([
+      { reason: "pin-name", id: 13, expected: "Mortgage Principle", actual: "Mortgage Interest" },
+    ]);
+  });
+
+  it("flags a setup-hook row absent from the fixture — the hook must not be a second definition", () => {
+    const withExtra = setup(`      (6,  'Other'),\n      (8,  'HELOC Interest')`);
+    expect(findFixtureGaps([], FIXTURE, withExtra)).toEqual([
+      { reason: "setup-missing", id: 8, expected: "HELOC Interest", actual: null },
+    ]);
+  });
+
+  it("flags a setup-hook row whose name disagrees with the fixture", () => {
+    const renamed = setup(`      (13, 'Mortgage Principle')`);
+    expect(findFixtureGaps([], FIXTURE, renamed)).toEqual([
+      { reason: "setup-name", id: 13, expected: "Mortgage Principle", actual: "Mortgage Interest" },
+    ]);
+  });
+
+  it("is directional: a fixture row no test perturbs need not be in the setup hook", () => {
+    // 13 is in the fixture and not in IN_SYNC. That is fine.
+    expect(findFixtureGaps([], FIXTURE, IN_SYNC)).toEqual([]);
+  });
+
+  it("accepts the shipped files", () => {
+    const repo = (rel: string) =>
+      readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../", rel), "utf8");
+    expect(
+      findFixtureGaps(
+        [...DEBT_PAYMENT_CATEGORIES, ...DEBT_INTEREST_CATEGORIES],
+        repo("init-db/seeds/finances-test-mock-data.sql"),
+        repo("app/tests/integration/vitest-setup.ts"),
+      ),
+    ).toEqual([]);
   });
 });

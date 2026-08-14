@@ -1,9 +1,15 @@
 -- ==============================================
 -- Shared lookup seed — runs against both Finances and Finances_Test.
 --
--- Seeds the two lookup tables that must stay identical across databases:
+-- Seeds the app-owned reference rows that must stay identical across databases:
 --   - account_type_categories (6 rows)
 --   - transaction_types (12 rows)
+--   - transaction_categories (1 row — see below)
+--
+-- transaction_categories is the odd one out: the table is user-managed, and
+-- only the single row the application itself writes ships here. See the
+-- seed-data taxonomy in docs/database.md for which rows belong in this file
+-- and which are the user's (issue #178).
 --
 -- CONTRACT (issue #187): this file is applied UNCONDITIONALLY to the live
 -- Finances database on every migrate run — there is no longer a row-count guard
@@ -52,6 +58,27 @@ OVERRIDING SYSTEM VALUE VALUES
     (12, 'Opening Balance')
 ON CONFLICT (transaction_type_id) DO NOTHING;
 
+-- transaction_categories is a user-managed table, and this is the one row that
+-- is not the user's: createAccount() writes it on every account opened with an
+-- initial balance (OPENING_BALANCE_CATEGORY in app/lib/constants/reference-ids.ts),
+-- so the app depends on it existing before the user has created anything. Until
+-- issue #178 it was asserted by /api/health/seed-data but shipped nowhere, so a
+-- brand-new Finances legitimately reported drift.
+--
+-- DO NOTHING is doing real work here beyond re-runnability: on an existing
+-- database this row is already present, and quite possibly renamed by the user
+-- via /settings/categories. It stays renamed — the drift check reports it, and
+-- repairing it is the user's call, not this file's.
+--
+-- Nothing else from transaction_categories belongs here. In particular the IDs
+-- pinned by app/lib/queries/liability-categories.ts are user data, not app-owned
+-- reference rows; issue #111 is what lets those rows opt into the Liabilities
+-- aggregates without being shipped.
+INSERT INTO transaction_categories (transaction_category_id, transaction_category)
+OVERRIDING SYSTEM VALUE VALUES
+    (6, 'Other')
+ON CONFLICT (transaction_category_id) DO NOTHING;
+
 -- Advance IDENTITY sequences past the highest explicit ID so future
 -- auto-generated inserts do not collide with the seeded values.
 SELECT setval(
@@ -62,6 +89,15 @@ SELECT setval(
 SELECT setval(
     pg_get_serial_sequence('transaction_types', 'transaction_type_id'),
     GREATEST((SELECT MAX(transaction_type_id) FROM transaction_types), 1)
+);
+
+-- GREATEST(..., 1) matters more here than above: transaction_categories is
+-- user-populated, so MAX() is normally far past 6 and this must not rewind the
+-- sequence. Against Finances_Test this runs before finances-test-mock-data.sql,
+-- which seeds IDs up to 80 and re-runs its own setval afterwards.
+SELECT setval(
+    pg_get_serial_sequence('transaction_categories', 'transaction_category_id'),
+    GREATEST((SELECT MAX(transaction_category_id) FROM transaction_categories), 1)
 );
 
 -- ==============================================

@@ -344,6 +344,12 @@ jobs:
           # default; 'Earmarked' under Current Liability shares a name with a
           # restricted asset type and must NOT, which is what scoping the
           # liquidity UPDATEs to the asset categories buys.
+          #
+          # The transaction below references transaction_category_id 6 without
+          # creating it first, which it could not do before issue #178: the FK is
+          # the assertion that the seed above ships the opening-balance category.
+          # It is then renamed, the way a user renames it in /settings/categories,
+          # to prove the re-apply below leaves that edit alone.
           psql -v ON_ERROR_STOP=1 -d "${CHECK_DB}" <<'SQL'
           INSERT INTO account_types (account_type, account_type_category_id) VALUES
               ('Checking Account', 1),
@@ -351,14 +357,14 @@ jobs:
           INSERT INTO accounts (account_name, account_type_id)
               SELECT 'Backfill Check Account', account_type_id
               FROM account_types WHERE account_type = 'Checking Account';
-          INSERT INTO transaction_categories (transaction_category_id, transaction_category)
-              OVERRIDING SYSTEM VALUE VALUES (6, 'Other')
-              ON CONFLICT (transaction_category_id) DO NOTHING;
           INSERT INTO transactions
               (transaction_description, transaction_date, account_id, amount,
                transaction_type_id, transaction_category_id)
               SELECT 'Backfill check expense', CURRENT_DATE, account_id, -10.00, 2, 6
               FROM accounts WHERE account_name = 'Backfill Check Account';
+          UPDATE transaction_categories
+              SET transaction_category = 'Miscellaneous'
+              WHERE transaction_category_id = 6;
           SQL
 
           # Reproduce the production drift, then apply the fix.
@@ -409,12 +415,47 @@ jobs:
                       'transaction_types sequence not resynced past the seeded ids (got %s)', n);
               END IF;
 
+              -- The opening-balance category the app writes on every account
+              -- opened with an initial balance (issue #178). It must survive a
+              -- user rename: the seed is ON CONFLICT DO NOTHING, so re-applying
+              -- it reports drift on /api/health/seed-data rather than silently
+              -- overwriting what the user chose to call this row.
+              SELECT transaction_category INTO actual
+              FROM transaction_categories WHERE transaction_category_id = 6;
+              IF actual IS NULL THEN
+                  failures := failures || 'transaction_categories id=6 is missing — shared-lookups.sql should ship it';
+              ELSIF actual <> 'Miscellaneous' THEN
+                  failures := failures || format(
+                      'user rename of transaction_categories id=6 was clobbered (got %L, want %L)',
+                      actual, 'Miscellaneous');
+              END IF;
+
+              SELECT count(*) INTO n FROM transaction_categories;
+              IF n <> 1 THEN
+                  failures := failures || format(
+                      'shared-lookups.sql should seed exactly one transaction_categories row, found %s', n);
+              END IF;
+
+              -- Resolved through pg_get_serial_sequence rather than by name:
+              -- this table's identity sequence is called
+              -- transaction_type_categories_transaction_type_category_id_seq,
+              -- a misnomer carried in from 0000_baseline. Hardcoding the
+              -- conventional name here would look up nothing and read as a
+              -- failure. Same reason the seed files call it.
+              SELECT pg_sequence_last_value(
+                  pg_get_serial_sequence('transaction_categories', 'transaction_category_id')::regclass
+              ) INTO n;
+              IF n IS NULL OR n < 6 THEN
+                  failures := failures || format(
+                      'transaction_categories sequence not resynced past the seeded ids (got %s)', n);
+              END IF;
+
               IF array_length(failures, 1) > 0 THEN
                   RAISE EXCEPTION E'reference backfill gate failed:\n  - %',
                       array_to_string(failures, E'\n  - ');
               END IF;
 
-              RAISE NOTICE 'reference backfill OK: id=12 restored, user data and liability classification untouched';
+              RAISE NOTICE 'reference backfill OK: transaction_types id=12 restored, transaction_categories id=6 shipped and its user rename preserved, user data and liability classification untouched';
           END
           $$;
           SQL

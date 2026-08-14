@@ -115,6 +115,18 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#87](https://github.com/aellington89/finance-stack/issues/87) Restrict user-level editing of static lookup tables
 - [#109](https://github.com/aellington89/finance-stack/issues/109) Protect pinned transaction_categories rows
 - [#178](https://github.com/aellington89/finance-stack/issues/178) Define the seed-data taxonomy
+- [#111](https://github.com/aellington89/finance-stack/issues/111) User-defined liability categories *(moved from Phase 6 by #178)*
+
+> **#178 reshaped the rest of this milestone.** The taxonomy it defines classifies
+> the ~15 `transaction_categories` rows the Liabilities drilldown pins as *user
+> data that code hard-depends on* — the one combination the taxonomy calls a
+> defect rather than a category. Shipping those rows was rejected (it would bake
+> one loan portfolio into every install and still need a code change to extend),
+> so the resolution is **#111**, which moves here from Phase 6: it is no longer an
+> additive feature but the fix for a filed integrity defect. That in turn leaves
+> **#109** protecting a single row — id 6 `Other`, now an app-owned reference row
+> exactly like the ones #87 covers — so #109 is a candidate to fold into #87
+> rather than carry its own `protected`-column design.
 
 ### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
 - [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*
@@ -141,6 +153,7 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#211](https://github.com/aellington89/finance-stack/issues/211) Re-take `node:26-alpine` once it reaches LTS *(after 2026-10-28; from #210)*
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
+- [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx
