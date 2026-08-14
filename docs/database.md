@@ -44,8 +44,8 @@ On the first `docker compose up` (empty Postgres data volume), [`init-db/01-crea
 Schema and seeding then come from the `migrate` Compose service, which runs after postgres is healthy. The migrate service:
 
 1. Creates the least-privilege service roles, then applies pending Drizzle migrations from [`app/drizzle/migrations/`](../app/drizzle/migrations/) to both `Finances` and `Finances_Test` and grants each role its privileges — see [Roles & Privileges](#roles--privileges).
-2. Seeds the two **shared lookup tables** (`account_type_categories`, `transaction_types`) into both databases so they start in sync. This runs on **every** migrate run, not only on an empty database: the seed is purely additive (`ON CONFLICT DO NOTHING`, `setval`, and `UPDATE`s guarded by `WHERE liquidity_class IS NULL`), so **existing Finances user data is never overwritten** and a reference row added to the seed after your database was first created is backfilled automatically. See [Repairing seed drift](#repairing-seed-drift).
-3. Seeds `Finances_Test` with mock data: all 19 `account_types`, all 27 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
+2. Seeds the **app-owned reference rows** (all of `account_type_categories` and `transaction_types`, plus the single `transaction_categories` row id 6 `Other`) into both databases so they start in sync — see [Seed-data taxonomy](#seed-data-taxonomy) for why that one category row ships and the rest do not. This runs on **every** migrate run, not only on an empty database: the seed is purely additive (`ON CONFLICT DO NOTHING`, `setval`, and `UPDATE`s guarded by `WHERE liquidity_class IS NULL`), so **existing Finances user data is never overwritten** and a reference row added to the seed after your database was first created is backfilled automatically. See [Repairing seed drift](#repairing-seed-drift).
+3. Seeds `Finances_Test` with mock data: all 19 `account_types`, 44 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
 4. Rebuilds `Finances_Test.account_balance_history` so balances are up-to-date as of today.
 
 `finance-app` and `importer` wait on `migrate: service_completed_successfully` before starting. After the migrate service exits, a fresh `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use; an existing `Finances` has its lookups reconciled against the current seed and is otherwise untouched. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
@@ -72,10 +72,11 @@ docker compose up -d --force-recreate finance-app
 
 Until Issue #187 this could not self-heal: the Finances seed was skipped whenever the database held any accounts or transactions, so a populated database never received a reference row added later. That is why production ended up permanently missing `transaction_types` id 12 (`Opening Balance`) — the row the opening-balance path writes on every account created with an initial balance.
 
-Two cases the re-run does *not* cover:
+One case the re-run does *not* cover:
 
 - **A renamed row.** The seed is `ON CONFLICT DO NOTHING`, so it will not rename a row back. Rename it in the UI, or `UPDATE` it to the name in [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts).
-- **`transaction_categories` id 6 `"Other"`.** It is checked but deliberately not in `shared-lookups.sql` — categories are user-created in `Finances`. A brand-new empty `Finances` therefore reports drift here until that category exists. Since Issue #191 that is a cosmetic-until-you-need-it condition rather than a broken install: the container starts healthy and the app serves normally. Tracked in Issue #178.
+
+  This is most likely to bite on **`transaction_categories` id 6 `"Other"`**, because `/settings/categories` offers that row for editing like any other. Since Issue #178 it ships in `shared-lookups.sql`, so a fresh install has it and no longer reports drift — but if you have renamed it, re-running migrate leaves your name in place and the drift report stands until you rename it back or the row is protected from editing (Issue #87).
 
 If you need to repair a database you cannot restart the stack for, the seed's own statement is safe to run by hand:
 
@@ -91,6 +92,55 @@ SELECT setval(pg_get_serial_sequence('transaction_types', 'transaction_type_id')
 ### Editing the shared seed
 
 Because `shared-lookups.sql` is now applied to the live database unconditionally, its idempotency is load-bearing. Every statement in it must be additive and safe to re-run: `INSERT … ON CONFLICT DO NOTHING`, `SELECT setval(…)`, `UPDATE … WHERE <guard>` — no `DELETE`, `TRUNCATE`, `DROP`, `ALTER`, `ON CONFLICT DO UPDATE`, or unguarded `UPDATE`. `npm run check:seed-references` enforces that list on every PR, and CI additionally proves the behaviour end-to-end against a populated throwaway database (the "Reference backfill gate").
+
+## Seed-data taxonomy
+
+*Added in Issue #178.* Every lookup row in this database sits somewhere on two independent axes, and where it sits determines which files it belongs in.
+
+1. **Ownership** — does the row **ship with the application** (seeded, the same on every install), or is it **the user's** (created and edited through the UI)?
+2. **Coupling** — does code depend on that **specific row** by id or name, or is it just data the user sees?
+
+| | Ships with the app | The user's |
+|---|---|---|
+| **Code depends on the specific row** | **App-owned reference.** Belongs in `shared-lookups.sql` *and* `SEED_REFERENCES`. | ⚠️ **Not a category — a defect.** Code cannot hard-depend on a row the user may rename or delete. |
+| **Code doesn't** | Convenience seed. Optional, and rare — if nothing depends on it, ask why it ships at all. | Pure user data. No seed, no health check. |
+
+The top-right cell is the one that matters. It is not a bucket you file things in; it is a bug report. Anything that lands there gets resolved one of two ways: **ship the row** (move it left) or **stop depending on it** (move it down).
+
+**Where each table sits today:**
+
+| Table / rows | Bucket | Notes |
+|---|---|---|
+| `transaction_types` (12 rows) | App-owned reference | Seeded; health-checked |
+| `account_type_categories` (6 rows) | App-owned reference | Seeded; health-checked |
+| `transaction_categories` id 6 `Other` | App-owned reference | The only category that ships — `createAccount()` writes it on every account opened with an initial balance |
+| `transaction_categories` — the ~15 IDs pinned by [`liability-categories.ts`](../app/lib/queries/liability-categories.ts) | ⚠️ Unresolved | Tracked as Issue #111 — see below |
+| `transaction_categories` — everything else | Pure user data | |
+| `account_types` rows | Pure user data | `liquidity_class` gets a seeded *default* per known name, via `UPDATE … WHERE liquidity_class IS NULL`, but the rows are yours |
+
+**The one unresolved case.** The Liabilities drilldown filters on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treat them as app-owned reference data, which puts them squarely in the top-right cell. It is **not** resolved by shipping them: that would bake one person's loan portfolio into every install and still leave the set unextensible without a code change. The resolution is Issue #111 — a `liability_role` attribute a user-owned category can opt into, replacing the pinned lists. Until then, a fresh install's Liabilities drilldown reports zeros, and the pinned names are enforced against the test fixture so the gap cannot widen unnoticed.
+
+### Adding a new reference row
+
+If code will depend on the row:
+
+1. Add it to [`init-db/seeds/shared-lookups.sql`](../init-db/seeds/shared-lookups.sql), following the [contract above](#editing-the-shared-seed).
+2. Add a constant for it in [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts) and list it in the matching `SEED_REFERENCES` group.
+3. Run `npm run check:seed-references`. It fails if the two disagree — including if you reference a table the seed does not populate at all, which is how the id-6 gap survived four releases.
+
+If it is a fixture row that only tests need, it goes in [`init-db/seeds/finances-test-mock-data.sql`](../init-db/seeds/finances-test-mock-data.sql) — not in `vitest-setup.ts`, and not in `shared-lookups.sql`. See [Testing](testing.md).
+
+**Three sources, one direction.** `transaction_categories` is defined in three places, and the gate keeps them pointing the same way rather than letting them drift:
+
+```
+shared-lookups.sql          finances-test-mock-data.sql
+  (app-owned: id 6)           (Finances_Test fixture rows)
+        ▲                              ▲          ▲
+        │ SEED_REFERENCES              │ pinned   │ must be a subset of
+        │ must match                   │ IDs must │ (it is drift-correction,
+        │                              │ exist in │  not a definition)
+  reference-ids.ts          liability-categories.ts   vitest-setup.ts
+```
 
 ## Roles & Privileges
 
@@ -227,8 +277,8 @@ Use **`finance_bi`**, with `FINANCE_BI_DB_PASSWORD`. It is the one role for this
 
 | File | Purpose |
 |---|---|
-| `shared-lookups.sql` | 6 account type categories + 12 transaction types, plus `account_types.liquidity_class` defaults for the known asset type names (runs against both DBs, on every migrate run) |
-| `finances-test-mock-data.sql` | 19 account types, 27 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
+| `shared-lookups.sql` | 6 account type categories + 12 transaction types + the one app-owned transaction category (id 6 `Other`), plus `account_types.liquidity_class` defaults for the known asset type names (runs against both DBs, on every migrate run) |
+| `finances-test-mock-data.sql` | 19 account types, 44 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
 | `rebuild-balance-history.sql` | Mirrors `scripts/update-account-balance-history.sql`, runs against `Finances_Test` at seed time |
 
 ### Refreshing Finances_Test (dates age out)

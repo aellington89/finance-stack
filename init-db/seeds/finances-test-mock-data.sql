@@ -41,13 +41,21 @@ OVERRIDING SYSTEM VALUE VALUES
 ON CONFLICT (account_type_id) DO NOTHING;
 
 -- --------------------------------------------
--- 2. transaction_categories (IDs match production seed)
+-- 2. transaction_categories
 --
--- Liabilities-drilldown queries pin specific category IDs for payments and
--- interest expense (see app/lib/queries/liability-categories.ts). All of
--- the relevant rows must be present here so integration tests exercise the
--- full set; the production seed contains additional categories not used by
--- this test fixture.
+-- Fixture rows for Finances_Test only. These are NOT a production seed —
+-- transaction_categories is user-managed, and the sole row that ships with the
+-- app is id 6 'Other' in shared-lookups.sql (see the seed-data taxonomy in
+-- docs/database.md). The IDs here mirror one real Finances database so the
+-- Liabilities drilldown has something recognisable to aggregate.
+--
+-- Every ID pinned by app/lib/queries/liability-categories.ts must appear below
+-- with a matching name, and `npm run check:seed-references` now enforces that.
+-- It did not until issue #178, and this block was missing four of them — 7, 8,
+-- 75 and 76 — so the debt-service totals those tests asserted were quietly
+-- computed over a short set. Integration tests still passed because
+-- app/tests/integration/vitest-setup.ts upserts a superset at beforeAll, which
+-- is exactly the kind of papering-over the gate now prevents.
 -- --------------------------------------------
 INSERT INTO transaction_categories (transaction_category_id, transaction_category)
 OVERRIDING SYSTEM VALUE VALUES
@@ -57,6 +65,8 @@ OVERRIDING SYSTEM VALUE VALUES
     (4,  'Student Loan Payment'),
     (5,  'Cash / Crypto Deposit'),
     (6,  'Other'),
+    (7,  'HELOC Principle'),
+    (8,  'HELOC Interest'),
     (9,  'Accrued HELOC Interest'),
     (10, 'Cash / Crypto Withdrawal'),
     (12, 'Mortgage Principle'),
@@ -89,6 +99,8 @@ OVERRIDING SYSTEM VALUE VALUES
     (69, 'Accrued Auto Loan Interest'),
     (70, 'Auto Loan Principle'),
     (74, 'Accrued Student Loan Interest'),
+    (75, 'Student Loan Principle'),
+    (76, 'Student Loan Interest'),
     (79, 'Balance Transfer Payment Expense'),
     (80, 'Credit Card Interest')
 ON CONFLICT (transaction_category_id) DO NOTHING;

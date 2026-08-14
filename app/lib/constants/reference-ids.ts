@@ -30,10 +30,20 @@ export const NON_CURRENT_LIABILITY_CATEGORY = {
   name: "Non-current Liability",
 } as const;
 
-// ── transaction_categories ────────────────────────────────────────────────
-// One seed-treated row used by account.ts opening-balance logic. NOTE: "Other"
-// is canonical for category id=6. Renaming it via /settings/categories will
-// intentionally trip the /api/health drift check.
+// ── transaction_categories (seeded in init-db/seeds/shared-lookups.sql) ───
+// The one app-owned row in an otherwise user-managed table: account.ts writes
+// it on every account created with an initial balance, so it has to exist
+// before the user has created anything. It ships in the shared seed as of
+// issue #178 — until then it was asserted here but seeded nowhere, so a
+// brand-new Finances reported drift on a correct install.
+//
+// Still editable via /settings/categories, and the seed is ON CONFLICT DO
+// NOTHING, so a rename sticks and trips the drift check. That is deliberate
+// until the row is protected (issue #87) — the alternative is a seed that
+// silently overwrites a user's edit on every `docker compose up`.
+//
+// Nothing else from this table belongs here; see the seed-data taxonomy in
+// docs/database.md.
 
 export const OPENING_BALANCE_CATEGORY = { id: 6, name: "Other" } as const;
 
