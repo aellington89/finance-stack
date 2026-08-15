@@ -104,11 +104,9 @@ const REGISTRY: Record<string, ActionCase> = {
   },
 
   // ── transaction types ──
-  createTransactionType: {
-    action: categoryActions.createTransactionType,
-    valid: { name: "Contract Probe" },
-    idFields: [],
-  },
+  // No createTransactionType: the table's full set ships with the app and the
+  // action was removed in Issue #109. The export-parity assertion below is what
+  // keeps this list and the module honest about that.
   updateTransactionType: {
     action: categoryActions.updateTransactionType,
     valid: { transactionTypeId: "1", name: "Contract Probe" },

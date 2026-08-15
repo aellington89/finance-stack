@@ -113,7 +113,7 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 ### v0.3.0 — Phase 2 (Auth-gated lookup-table protection)
 - [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users
 - [#87](https://github.com/aellington89/finance-stack/issues/87) Restrict user-level editing of static lookup tables
-- [#109](https://github.com/aellington89/finance-stack/issues/109) Protect pinned transaction_categories rows
+- [#109](https://github.com/aellington89/finance-stack/issues/109) Protect the lookup rows the app owns; drop Transaction Type creation
 - [#178](https://github.com/aellington89/finance-stack/issues/178) Define the seed-data taxonomy
 - [#111](https://github.com/aellington89/finance-stack/issues/111) User-defined liability categories *(moved from Phase 6 by #178)*
 
@@ -123,10 +123,18 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > defect rather than a category. Shipping those rows was rejected (it would bake
 > one loan portfolio into every install and still need a code change to extend),
 > so the resolution is **#111**, which moves here from Phase 6: it is no longer an
-> additive feature but the fix for a filed integrity defect. That in turn leaves
-> **#109** protecting a single row — id 6 `Other`, now an app-owned reference row
-> exactly like the ones #87 covers — so #109 is a candidate to fold into #87
-> rather than carry its own `protected`-column design.
+> additive feature but the fix for a filed integrity defect.
+>
+> **#109 then shipped wider than that reading suggested.** Rather than a
+> `protected` column it derives protection from the constants that already
+> declare these rows, and rather than one row it locks all 19 that
+> `shared-lookups.sql` ships, across all three lookup tables — plus the liability
+> pins, matched on id *and* name so protection is self-limiting on an install
+> that never had them. It also removed Transaction Type creation outright. That
+> takes a large bite out of **#87**: `transaction_types` is now add-proof with its
+> shipped rows locked, and `account_type_categories` has no UI to restrict. What
+> is left of #87 is the role gate and the admin screen — which is also where a
+> legitimate future `transaction_types` insert would live.
 
 ### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
 - [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*
@@ -154,6 +162,15 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
+- [#271](https://github.com/aellington89/finance-stack/issues/271) `transaction_types` id 9 ships as `Accrued Amoritized Interest` — *amortized* is misspelled *(new — from #109)*
+- [#273](https://github.com/aellington89/finance-stack/issues/273) `importer/parsers/paystubs.py` hardcodes 17 lookup ids; five categories and the pay account are absent from the test fixture *(new — from #109)*
+
+> **#273 is importer hardening's real prerequisite.** #124 and #132 above treat
+> the importer as a service to make idempotent and containerize; #273 is the data
+> coupling underneath it — a second, undocumented instance of the defect cell in
+> the [seed-data taxonomy](database.md#seed-data-taxonomy), left open when #109
+> closed the first. Worth sequencing before #124, since resolving it changes what
+> a retried import is keyed on.
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx
@@ -178,7 +195,6 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#139](https://github.com/aellington89/finance-stack/issues/139) Receipt attachments + transaction tagging
 - [#140](https://github.com/aellington89/finance-stack/issues/140) Settings: theme, currency, profile
 - [#110](https://github.com/aellington89/finance-stack/issues/110) Liabilities schema expansion
-- [#111](https://github.com/aellington89/finance-stack/issues/111) User-defined liability categories
 
 ## Notes
 

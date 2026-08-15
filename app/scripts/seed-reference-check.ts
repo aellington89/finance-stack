@@ -26,15 +26,18 @@ import type { SeedReferenceGroup } from "@/lib/constants/reference-ids";
 // other reference row. Any absent table is a bug and fails the gate.
 export const TABLES_ALLOWED_ABSENT = new Set<string>([]);
 
-export type MismatchReason = "name" | "missing-row" | "missing-table";
+// "unlisted" is used only by findShippedSetMismatches, which unlike the
+// reference check runs in both directions: the seed ships a row that
+// SHIPPED_ROWS does not declare, so it would reach every install unlocked.
+export type MismatchReason = "name" | "missing-row" | "missing-table" | "unlisted";
 
 export interface Mismatch {
   table: string;
   // id/expected are null only for a whole-table miss (reason "missing-table").
   id: number | null;
   expected: string | null;
-  // actual is the seed-side name for "name", and null for "missing-row" /
-  // "missing-table".
+  // actual is the seed-side name for "name" and "unlisted", and null for
+  // "missing-row" / "missing-table".
   actual: string | null;
   reason: MismatchReason;
 }
@@ -95,6 +98,73 @@ export function findSeedReferenceMismatches(
         mismatches.push({ table: group.table, id, expected: name, actual: null, reason: "missing-row" });
       } else if (actual !== name) {
         mismatches.push({ table: group.table, id, expected: name, actual, reason: "name" });
+      }
+    }
+  }
+
+  return mismatches;
+}
+
+// ── Shipped-set agreement ─────────────────────────────────────────────────
+// The fourth half of the gate (issue #109). SHIPPED_ROWS in reference-ids.ts
+// is the code-side copy of everything shared-lookups.sql ships, and it is what
+// /settings/categories locks against rename and delete. Restating the seed in
+// TypeScript is the duplication #178 was written about, so this check proves
+// the two equal rather than trusting them to stay so.
+//
+// Unlike findSeedReferenceMismatches above — deliberately directional, because
+// a seed row nothing references is fine — this one runs in BOTH directions. A
+// row present in the seed but absent from SHIPPED_ROWS is the dangerous
+// asymmetry: it ships to every install and is silently editable, which is the
+// bug this gate exists to prevent rather than one it reports after the fact.
+
+export function findShippedSetMismatches(
+  shippedRows: ReadonlyArray<SeedReferenceGroup>,
+  sql: string,
+): Mismatch[] {
+  const seed = parseSeedRows(sql);
+  const mismatches: Mismatch[] = [];
+
+  // code → seed
+  for (const group of shippedRows) {
+    const seedRows = seed.get(group.table.toLowerCase());
+
+    if (!seedRows) {
+      mismatches.push({
+        table: group.table,
+        id: null,
+        expected: null,
+        actual: null,
+        reason: "missing-table",
+      });
+      continue;
+    }
+
+    for (const { id, name } of group.expected) {
+      const actual = seedRows.get(id);
+      if (actual === undefined) {
+        mismatches.push({ table: group.table, id, expected: name, actual: null, reason: "missing-row" });
+      } else if (actual !== name) {
+        mismatches.push({ table: group.table, id, expected: name, actual, reason: "name" });
+      }
+    }
+  }
+
+  // seed → code. Name disagreements are already reported by the pass above, so
+  // this one only looks for rows SHIPPED_ROWS never mentions.
+  for (const [table, seedRows] of seed) {
+    const group = shippedRows.find((g) => g.table.toLowerCase() === table);
+    if (!group) {
+      for (const [id, name] of seedRows) {
+        mismatches.push({ table, id, expected: null, actual: name, reason: "unlisted" });
+      }
+      continue;
+    }
+
+    const declaredIds = new Set(group.expected.map((r) => r.id));
+    for (const [id, name] of seedRows) {
+      if (!declaredIds.has(id)) {
+        mismatches.push({ table: group.table, id, expected: null, actual: name, reason: "unlisted" });
       }
     }
   }

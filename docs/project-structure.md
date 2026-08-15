@@ -142,7 +142,8 @@ finance-stack/
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
-│   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name) and SEED_REFERENCES driver for the /api/health/seed-data drift check
+│   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name): SEED_REFERENCES drives the /api/health/seed-data drift check, SHIPPED_ROWS drives row protection (#109)
+│   │   ├── constants/protected-rows.ts   # protectionFor() — which lookup rows /settings/categories refuses to rename or delete, and why (#109)
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
@@ -172,6 +173,7 @@ finance-stack/
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │   │   ├── queries/date-range.ts         # Shared dateFrom/dateTo URL-param parsing + 30-day default
 │   │   ├── queries/categories.ts         # Queries for all four reference-data tables
+│   │   ├── queries/protected-rows.ts     # Per-table reads backing the protection guards in actions/categories.ts (#109)
 │   │   ├── format/financial.ts           # Shared signed-currency, change-color, percent helpers (used by asset + liability tables)
 │   │   ├── forms/transaction.ts          # Post-submit state helper (persists Date, Account, Type across submits)
 │   │   ├── validations/account.ts        # Zod schema for account form validation

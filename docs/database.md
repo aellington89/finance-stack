@@ -76,7 +76,7 @@ One case the re-run does *not* cover:
 
 - **A renamed row.** The seed is `ON CONFLICT DO NOTHING`, so it will not rename a row back. Rename it in the UI, or `UPDATE` it to the name in [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts).
 
-  This is most likely to bite on **`transaction_categories` id 6 `"Other"`**, because `/settings/categories` offers that row for editing like any other. Since Issue #178 it ships in `shared-lookups.sql`, so a fresh install has it and no longer reports drift — but if you have renamed it, re-running migrate leaves your name in place and the drift report stands until you rename it back or the row is protected from editing (Issue #87).
+  This is most likely to bite on **`transaction_categories` id 6 `"Other"`**, because `/settings/categories` used to offer that row for editing like any other. Since Issue #178 it ships in `shared-lookups.sql`, so a fresh install has it and no longer reports drift; since Issue #109 it is protected, so it cannot drift again. If you renamed it before that landed, re-running migrate leaves your name in place — the repair is to rename it back in the UI, which is deliberately the one edit protection still allows (see [Protected rows](#protected-rows)).
 
 If you need to repair a database you cannot restart the stack for, the seed's own statement is safe to run by hand:
 
@@ -120,13 +120,35 @@ The top-right cell is the one that matters. It is not a bucket you file things i
 
 **The one unresolved case.** The Liabilities drilldown filters on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treat them as app-owned reference data, which puts them squarely in the top-right cell. It is **not** resolved by shipping them: that would bake one person's loan portfolio into every install and still leave the set unextensible without a code change. The resolution is Issue #111 — a `liability_role` attribute a user-owned category can opt into, replacing the pinned lists. Until then, a fresh install's Liabilities drilldown reports zeros, and the pinned names are enforced against the test fixture so the gap cannot widen unnoticed.
 
+### Protected rows
+
+*Added in Issue #109.* The taxonomy above says which rows the application owns. Protection is what stops the UI handing them to the user anyway: `/settings/categories` renders a lock instead of the edit and delete buttons, and the server actions in [`lib/actions/categories.ts`](../app/lib/actions/categories.ts) refuse the same rows so a crafted form submit gets no further.
+
+Two rules, both in [`lib/constants/protected-rows.ts`](../app/lib/constants/protected-rows.ts):
+
+| Rule | Matched on | Rows |
+| --- | --- | --- |
+| **App-owned** | id | Every row `shared-lookups.sql` ships — all 12 `transaction_types`, all 6 `account_type_categories`, `transaction_categories` id 6. Declared as `SHIPPED_ROWS` in [`reference-ids.ts`](../app/lib/constants/reference-ids.ts). |
+| **Liability pin** | id **and** current name | The ~15 `transaction_categories` rows [`liability-categories.ts`](../app/lib/queries/liability-categories.ts) pins. |
+
+**Shipping is the criterion, not being named by code.** `transaction_types` id 3 `Refund` is in no `SEED_REFERENCES` group and no query pins it, but it arrives identically on every install and renaming it buys nothing but divergence. `SEED_REFERENCES` stays the narrower "code depends on this specific row" list that drives the health check; `SHIPPED_ROWS` is a superset of it.
+
+**The pins match on name because they are not ours.** Those rows are the user's — see the unresolved case above — and are pinned by id only because the queries have no better handle on them until Issue #111. Locking id 7 outright would lock whatever unrelated category occupies id 7 on somebody else's database. Matching the name too makes protection self-limiting: a fresh install matches none of them and locks nothing.
+
+**Renaming back is always allowed.** The rule is "the name must equal the canonical name", not "this row is frozen". An install that renamed id 6 before this landed keeps that name, and a blanket refusal would strand `/api/health/seed-data` at 503 with no way out of the UI. The only rename protection permits is the one that restores the shipped name. Deletes are refused outright.
+
+**It is an application guard, not a database one.** A `BEFORE UPDATE OR DELETE` trigger was considered and rejected: [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) re-converges these rows with `ON CONFLICT DO UPDATE`, and the manual `UPDATE` above is the documented repair path. Both are legitimate, and a trigger would break them to stop a mistake nobody makes through `psql`.
+
+`transaction_types` additionally accepts no new rows: the Add button is gone from `/settings/categories` and `createTransactionType` was deleted rather than guarded, because a thirteenth type is a row nothing in the codebase would recognise. Rows an install already created past id 12 are untouched and stay editable.
+
 ### Adding a new reference row
 
 If code will depend on the row:
 
 1. Add it to [`init-db/seeds/shared-lookups.sql`](../init-db/seeds/shared-lookups.sql), following the [contract above](#editing-the-shared-seed).
 2. Add a constant for it in [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts) and list it in the matching `SEED_REFERENCES` group.
-3. Run `npm run check:seed-references`. It fails if the two disagree — including if you reference a table the seed does not populate at all, which is how the id-6 gap survived four releases.
+3. Add it to the matching `SHIPPED_ROWS` group in the same file. Every shipped row belongs there, whether or not code names it — that is what makes it [protected](#protected-rows).
+4. Run `npm run check:seed-references`. It fails if any of the three disagree — including if you reference a table the seed does not populate at all, which is how the id-6 gap survived four releases, and if you ship a row `SHIPPED_ROWS` does not list, which would reach every install editable.
 
 If it is a fixture row that only tests need, it goes in [`init-db/seeds/finances-test-mock-data.sql`](../init-db/seeds/finances-test-mock-data.sql) — not in `vitest-setup.ts`, and not in `shared-lookups.sql`. See [Testing](testing.md).
 

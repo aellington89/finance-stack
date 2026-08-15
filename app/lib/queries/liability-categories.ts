@@ -6,7 +6,7 @@
 // this avoids fragility from rename/pattern mismatches but means the seeded
 // rows must not be deleted via /settings/categories.
 //
-// Categorization scheme (see docs/Liability Tracking.md):
+// Categorization scheme (see the seed-data taxonomy in docs/database.md):
 //   • DEBT_INTEREST_CATEGORY_IDS — interest charges that ADD to the
 //     liability balance. Posted on the liability side as a NEGATIVE amount
 //     (added debt). Includes the "Accrued *" categories for loans and
@@ -38,11 +38,20 @@
 // code change. Only id 6 'Other' ships there, because the app writes it
 // itself; see that file's header.
 //
-// Until #111 lands, the names below are load-bearing rather than decorative:
-// `npm run check:seed-references` asserts each (id, name) against
+// Until #111 lands, the names below are load-bearing rather than decorative,
+// in two ways.
+//
+// First, `npm run check:seed-references` asserts each (id, name) against
 // init-db/seeds/finances-test-mock-data.sql, so a pin that no fixture provides
 // fails CI instead of silently contributing nothing to a test's totals — which
 // is how ids 7, 8, 75 and 76 went four releases missing from that fixture.
+//
+// Second, since #109 these (id, name) pairs are what /settings/categories locks
+// against rename and delete. The name is half the match on purpose: these rows
+// are the user's and ship nowhere, so locking by id alone would lock whatever
+// unrelated category occupies id 7 on someone else's install. That hardens the
+// defect described above — a pinned row can no longer be renamed out from under
+// the queries — but it does not fix it. #111 still owns the fix.
 
 import {
   CURRENT_LIABILITY_CATEGORY,

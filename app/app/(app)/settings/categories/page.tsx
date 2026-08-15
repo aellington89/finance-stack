@@ -8,17 +8,29 @@ import {
   createTransactionCategory,
   updateTransactionCategory,
   deleteTransactionCategory,
-  createTransactionType,
   updateTransactionType,
   deleteTransactionType,
   createAccountType,
   updateAccountType,
   deleteAccountType,
 } from "@/lib/actions/categories";
+import {
+  protectionFor,
+  PROTECTION_TOOLTIP,
+  type ProtectedTable,
+} from "@/lib/constants/protected-rows";
 import { EntityCard } from "@/components/settings/entity-card";
 import { AccountTypesCard } from "@/components/settings/account-types-card";
 
 export const dynamic = "force-dynamic";
+
+// The server actions refuse a protected row whatever the UI does (Issue #109).
+// This resolves the same predicate for display so the page does not offer an
+// edit that is going to bounce.
+function lockedReason(table: ProtectedTable, id: number, name: string): string | null {
+  const protection = protectionFor(table, id, name);
+  return protection ? PROTECTION_TOOLTIP[protection.reason] : null;
+}
 
 export default async function CategoriesPage() {
   const [txnCategories, txnTypes, acctTypeCategories, acctTypes] =
@@ -32,11 +44,17 @@ export default async function CategoriesPage() {
   const txnCategoryItems = txnCategories.map((r) => ({
     id: r.transactionCategoryId,
     name: r.transactionCategory,
+    lockedReason: lockedReason(
+      "transaction_categories",
+      r.transactionCategoryId,
+      r.transactionCategory
+    ),
   }));
 
   const txnTypeItems = txnTypes.map((r) => ({
     id: r.transactionTypeId,
     name: r.transactionType,
+    lockedReason: lockedReason("transaction_types", r.transactionTypeId, r.transactionType),
   }));
 
   const acctTypeCategoryItems = acctTypeCategories.map((r) => ({
@@ -59,12 +77,12 @@ export default async function CategoriesPage() {
           updateAction={updateTransactionCategory}
           deleteAction={deleteTransactionCategory}
         />
+        {/* No createAction: the full set ships with the app (Issue #109). */}
         <EntityCard
           title="Transaction Types"
           entityLabel="Type"
           idFieldName="transactionTypeId"
           items={txnTypeItems}
-          createAction={createTransactionType}
           updateAction={updateTransactionType}
           deleteAction={deleteTransactionType}
         />
