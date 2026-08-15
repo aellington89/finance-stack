@@ -17,6 +17,12 @@ import { parseEntityId } from "@/lib/validations/id";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
+import { protectionRefusal } from "@/lib/constants/protected-rows";
+import {
+  accountTypeCategoryProtection,
+  transactionCategoryProtection,
+  transactionTypeProtection,
+} from "@/lib/queries/protected-rows";
 
 // Every write below goes through auditedTransaction() even where it is a single
 // statement: that helper is what names the actor for the audit trigger, and a
@@ -25,6 +31,14 @@ import { requireActionUser } from "@/lib/auth/guard";
 // they are reads, and holding it open across them buys nothing — but they sit
 // inside the `try` (Issue #179), so a read that fails returns an ActionState
 // rather than escaping the action as an unhandled throw.
+//
+// The protection pre-checks (Issue #109) follow the same placement, and sit
+// after parseEntityId/safeParse so a malformed payload is still refused before
+// the database is reached — tests/integration/actions/validation-contract.test.ts
+// asserts exactly that. In the delete actions they run before the `inUse` read:
+// a protected row is nearly always in use, and "it is protected" is the more
+// actionable of the two messages. See lib/constants/protected-rows.ts for why
+// rename-to-canonical is the one edit that gets through.
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
   revalidatePath("/dashboard/transactions");
@@ -77,6 +91,15 @@ export async function updateTransactionCategory(
   }
 
   try {
+    const protection = await transactionCategoryProtection(id);
+    if (protection && protection.canonicalName !== result.data.name) {
+      return {
+        success: false,
+        errors: {},
+        message: protectionRefusal(protection, "rename", "category"),
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx
         .update(transactionCategories)
@@ -102,6 +125,15 @@ export async function deleteTransactionCategory(
   if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
   try {
+    const protection = await transactionCategoryProtection(id);
+    if (protection) {
+      return {
+        success: false,
+        errors: {},
+        message: protectionRefusal(protection, "delete", "category"),
+      };
+    }
+
     const inUse = await db
       .select({ id: transactions.transactionId })
       .from(transactions)
@@ -128,30 +160,14 @@ export async function deleteTransactionCategory(
 }
 
 // ─── Transaction Types ────────────────────────────────────────────────────────
-
-export async function createTransactionType(
-  prevState: ActionState,
-  formData: FormData
-): Promise<ActionState> {
-  const denied = await requireActionUser();
-  if (denied) return denied;
-
-  const result = parseNameForm(formData);
-  if (!result.success) {
-    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
-  }
-
-  try {
-    await auditedTransaction(async (tx) => {
-      await tx.insert(transactionTypes).values({ transactionType: result.data.name });
-    });
-  } catch (error) {
-    return actionFailure("createTransactionType", error, "Failed to create type. Please try again.");
-  }
-
-  revalidateCategoryPaths();
-  return { success: true, errors: {}, message: "Type created" };
-}
+//
+// There is deliberately no createTransactionType (Issue #109). All 12 rows this
+// table ships are protected, and a thirteenth is a row no query, importer parser
+// or SEED_REFERENCES entry would ever recognise — the same code-depends-on-a-row-
+// the-user-owns defect the seed-data taxonomy names in docs/database.md. The
+// affordance is gone from /settings/categories rather than the action being kept
+// and made to always refuse. A legitimate future insert belongs behind the admin
+// screen in #87, with a role check of its own.
 
 export async function updateTransactionType(
   prevState: ActionState,
@@ -169,6 +185,15 @@ export async function updateTransactionType(
   }
 
   try {
+    const protection = await transactionTypeProtection(id);
+    if (protection && protection.canonicalName !== result.data.name) {
+      return {
+        success: false,
+        errors: {},
+        message: protectionRefusal(protection, "rename", "type"),
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx
         .update(transactionTypes)
@@ -194,6 +219,15 @@ export async function deleteTransactionType(
   if (id === null) return { success: false, errors: {}, message: "Invalid type ID" };
 
   try {
+    const protection = await transactionTypeProtection(id);
+    if (protection) {
+      return {
+        success: false,
+        errors: {},
+        message: protectionRefusal(protection, "delete", "type"),
+      };
+    }
+
     const inUse = await db
       .select({ id: transactions.transactionId })
       .from(transactions)
@@ -261,6 +295,15 @@ export async function updateAccountTypeCategory(
   }
 
   try {
+    const protection = await accountTypeCategoryProtection(id);
+    if (protection && protection.canonicalName !== result.data.name) {
+      return {
+        success: false,
+        errors: {},
+        message: protectionRefusal(protection, "rename", "category"),
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx
         .update(accountTypeCategories)
@@ -286,6 +329,15 @@ export async function deleteAccountTypeCategory(
   if (id === null) return { success: false, errors: {}, message: "Invalid account type category ID" };
 
   try {
+    const protection = await accountTypeCategoryProtection(id);
+    if (protection) {
+      return {
+        success: false,
+        errors: {},
+        message: protectionRefusal(protection, "delete", "category"),
+      };
+    }
+
     const inUse = await db
       .select({ id: accountTypes.accountTypeId })
       .from(accountTypes)

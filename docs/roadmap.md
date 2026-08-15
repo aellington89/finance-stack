@@ -123,10 +123,18 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > defect rather than a category. Shipping those rows was rejected (it would bake
 > one loan portfolio into every install and still need a code change to extend),
 > so the resolution is **#111**, which moves here from Phase 6: it is no longer an
-> additive feature but the fix for a filed integrity defect. That in turn leaves
-> **#109** protecting a single row — id 6 `Other`, now an app-owned reference row
-> exactly like the ones #87 covers — so #109 is a candidate to fold into #87
-> rather than carry its own `protected`-column design.
+> additive feature but the fix for a filed integrity defect.
+>
+> **#109 then shipped wider than that reading suggested.** Rather than a
+> `protected` column it derives protection from the constants that already
+> declare these rows, and rather than one row it locks all 19 that
+> `shared-lookups.sql` ships, across all three lookup tables — plus the liability
+> pins, matched on id *and* name so protection is self-limiting on an install
+> that never had them. It also removed Transaction Type creation outright. That
+> takes a large bite out of **#87**: `transaction_types` is now add-proof with its
+> shipped rows locked, and `account_type_categories` has no UI to restrict. What
+> is left of #87 is the role gate and the admin screen — which is also where a
+> legitimate future `transaction_types` insert would live.
 
 ### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
 - [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*

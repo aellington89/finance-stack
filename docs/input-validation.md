@@ -12,7 +12,9 @@ The rules every server action and page boundary follows, and the two CI gates th
 
 ## The validation checklist
 
-All 18 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
+All 17 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
+
+There is no `createTransactionType()`: every row that table holds ships in `shared-lookups.sql`, so it was removed rather than guarded ([Issue #109](https://github.com/aellington89/finance-stack/issues/109)).
 
 `parseEntityId()` ([`lib/validations/id.ts`](../app/lib/validations/id.ts)) narrows an ID to a positive `int4`, returning `null` for anything else. It exists because the guard it replaced (`!id || id <= 0`) accepted `1.5`, `Infinity`, and values past the `int4` ceiling — all of which bind cleanly in JavaScript and then raise `22P02` / `22003` in the driver.
 
@@ -27,7 +29,6 @@ All 18 mutating actions, all green. Each also opens with `requireActionUser()` (
 | `createTransactionCategory()` | `entityNameSchema` | — | Failed to create category. Please try again. |
 | `updateTransactionCategory()` | `entityNameSchema` | `transactionCategoryId` | Failed to update category. Please try again. |
 | `deleteTransactionCategory()` | — | `transactionCategoryId` | Failed to delete category. Please try again. |
-| `createTransactionType()` | `entityNameSchema` | — | Failed to create type. Please try again. |
 | `updateTransactionType()` | `entityNameSchema` | `transactionTypeId` | Failed to update type. Please try again. |
 | `deleteTransactionType()` | — | `transactionTypeId` | Failed to delete type. Please try again. |
 | `createAccountTypeCategory()` | `entityNameSchema` | — | Failed to create category. Please try again. |
@@ -53,7 +54,7 @@ Only three things can produce text a user sees:
 | Source | Example | Where it comes from |
 | --- | --- | --- |
 | A Zod field message | "Account name is required" | Authored in the schema, keyed by field via `buildFieldErrors()` |
-| A guard literal | "Invalid account ID", "Cannot delete: this category is used by existing transactions." | Written inline in the action |
+| A guard literal | "Invalid account ID", "Cannot delete: this category is used by existing transactions.", "Cannot delete: this type is protected — it ships with the app." | Written inline in the action, or composed by `protectionRefusal()` ([`lib/constants/protected-rows.ts`](../app/lib/constants/protected-rows.ts)) |
 | `actionFailure()`'s third argument | "Failed to create account. Please try again." | The catch arm; the real error goes to the logs |
 
 Zod's own messages count as internals, not as authored text. A field the client omits arrives as `null` from `formData.get()`, and a bare `z.string()` renders that as `Invalid input: expected string, received null` — which `buildFieldErrors()` would put straight on the form. Every `z.string()` in `lib/validations/` therefore carries a message argument: `z.string("Account name is required")`.

@@ -26,6 +26,12 @@
 -- `npm run check:seed-references` enforces exactly that list, so a violation
 -- fails CI rather than production.
 --
+-- SECOND CONTRACT (issue #109): every row this file ships is protected against
+-- rename and delete in /settings/categories, and must be listed in SHIPPED_ROWS
+-- in app/lib/constants/reference-ids.ts. The same gate proves the two equal in
+-- both directions — add a row here without adding it there and CI fails, because
+-- an unlisted row would reach every install editable.
+--
 -- Finances_Test drift is corrected at test-suite startup by
 -- app/tests/integration/vitest-setup.ts, which uses DO UPDATE. That is safe
 -- there and would not be here — Finances_Test holds fixtures, Finances holds

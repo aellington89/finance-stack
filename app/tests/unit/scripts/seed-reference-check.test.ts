@@ -11,6 +11,7 @@ import {
   parseSeedRows,
   findFixtureGaps,
   findSeedReferenceMismatches,
+  findShippedSetMismatches,
   findUnsafeSeedStatements,
   TABLES_ALLOWED_ABSENT,
 } from "@/scripts/seed-reference-check";
@@ -130,6 +131,99 @@ ON CONFLICT (account_type_category_id) DO NOTHING;`;
 // The seed is applied to the live Finances database on every migrate run
 // (issue #187), so these rules are what stands between an edit to that file and
 // real user data.
+describe("findShippedSetMismatches", () => {
+  // The full contents of SEED above, which is what a correct SHIPPED_ROWS
+  // looks like for this fixture.
+  const complete = [
+    group("account_type_categories", [
+      { id: 1, name: "Current Asset" },
+      { id: 2, name: "Restricted Asset" },
+      { id: 5, name: "Current Liability" },
+    ]),
+    group("transaction_types", [
+      { id: 2, name: "Expense" },
+      { id: 12, name: "Opening Balance" },
+    ]),
+  ];
+
+  it("passes when code and seed hold exactly the same rows", () => {
+    expect(findShippedSetMismatches(complete, SEED)).toEqual([]);
+  });
+
+  it("flags a seed row the code does not declare", () => {
+    // The asymmetry that matters: this row ships to every install and, without
+    // a SHIPPED_ROWS entry, arrives editable.
+    const missingOne = [
+      complete[0],
+      group("transaction_types", [{ id: 2, name: "Expense" }]),
+    ];
+    expect(findShippedSetMismatches(missingOne, SEED)).toEqual([
+      {
+        table: "transaction_types",
+        id: 12,
+        expected: null,
+        actual: "Opening Balance",
+        reason: "unlisted",
+      },
+    ]);
+  });
+
+  it("flags a whole table the code does not declare", () => {
+    const typesOnly = [complete[1]];
+    expect(findShippedSetMismatches(typesOnly, SEED)).toEqual([
+      { table: "account_type_categories", id: 1, expected: null, actual: "Current Asset", reason: "unlisted" },
+      { table: "account_type_categories", id: 2, expected: null, actual: "Restricted Asset", reason: "unlisted" },
+      { table: "account_type_categories", id: 5, expected: null, actual: "Current Liability", reason: "unlisted" },
+    ]);
+  });
+
+  it("flags a declared row the seed does not ship", () => {
+    const extra = [
+      complete[0],
+      group("transaction_types", [
+        { id: 2, name: "Expense" },
+        { id: 12, name: "Opening Balance" },
+        { id: 13, name: "Invented" },
+      ]),
+    ];
+    expect(findShippedSetMismatches(extra, SEED)).toEqual([
+      { table: "transaction_types", id: 13, expected: "Invented", actual: null, reason: "missing-row" },
+    ]);
+  });
+
+  it("flags a name disagreement once, not twice", () => {
+    // The code->seed pass reports the name; the seed->code pass must not then
+    // also report the same id as unlisted.
+    const renamed = [
+      complete[0],
+      group("transaction_types", [
+        { id: 2, name: "Expense" },
+        { id: 12, name: "Opening Balances" },
+      ]),
+    ];
+    expect(findShippedSetMismatches(renamed, SEED)).toEqual([
+      { table: "transaction_types", id: 12, expected: "Opening Balances", actual: "Opening Balance", reason: "name" },
+    ]);
+  });
+
+  it("flags a declared table with no INSERT block at all", () => {
+    const withGhost = [...complete, group("ghost_table", [{ id: 1, name: "Nothing" }])];
+    expect(findShippedSetMismatches(withGhost, SEED)).toEqual([
+      { table: "ghost_table", id: null, expected: null, actual: null, reason: "missing-table" },
+    ]);
+  });
+
+  it("does not honour TABLES_ALLOWED_ABSENT", () => {
+    // That escape hatch belongs to the reference check. A shipped row is
+    // shipped; there is no "declared but deliberately unseeded" case here.
+    expect(TABLES_ALLOWED_ABSENT.size).toBe(0);
+    const withGhost = [group("ghost_table", [{ id: 1, name: "Nothing" }])];
+    expect(findShippedSetMismatches(withGhost, SEED).some((m) => m.reason === "missing-table")).toBe(
+      true
+    );
+  });
+});
+
 describe("findUnsafeSeedStatements", () => {
   const reasons = (sql: string) => findUnsafeSeedStatements(sql).map((u) => u.reason);
 

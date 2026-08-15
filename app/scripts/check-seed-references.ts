@@ -14,6 +14,9 @@
 // 3. The Finances_Test fixture holds every transaction_categories row the
 //    Liabilities queries pin, and the integration setup hook does not define a
 //    fourth version of them (issue #178).
+// 4. SHIPPED_ROWS lists exactly what that seed ships, in both directions. It is
+//    what /settings/categories locks against rename and delete (issue #109), so
+//    a seed row missing from it ships to every install editable.
 //
 // Mirrors the Schema drift gate's ::error:: annotation + remediation-hint style.
 
@@ -21,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SEED_REFERENCES } from "@/lib/constants/reference-ids";
+import { SEED_REFERENCES, SHIPPED_ROWS } from "@/lib/constants/reference-ids";
 import {
   DEBT_INTEREST_CATEGORIES,
   DEBT_PAYMENT_CATEGORIES,
@@ -29,6 +32,7 @@ import {
 import {
   findFixtureGaps,
   findSeedReferenceMismatches,
+  findShippedSetMismatches,
   findUnsafeSeedStatements,
   type FixtureGap,
   type Mismatch,
@@ -51,6 +55,23 @@ function formatMismatch(m: Mismatch): string {
       return `::error::Seed reference drift: ${m.table} id=${m.id} — code expects "${m.expected}" but no row with that id exists in shared-lookups.sql`;
     case "missing-table":
       return `::error::Seed reference drift: table "${m.table}" is referenced by SEED_REFERENCES but no INSERT block exists in shared-lookups.sql (and it is not in the allowed-absent list)`;
+    case "unlisted":
+      // findSeedReferenceMismatches is directional and never emits this — an
+      // unreferenced seed row is fine. Only the shipped-set check does.
+      return `::error::Seed reference drift: ${m.table} id=${m.id} "${m.actual}" — unexpected reason "unlisted" from the reference check`;
+  }
+}
+
+function formatShippedMismatch(m: Mismatch): string {
+  switch (m.reason) {
+    case "name":
+      return `::error::Shipped-set drift: ${m.table} id=${m.id} — SHIPPED_ROWS declares "${m.expected}" but shared-lookups.sql ships "${m.actual}"`;
+    case "missing-row":
+      return `::error::Shipped-set drift: ${m.table} id=${m.id} — SHIPPED_ROWS declares "${m.expected}" but shared-lookups.sql ships no row with that id`;
+    case "missing-table":
+      return `::error::Shipped-set drift: table "${m.table}" is declared by SHIPPED_ROWS but no INSERT block exists in shared-lookups.sql`;
+    case "unlisted":
+      return `::error::Shipped-set drift: ${m.table} id=${m.id} "${m.actual}" ships in shared-lookups.sql but is absent from SHIPPED_ROWS — it would reach every install editable`;
   }
 }
 
@@ -85,6 +106,7 @@ function formatFixtureGap(g: FixtureGap): string {
 function main(): void {
   const seed = readFileSync(SEED_PATH, "utf8");
   const mismatches = findSeedReferenceMismatches(SEED_REFERENCES, seed);
+  const shipped = findShippedSetMismatches(SHIPPED_ROWS, seed);
   const unsafe = findUnsafeSeedStatements(seed);
   const gaps = findFixtureGaps(
     [...DEBT_PAYMENT_CATEGORIES, ...DEBT_INTEREST_CATEGORIES],
@@ -102,8 +124,20 @@ function main(): void {
     );
   }
 
-  if (unsafe.length > 0) {
+  if (shipped.length > 0) {
     if (mismatches.length > 0) console.error("");
+    for (const m of shipped) console.error(formatShippedMismatch(m));
+    console.error("");
+    console.error(
+      "SHIPPED_ROWS in app/lib/constants/reference-ids.ts is the code-side copy of everything " +
+        "init-db/seeds/shared-lookups.sql ships, and it is what /settings/categories locks against " +
+        "rename and delete (issue #109). Add the row above to SHIPPED_ROWS — it becomes protected — " +
+        "or drop it from the seed, then re-run `npm run check:seed-references`.",
+    );
+  }
+
+  if (unsafe.length > 0) {
+    if (mismatches.length > 0 || shipped.length > 0) console.error("");
     for (const u of unsafe) console.error(formatUnsafe(u));
     console.error("");
     console.error(
@@ -115,7 +149,7 @@ function main(): void {
   }
 
   if (gaps.length > 0) {
-    if (mismatches.length > 0 || unsafe.length > 0) console.error("");
+    if (mismatches.length > 0 || shipped.length > 0 || unsafe.length > 0) console.error("");
     for (const g of gaps) console.error(formatFixtureGap(g));
     console.error("");
     console.error(
@@ -127,9 +161,12 @@ function main(): void {
     );
   }
 
-  if (mismatches.length > 0 || unsafe.length > 0 || gaps.length > 0) process.exit(1);
+  if (mismatches.length > 0 || shipped.length > 0 || unsafe.length > 0 || gaps.length > 0) {
+    process.exit(1);
+  }
 
   console.log("✓ Seed reference gate: SEED_REFERENCES matches init-db/seeds/shared-lookups.sql");
+  console.log("✓ Shipped set gate: SHIPPED_ROWS lists exactly what shared-lookups.sql ships, so every shipped row is protected");
   console.log("✓ Seed contract gate: every statement in shared-lookups.sql is additive and re-runnable");
   console.log("✓ Fixture agreement gate: finances-test-mock-data.sql holds every pinned liability category, and vitest-setup.ts agrees with it");
 }

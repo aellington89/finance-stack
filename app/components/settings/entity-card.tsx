@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   CardTitle,
   CardAction,
 } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EntityDialog } from "@/components/settings/entity-dialog";
 import { DeleteEntityDialog } from "@/components/settings/delete-entity-dialog";
 
@@ -23,6 +24,10 @@ interface ActionState {
 interface EntityItem {
   id: number;
   name: string;
+  // Set when the row is protected (Issue #109) — the hover text explaining why.
+  // The server action refuses these regardless; this only removes the
+  // affordance that would lead the user into that refusal.
+  lockedReason?: string | null;
 }
 
 interface EntityCardProps {
@@ -30,7 +35,10 @@ interface EntityCardProps {
   entityLabel: string;
   idFieldName: string;
   items: EntityItem[];
-  createAction: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
+  // Omitted where the table does not accept user-created rows — Transaction
+  // Types, whose full set ships with the app (Issue #109). Leaving it out
+  // hides the Add button and the add dialog entirely.
+  createAction?: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   updateAction: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   deleteAction: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
 }
@@ -53,16 +61,18 @@ export function EntityCard({
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
-          <CardAction>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Add ${entityLabel}`}
-              onClick={() => setAddOpen(true)}
-            >
-              <Plus className="size-4" />
-            </Button>
-          </CardAction>
+          {createAction && (
+            <CardAction>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Add ${entityLabel}`}
+                onClick={() => setAddOpen(true)}
+              >
+                <Plus className="size-4" />
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="overflow-y-auto max-h-[28rem] space-y-0.5">
           {items.length === 0 ? (
@@ -76,38 +86,62 @@ export function EntityCard({
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 group"
               >
                 <span className="flex-1 min-w-0 truncate">{item.name}</span>
-                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Edit ${item.name}`}
-                    onClick={() => setEditTarget(item)}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Delete ${item.name}`}
-                    onClick={() => setDeleteTarget(item)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
+                {item.lockedReason ? (
+                  // The lock stays visible without hovering — it is the reason
+                  // the row looks different, so hiding it until hover would be
+                  // hiding the explanation. It is a plain span rather than a
+                  // disabled Button because buttonVariants sets
+                  // disabled:pointer-events-none, which would stop the tooltip
+                  // from ever opening.
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span
+                          className="flex size-6 shrink-0 items-center justify-center text-muted-foreground"
+                          aria-label={`${item.name} is protected`}
+                        />
+                      }
+                    >
+                      <Lock className="size-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent side="left">{item.lockedReason}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Edit ${item.name}`}
+                      onClick={() => setEditTarget(item)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Delete ${item.name}`}
+                      onClick={() => setDeleteTarget(item)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
             ))
           )}
         </CardContent>
       </Card>
 
-      {/* Add dialog */}
-      <EntityDialog
-        key="add"
-        title={`Add ${entityLabel}`}
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        action={createAction}
-      />
+      {/* Add dialog — absent for tables that take no user-created rows */}
+      {createAction && (
+        <EntityDialog
+          key="add"
+          title={`Add ${entityLabel}`}
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          action={createAction}
+        />
+      )}
 
       {/* Edit dialog — remounts per item via key */}
       {editTarget && (
