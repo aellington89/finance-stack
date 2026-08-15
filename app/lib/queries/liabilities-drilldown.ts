@@ -1,13 +1,16 @@
 import { db } from "@/lib/db";
 import { sql, type SQL } from "drizzle-orm";
 import {
-  DEBT_INTEREST_CATEGORY_IDS,
-  DEBT_PAYMENT_CATEGORY_IDS,
   LIABILITY_CATEGORY_IDS,
   LIABILITY_CURRENT_CATEGORY_ID,
   LIABILITY_NON_CURRENT_CATEGORY_ID,
 } from "@/lib/queries/liability-categories";
-import { balanceAtDate } from "@/lib/queries/_aggregates";
+import {
+  DEBT_ACCRUAL_ROLES,
+  DEBT_PAYMENT_ROLES,
+  DEBT_SERVICE_ROLES,
+} from "@/lib/constants/reporting-roles";
+import { balanceAtDate, categoryIdsWithRoles, valueList } from "@/lib/queries/_aggregates";
 
 // Sign convention: liability balances are stored as negative numbers in
 // account_balance_history. We preserve that sign throughout — this module
@@ -16,20 +19,20 @@ import { balanceAtDate } from "@/lib/queries/_aggregates";
 // payments are positive (paydown moves balance toward zero), interest accruals
 // are negative (added debt moves balance further from zero).
 
-// Build a parameterized SQL fragment for `IN (...)` from a numeric tuple.
-const inList = (ids: readonly number[]): SQL =>
-  sql.join(
-    ids.map((id) => sql`${id}`),
-    sql`, `
-  );
+// account_type_categories ids. These stay pinned by id, and legitimately so:
+// that table ships with the application, identical on every install, which the
+// seed-data taxonomy in docs/database.md calls app-owned reference data rather
+// than the defect the transaction_categories pins were.
+const LIABILITY_IDS = valueList(LIABILITY_CATEGORY_IDS);
 
-const LIABILITY_IDS = inList(LIABILITY_CATEGORY_IDS);
-const PAYMENT_IDS = inList(DEBT_PAYMENT_CATEGORY_IDS);
-const INTEREST_IDS = inList(DEBT_INTEREST_CATEGORY_IDS);
-const DEBT_SERVICE_IDS = inList([
-  ...DEBT_PAYMENT_CATEGORY_IDS,
-  ...DEBT_INTEREST_CATEGORY_IDS,
-]);
+// Which categories count as debt activity is now the user's answer, not the
+// codebase's: these resolve against transaction_categories.reporting_role at
+// query time (issue #111). Before that this module held three lists of literal
+// transaction_category_id values, so a category the user added was silently
+// excluded from every total below and a fresh install reported zeros.
+const PAYMENT_CATEGORIES = categoryIdsWithRoles(DEBT_PAYMENT_ROLES);
+const INTEREST_CATEGORIES = categoryIdsWithRoles(DEBT_ACCRUAL_ROLES);
+const DEBT_SERVICE_CATEGORIES = categoryIdsWithRoles(DEBT_SERVICE_ROLES);
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -562,9 +565,9 @@ export async function getDebtServiceSummary(
       at.account_type AS account_type_name,
       a.account_id,
       a.account_name,
-      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${PAYMENT_IDS})
+      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${PAYMENT_CATEGORIES})
         THEN t.amount ELSE 0 END), 0) AS payments,
-      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${INTEREST_IDS})
+      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${INTEREST_CATEGORIES})
         THEN t.amount ELSE 0 END), 0) AS interest
     FROM transactions t
     JOIN accounts a ON a.account_id = t.account_id
@@ -573,7 +576,7 @@ export async function getDebtServiceSummary(
       ON atc.account_type_category_id = at.account_type_category_id
     WHERE atc.account_type_category_id IN (${LIABILITY_IDS})
       AND t.transaction_date BETWEEN ${dateFrom}::date AND ${endDate}::date
-      AND t.transaction_category_id IN (${DEBT_SERVICE_IDS})
+      AND t.transaction_category_id IN (${DEBT_SERVICE_CATEGORIES})
     GROUP BY
       atc.account_type_category_id, atc.account_type_category,
       at.account_type_id, at.account_type,
@@ -719,9 +722,9 @@ export async function getDebtWaterfall(
 
   const txResult = await db.execute(sql`
     SELECT
-      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${PAYMENT_IDS})
+      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${PAYMENT_CATEGORIES})
         THEN t.amount ELSE 0 END), 0) AS payments,
-      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${INTEREST_IDS})
+      COALESCE(SUM(CASE WHEN t.transaction_category_id IN (${INTEREST_CATEGORIES})
         THEN t.amount ELSE 0 END), 0) AS interest
     FROM transactions t
     JOIN accounts a ON a.account_id = t.account_id

@@ -37,6 +37,18 @@ interface CategoryOption {
   name: string;
 }
 
+/** A reporting role the user can tag a transaction category with (Issue #111). */
+export interface RoleOption {
+  key: string;
+  label: string;
+  description: string;
+}
+
+// The "no role" choice. Submitted as the empty string, which
+// transactionCategorySchema normalises to null — clearing a role has to be
+// possible, or a mis-tag would be permanent.
+const NO_ROLE = "";
+
 interface EntityDialogProps {
   title: string;
   open: boolean;
@@ -50,6 +62,9 @@ interface EntityDialogProps {
   /** If provided, renders a category combobox (for Account Types) */
   categoryOptions?: CategoryOption[];
   defaultCategoryId?: number;
+  /** If provided, renders the reporting-role picker (for Transaction Categories) */
+  roleOptions?: RoleOption[];
+  defaultRole?: string | null;
 }
 
 function SubmitButton({ isEdit }: { isEdit: boolean }) {
@@ -71,6 +86,8 @@ export function EntityDialog({
   defaultName = "",
   categoryOptions,
   defaultCategoryId,
+  roleOptions,
+  defaultRole,
 }: EntityDialogProps) {
   const isEdit = !!itemId;
   const [state, formAction] = useActionState(action, initialState);
@@ -78,6 +95,7 @@ export function EntityDialog({
   const [categoryId, setCategoryId] = useState(
     defaultCategoryId ? String(defaultCategoryId) : ""
   );
+  const [role, setRole] = useState(defaultRole ?? NO_ROLE);
 
   // Sync controlled inputs when dialog opens or target item changes.
   // Intentional: resets form to fresh values each time the dialog opens for a (potentially different) item.
@@ -86,8 +104,9 @@ export function EntityDialog({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setName(defaultName);
       setCategoryId(defaultCategoryId ? String(defaultCategoryId) : "");
+      setRole(defaultRole ?? NO_ROLE);
     }
-  }, [open, defaultName, defaultCategoryId]);
+  }, [open, defaultName, defaultCategoryId, defaultRole]);
 
   useEffect(() => {
     if (state.message) {
@@ -168,6 +187,42 @@ export function EntityDialog({
               {state.errors.accountTypeCategoryId && (
                 <p className="text-sm text-destructive">
                   {state.errors.accountTypeCategoryId[0]}
+                </p>
+              )}
+            </div>
+          )}
+
+          {roleOptions && (
+            <div className="space-y-2">
+              <Label htmlFor="entity-role">Reporting role</Label>
+              {/*
+                A native select rather than the Combobox used above: the list is
+                four fixed options, not a searchable set, and each needs its
+                explanation visible rather than behind a hover — "which of these
+                is a HELOC principal payment" is the actual question being asked.
+              */}
+              <select
+                id="entity-role"
+                name="reportingRole"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                aria-invalid={state.errors.reportingRole ? true : undefined}
+                className="border-input bg-transparent dark:bg-input/30 flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:border-destructive"
+              >
+                <option value={NO_ROLE}>None — not used by any report</option>
+                {roleOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {roleOptions.find((o) => o.key === role)?.description ??
+                  "Categories with a role feed the matching totals on the Liabilities tab. Leave this as None unless you want it counted there."}
+              </p>
+              {state.errors.reportingRole && (
+                <p className="text-sm text-destructive">
+                  {state.errors.reportingRole[0]}
                 </p>
               )}
             </div>

@@ -56,6 +56,21 @@ beforeEach(() => {
 // CASCADE would wipe seeded accounts/transactions/account_balance_history
 // that other tests rely on.
 beforeAll(async () => {
+  // The session mocked above has to correspond to a real `users` row, because
+  // requireAdminUser() reads the role from the database rather than from the
+  // session token (Issue #87) — sessions are 30-day JWTs with no server-side
+  // revocation, so trusting the token would leave a demoted admin privileged
+  // for a month. Without this row every admin-gated action in the suite is
+  // refused, which is the gate working rather than a mock being wrong.
+  //
+  // Deliberately not deleted afterwards: it is the identity the whole
+  // integration project runs as, and the audit rows it produces name it.
+  await db.execute(sql`
+    INSERT INTO users (user_id, username, password_hash, role)
+    VALUES ('00000000-0000-0000-0000-000000000000', 'integration-test-user', 'not-a-real-hash', 'admin')
+    ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role
+  `);
+
   await db.execute(sql`
     INSERT INTO account_type_categories (account_type_category_id, account_type_category)
     OVERRIDING SYSTEM VALUE VALUES
@@ -127,6 +142,33 @@ beforeAll(async () => {
       (80, 'Credit Card Interest')
     ON CONFLICT (transaction_category_id) DO UPDATE
       SET transaction_category = EXCLUDED.transaction_category
+  `);
+
+  // Re-converge the reporting roles the Liabilities queries filter on (Issue
+  // #111), for the same reason as the names above: a test that clears or
+  // retags a category must not leave the next file asserting debt totals over
+  // a changed set.
+  //
+  // Unconditional rather than guarded on IS NULL — unlike the fixture seed,
+  // this hook's whole job is drift correction, so a role a test changed has to
+  // come back. Kept as separate UPDATEs rather than a third column in the
+  // upsert above because parseSeedRows reads `(id, 'name')` tuples only; see
+  // the fixture seed's own note.
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_principle_paid'
+      WHERE transaction_category_id IN (7, 12, 70, 75)
+  `);
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_interest_paid'
+      WHERE transaction_category_id IN (8, 13, 57, 68, 76)
+  `);
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_interest_accrued'
+      WHERE transaction_category_id IN (9, 14, 69, 74, 80)
+  `);
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_cash_paydown'
+      WHERE transaction_category_id IN (29)
   `);
 
   // Advance the IDENTITY sequences past the highest explicit ID so subsequent

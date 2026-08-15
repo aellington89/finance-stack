@@ -12,7 +12,7 @@ import {
   CardAction,
 } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EntityDialog } from "@/components/settings/entity-dialog";
+import { EntityDialog, type RoleOption } from "@/components/settings/entity-dialog";
 import { DeleteEntityDialog } from "@/components/settings/delete-entity-dialog";
 
 interface ActionState {
@@ -28,6 +28,9 @@ interface EntityItem {
   // The server action refuses these regardless; this only removes the
   // affordance that would lead the user into that refusal.
   lockedReason?: string | null;
+  // The row's reporting role, for tables that carry one (Issue #111). `label`
+  // is what the row renders; `key` is what the edit dialog pre-selects.
+  role?: { key: string; label: string } | null;
 }
 
 interface EntityCardProps {
@@ -41,6 +44,10 @@ interface EntityCardProps {
   createAction?: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   updateAction: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   deleteAction: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
+  // Passed only for Transaction Categories, which is the one lookup table
+  // carrying a reporting role (Issue #111). Its presence is what renders the
+  // picker in the add/edit dialogs.
+  roleOptions?: RoleOption[];
 }
 
 export function EntityCard({
@@ -51,6 +58,7 @@ export function EntityCard({
   createAction,
   updateAction,
   deleteAction,
+  roleOptions,
 }: EntityCardProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EntityItem | null>(null);
@@ -86,6 +94,15 @@ export function EntityCard({
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 group"
               >
                 <span className="flex-1 min-w-0 truncate">{item.name}</span>
+                {item.role && (
+                  // Visible without hovering, like the lock: a role changes what
+                  // the row does to the Liabilities totals, so it is the kind of
+                  // thing you want to see while scanning the list rather than
+                  // discover by opening each row in turn.
+                  <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    {item.role.label}
+                  </span>
+                )}
                 {item.lockedReason ? (
                   // The lock stays visible without hovering — it is the reason
                   // the row looks different, so hiding it until hover would be
@@ -140,6 +157,7 @@ export function EntityCard({
           open={addOpen}
           onOpenChange={setAddOpen}
           action={createAction}
+          roleOptions={roleOptions}
         />
       )}
 
@@ -154,6 +172,8 @@ export function EntityCard({
           itemId={editTarget.id}
           itemIdFieldName={idFieldName}
           defaultName={editTarget.name}
+          roleOptions={roleOptions}
+          defaultRole={editTarget.role?.key ?? null}
         />
       )}
 

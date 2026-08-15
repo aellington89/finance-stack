@@ -12,17 +12,16 @@ import {
   accounts,
 } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
-import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categories";
+import {
+  entityNameSchema,
+  accountTypeSchema,
+  transactionCategorySchema,
+} from "@/lib/validations/categories";
 import { parseEntityId } from "@/lib/validations/id";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
-import { requireActionUser } from "@/lib/auth/guard";
-import { protectionRefusal } from "@/lib/constants/protected-rows";
-import {
-  accountTypeCategoryProtection,
-  transactionCategoryProtection,
-  transactionTypeProtection,
-} from "@/lib/queries/protected-rows";
+import { requireActionUser, requireAdminUser } from "@/lib/auth/guard";
+import { protectionFor, protectionRefusal } from "@/lib/constants/protected-rows";
 
 // Every write below goes through auditedTransaction() even where it is a single
 // statement: that helper is what names the actor for the audit trigger, and a
@@ -32,21 +31,39 @@ import {
 // inside the `try` (Issue #179), so a read that fails returns an ActionState
 // rather than escaping the action as an unhandled throw.
 //
-// The protection pre-checks (Issue #109) follow the same placement, and sit
-// after parseEntityId/safeParse so a malformed payload is still refused before
-// the database is reached — tests/integration/actions/validation-contract.test.ts
-// asserts exactly that. In the delete actions they run before the `inUse` read:
-// a protected row is nearly always in use, and "it is protected" is the more
-// actionable of the two messages. See lib/constants/protected-rows.ts for why
-// rename-to-canonical is the one edit that gets through.
+// The protection pre-checks (Issue #109) sit after parseEntityId/safeParse so a
+// malformed payload is still refused before the database is reached —
+// tests/integration/actions/validation-contract.test.ts asserts exactly that. In
+// the delete actions they run before the `inUse` read: a protected row is nearly
+// always in use, and "it is protected" is the more actionable of the two
+// messages. See lib/constants/protected-rows.ts for why rename-to-canonical is
+// the one edit that gets through.
+//
+// protectionFor() is a pure predicate over SHIPPED_ROWS and reaches no database.
+// It needed one until issue #111: the liability-pin rule matched on the row's
+// current name, so the guard had to fetch the database's copy of it — the name
+// in the submitted form is what the user wants it to become, not what it is.
+// With that rule gone the three reads in lib/queries/protected-rows.ts had no
+// remaining caller and the module was deleted.
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
+  revalidatePath("/settings/admin");
   revalidatePath("/dashboard/transactions");
   revalidatePath("/accounts/new");
 }
 
 function parseNameForm(formData: FormData) {
   return entityNameSchema.safeParse({ name: formData.get("name") as string });
+}
+
+// Transaction categories carry a reporting role as well as a name (Issue #111).
+// `formData.get()` yields null when the field is absent, which the schema treats
+// as "no role" — same as the picker's "None".
+function parseCategoryForm(formData: FormData) {
+  return transactionCategorySchema.safeParse({
+    name: formData.get("name") as string,
+    reportingRole: formData.get("reportingRole") as string | null,
+  });
 }
 
 // ─── Transaction Categories ───────────────────────────────────────────────────
@@ -58,14 +75,17 @@ export async function createTransactionCategory(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const result = parseNameForm(formData);
+  const result = parseCategoryForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   try {
     await auditedTransaction(async (tx) => {
-      await tx.insert(transactionCategories).values({ transactionCategory: result.data.name });
+      await tx.insert(transactionCategories).values({
+        transactionCategory: result.data.name,
+        reportingRole: result.data.reportingRole,
+      });
     });
   } catch (error) {
     return actionFailure("createTransactionCategory", error, "Failed to create category. Please try again.");
@@ -85,13 +105,13 @@ export async function updateTransactionCategory(
   const id = parseEntityId(formData.get("transactionCategoryId"));
   if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
-  const result = parseNameForm(formData);
+  const result = parseCategoryForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   try {
-    const protection = await transactionCategoryProtection(id);
+    const protection = protectionFor("transaction_categories", id);
     if (protection && protection.canonicalName !== result.data.name) {
       return {
         success: false,
@@ -103,7 +123,10 @@ export async function updateTransactionCategory(
     await auditedTransaction(async (tx) => {
       await tx
         .update(transactionCategories)
-        .set({ transactionCategory: result.data.name })
+        .set({
+          transactionCategory: result.data.name,
+          reportingRole: result.data.reportingRole,
+        })
         .where(eq(transactionCategories.transactionCategoryId, id));
     });
   } catch (error) {
@@ -125,7 +148,7 @@ export async function deleteTransactionCategory(
   if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
   try {
-    const protection = await transactionCategoryProtection(id);
+    const protection = protectionFor("transaction_categories", id);
     if (protection) {
       return {
         success: false,
@@ -161,19 +184,52 @@ export async function deleteTransactionCategory(
 
 // ─── Transaction Types ────────────────────────────────────────────────────────
 //
-// There is deliberately no createTransactionType (Issue #109). All 12 rows this
-// table ships are protected, and a thirteenth is a row no query, importer parser
-// or SEED_REFERENCES entry would ever recognise — the same code-depends-on-a-row-
-// the-user-owns defect the seed-data taxonomy names in docs/database.md. The
-// affordance is gone from /settings/categories rather than the action being kept
-// and made to always refuse. A legitimate future insert belongs behind the admin
-// screen in #87, with a role check of its own.
+// Admin-only, all three (Issue #87). createTransactionType was deleted outright
+// by Issue #109 rather than kept and made to always refuse: all 12 rows this
+// table ships are protected, and a thirteenth created from /settings/categories
+// was a row no query, importer parser or SEED_REFERENCES entry would recognise.
+// That issue named where a legitimate insert would live — "behind the admin
+// screen in #87, with a role check of its own" — and this is it.
+//
+// Update and delete were briefly left open to any signed-in user on the
+// reasoning that protectionFor() already refuses all 12 shipped rows, so the
+// only thing they could reach was a row an install created for itself past id
+// 12. That reasoning had the sign backwards: such a row is user-minted
+// reference data that the classification every KPI reads depends on, which is
+// precisely what this issue says a regular user must not edit. The card is gone
+// from /settings/categories — with no create button and every shipped row
+// locked, it was twelve padlocks and no action — and the table is managed
+// whole on /settings/admin.
+
+export async function createTransactionType(
+  prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const denied = await requireAdminUser();
+  if (denied) return denied;
+
+  const result = parseNameForm(formData);
+  if (!result.success) {
+    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
+  }
+
+  try {
+    await auditedTransaction(async (tx) => {
+      await tx.insert(transactionTypes).values({ transactionType: result.data.name });
+    });
+  } catch (error) {
+    return actionFailure("createTransactionType", error, "Failed to create type. Please try again.");
+  }
+
+  revalidateCategoryPaths();
+  return { success: true, errors: {}, message: "Type created" };
+}
 
 export async function updateTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("transactionTypeId"));
@@ -185,7 +241,7 @@ export async function updateTransactionType(
   }
 
   try {
-    const protection = await transactionTypeProtection(id);
+    const protection = protectionFor("transaction_types", id);
     if (protection && protection.canonicalName !== result.data.name) {
       return {
         success: false,
@@ -212,14 +268,14 @@ export async function deleteTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("transactionTypeId"));
   if (id === null) return { success: false, errors: {}, message: "Invalid type ID" };
 
   try {
-    const protection = await transactionTypeProtection(id);
+    const protection = protectionFor("transaction_types", id);
     if (protection) {
       return {
         success: false,
@@ -254,12 +310,18 @@ export async function deleteTransactionType(
 }
 
 // ─── Account Type Categories ──────────────────────────────────────────────────
+//
+// Admin-only (Issue #87). This table defines the balance-sheet groupings every
+// KPI rolls up through — Current Asset, Current Liability and the rest — so a
+// wrong edit here is not one bad row but every dashboard at once. It has never
+// had a card on /settings/categories; the affordance now lives on
+// /settings/admin, and these three refuse a non-admin whatever the UI does.
 
 export async function createAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const result = parseNameForm(formData);
@@ -283,7 +345,7 @@ export async function updateAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("accountTypeCategoryId"));
@@ -295,7 +357,7 @@ export async function updateAccountTypeCategory(
   }
 
   try {
-    const protection = await accountTypeCategoryProtection(id);
+    const protection = protectionFor("account_type_categories", id);
     if (protection && protection.canonicalName !== result.data.name) {
       return {
         success: false,
@@ -322,14 +384,14 @@ export async function deleteAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("accountTypeCategoryId"));
   if (id === null) return { success: false, errors: {}, message: "Invalid account type category ID" };
 
   try {
-    const protection = await accountTypeCategoryProtection(id);
+    const protection = protectionFor("account_type_categories", id);
     if (protection) {
       return {
         success: false,

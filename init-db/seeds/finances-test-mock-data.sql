@@ -106,6 +106,44 @@ OVERRIDING SYSTEM VALUE VALUES
 ON CONFLICT (transaction_category_id) DO NOTHING;
 
 -- --------------------------------------------
+-- 2b. transaction_categories.reporting_role (issue #111)
+--
+-- What the Liabilities drilldown reads. Until #111 these categories were named
+-- by literal id in app/lib/queries/liability-categories.ts; the role carries
+-- that meaning now, and the queries resolve membership against this column at
+-- query time so a category the user adds and tags is counted without a code
+-- change.
+--
+-- These are separate UPDATE statements rather than a third column in the INSERT
+-- above, and that is load-bearing rather than stylistic: parseSeedRows in
+-- app/scripts/seed-reference-check.ts reads `(id, 'name')` tuples and nothing
+-- else, so a third column would make every row in that block stop matching, the
+-- block parse to zero rows, and three of the gates in that file pass over an
+-- empty set while reporting success. `npm run check:seed-references` now fails
+-- on an unreadable block rather than trusting this comment to be read.
+--
+-- The same gate asserts every role in the registry is assigned by at least one
+-- row below. A role no fixture category carries is a role whose aggregate the
+-- integration suite cannot tell apart from zero — which is exactly how ids 7,
+-- 8, 75 and 76 stayed missing from this file for four releases.
+--
+-- Guarded on IS NULL so a re-run is a no-op.
+-- --------------------------------------------
+UPDATE transaction_categories SET reporting_role = 'debt_principle_paid'
+    WHERE reporting_role IS NULL AND transaction_category_id IN (7, 12, 70, 75);
+
+UPDATE transaction_categories SET reporting_role = 'debt_interest_paid'
+    WHERE reporting_role IS NULL AND transaction_category_id IN (8, 13, 57, 68, 76);
+
+-- Credit cards do not split into accrued and paid the way installment loans do
+-- — the finance charge is the accrual — so id 80 belongs here, not above.
+UPDATE transaction_categories SET reporting_role = 'debt_interest_accrued'
+    WHERE reporting_role IS NULL AND transaction_category_id IN (9, 14, 69, 74, 80);
+
+UPDATE transaction_categories SET reporting_role = 'debt_cash_paydown'
+    WHERE reporting_role IS NULL AND transaction_category_id IN (29);
+
+-- --------------------------------------------
 -- 3. accounts (8 rows — all opened 18 months ago so the 12-month
 --    transaction window falls cleanly inside each account's lifetime)
 -- --------------------------------------------

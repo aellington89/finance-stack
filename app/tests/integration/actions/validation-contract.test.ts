@@ -104,9 +104,16 @@ const REGISTRY: Record<string, ActionCase> = {
   },
 
   // ── transaction types ──
-  // No createTransactionType: the table's full set ships with the app and the
-  // action was removed in Issue #109. The export-parity assertion below is what
-  // keeps this list and the module honest about that.
+  // createTransactionType was removed in Issue #109 and restored in Issue #87,
+  // now admin-only and reachable from /settings/admin rather than
+  // /settings/categories. The contract below is unchanged by that: the role
+  // check runs first, and the integration session is an admin, so what these
+  // cases exercise is still the validation.
+  createTransactionType: {
+    action: categoryActions.createTransactionType,
+    valid: { name: "Contract Probe" },
+    idFields: [],
+  },
   updateTransactionType: {
     action: categoryActions.updateTransactionType,
     valid: { transactionTypeId: "1", name: "Contract Probe" },

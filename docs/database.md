@@ -114,32 +114,57 @@ The top-right cell is the one that matters. It is not a bucket you file things i
 | `transaction_types` (12 rows) | App-owned reference | Seeded; health-checked |
 | `account_type_categories` (6 rows) | App-owned reference | Seeded; health-checked |
 | `transaction_categories` id 6 `Other` | App-owned reference | The only category that ships — `createAccount()` writes it on every account opened with an initial balance |
-| `transaction_categories` — the ~15 IDs pinned by [`liability-categories.ts`](../app/lib/queries/liability-categories.ts) | ⚠️ Unresolved | Tracked as Issue #111 — see below |
-| `transaction_categories` — everything else | Pure user data | |
+| `transaction_categories` — all other rows | Pure user data | Includes the ~15 the Liabilities drilldown reads, which opt in via `reporting_role` rather than by being named in code — see below |
 | `account_types` rows | Pure user data | `liquidity_class` gets a seeded *default* per known name, via `UPDATE … WHERE liquidity_class IS NULL`, but the rows are yours |
 
-**The one unresolved case.** The Liabilities drilldown filters on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treat them as app-owned reference data, which puts them squarely in the top-right cell. It is **not** resolved by shipping them: that would bake one person's loan portfolio into every install and still leave the set unextensible without a code change. The resolution is Issue #111 — a `liability_role` attribute a user-owned category can opt into, replacing the pinned lists. Until then, a fresh install's Liabilities drilldown reports zeros, and the pinned names are enforced against the test fixture so the gap cannot widen unnoticed.
+**The case that used to be unresolved.** The Liabilities drilldown filtered on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treated them as app-owned reference data, which put them squarely in the top-right cell. Shipping them was rejected: it would bake one person's loan portfolio into every install and still leave the set unextensible without a code change.
+
+**Issue #111 resolved it by moving the row down, not left.** `transaction_categories` now carries a nullable `reporting_role`, and the aggregates filter on that column instead of on a list of ids. The meaning is an application concept the code owns; *which* categories carry it is the user's answer, given in `/settings/categories` and read at query time. A category you add and tag today is counted today. A fresh install has none tagged and reports zeros — which is now correct rather than a symptom, because it has no debt categories either.
+
+### Reporting roles
+
+*Added in Issue #111.* A reporting role is what a transaction category **means** to an aggregate, stored on the row rather than inferred from its id or name.
+
+| Role | What it tags |
+|---|---|
+| `debt_principle_paid` | The principal portion of a loan payment, posted on the liability account |
+| `debt_interest_paid` | The interest portion of a loan payment, posted on the liability account |
+| `debt_interest_accrued` | Interest charged to the balance rather than paid — accrued loan interest, or a credit-card finance charge |
+| `debt_cash_paydown` | A payment reducing the balance without a principal/interest split, e.g. a credit-card applied credit |
+
+Declared in [`lib/constants/reporting-roles.ts`](../app/lib/constants/reporting-roles.ts), which every consumer reads — the query layer, the settings UI, the CI gate and this table's contents.
+
+**Keys are namespaced by domain** (`debt_*`) and the column is `reporting_role`, not `liability_role`. Nothing about the mechanism is liability-specific: a future metric wanting `income_interest_earned` or `investment_dividend` adds a registry entry and a migration widening the CHECK, with no collision and no rename. Only the `debt` domain ships today, deliberately — a role no query reads would be a permitted value that means nothing.
+
+**Only `transaction_categories` carries the column.** `transaction_types` and `account_type_categories` ship with the application, so code naming a specific row of theirs by id is legitimate under the taxonomy rather than a defect. Adding the column there would be a column nothing reads.
+
+**The role set is written twice, and gated.** It appears in the registry and again in the `CHECK` constraint in [`drizzle/schema.ts`](../app/drizzle/schema.ts). Generating one from the other would need `sql.raw`, which `eslint.config.mjs` bans repo-wide — so `npm run check:seed-references` proves the two equal in both directions instead, the same posture `SHIPPED_ROWS` has against `shared-lookups.sql`. A role in the registry but not the constraint is a value the UI offers and the database rejects; one in the constraint but not the registry is a value the database accepts that no query reads.
+
+**Upgrading an existing install.** Migration `0005` backfills the roles onto the fifteen categories the old pinned lists named, matched on **id and name together** — the same self-limiting rule row protection uses, so an install where id 7 is somebody's "Coffee" category is left alone. The backfill lives in the migration rather than in `shared-lookups.sql` on purpose: that file re-runs on every `docker compose up`, where an `IS NULL` guard would silently put a role back on a category you had deliberately cleared. Categories the backfill did not match stay untagged and can be tagged in `/settings/categories`.
 
 ### Protected rows
 
 *Added in Issue #109.* The taxonomy above says which rows the application owns. Protection is what stops the UI handing them to the user anyway: `/settings/categories` renders a lock instead of the edit and delete buttons, and the server actions in [`lib/actions/categories.ts`](../app/lib/actions/categories.ts) refuse the same rows so a crafted form submit gets no further.
 
-Two rules, both in [`lib/constants/protected-rows.ts`](../app/lib/constants/protected-rows.ts):
+One rule, in [`lib/constants/protected-rows.ts`](../app/lib/constants/protected-rows.ts):
 
 | Rule | Matched on | Rows |
 | --- | --- | --- |
 | **App-owned** | id | Every row `shared-lookups.sql` ships — all 12 `transaction_types`, all 6 `account_type_categories`, `transaction_categories` id 6. Declared as `SHIPPED_ROWS` in [`reference-ids.ts`](../app/lib/constants/reference-ids.ts). |
-| **Liability pin** | id **and** current name | The ~15 `transaction_categories` rows [`liability-categories.ts`](../app/lib/queries/liability-categories.ts) pins. |
 
 **Shipping is the criterion, not being named by code.** `transaction_types` id 3 `Refund` is in no `SEED_REFERENCES` group and no query pins it, but it arrives identically on every install and renaming it buys nothing but divergence. `SEED_REFERENCES` stays the narrower "code depends on this specific row" list that drives the health check; `SHIPPED_ROWS` is a superset of it.
 
-**The pins match on name because they are not ours.** Those rows are the user's — see the unresolved case above — and are pinned by id only because the queries have no better handle on them until Issue #111. Locking id 7 outright would lock whatever unrelated category occupies id 7 on somebody else's database. Matching the name too makes protection self-limiting: a fresh install matches none of them and locks nothing.
+**There used to be a second rule, and Issue #111 removed it.** *Liability pin* locked the ~15 `transaction_categories` rows the Debt Service and Debt Waterfall queries named by id — matched on id **and** current name, so that protection was self-limiting on an install where those ids held unrelated rows. It existed only because the queries had no better handle on those rows. Now that `reporting_role` carries the meaning, renaming "Mortgage Principle" drops it out of nothing, so there is nothing left to protect it from. **Those fifteen categories are fully editable and deletable again** — they are the user's rows, which is what the taxonomy always said they were.
 
 **Renaming back is always allowed.** The rule is "the name must equal the canonical name", not "this row is frozen". An install that renamed id 6 before this landed keeps that name, and a blanket refusal would strand `/api/health/seed-data` at 503 with no way out of the UI. The only rename protection permits is the one that restores the shipped name. Deletes are refused outright.
 
 **It is an application guard, not a database one.** A `BEFORE UPDATE OR DELETE` trigger was considered and rejected: [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) re-converges these rows with `ON CONFLICT DO UPDATE`, and the manual `UPDATE` above is the documented repair path. Both are legitimate, and a trigger would break them to stop a mistake nobody makes through `psql`.
 
-`transaction_types` additionally accepts no new rows: the Add button is gone from `/settings/categories` and `createTransactionType` was deleted rather than guarded, because a thirteenth type is a row nothing in the codebase would recognise. Rows an install already created past id 12 are untouched and stay editable.
+`transaction_types` is not on `/settings/categories` at all. Issue #109 removed the Add button and deleted `createTransactionType` rather than guarding it, because a thirteenth type created there is a row nothing in the codebase would recognise — which left a card rendering twelve padlocks and offering no action, since every row the table ships is protected. Rows an install created past id 12 before that are untouched and still editable, on the admin page below.
+
+**Where both tables live now.** [Issue #87](https://github.com/aellington89/finance-stack/issues/87) moved `transaction_types` and `account_type_categories` whole to `/settings/admin`, which requires `role = 'admin'`; `account_type_categories` had never had a card on `/settings/categories` in the first place. Both are the basis of every KPI, so a wrong edit is not one bad row but every dashboard at once — see [Roles](auth.md#roles) for why the split lands there rather than on the whole settings page.
+
+Protection and the role gate answer different questions and are not redundant. Protection says *this row ships with the app* and applies to everyone including admins; the role gate says *this table is reference data* and covers the rows protection cannot know about — the ones an install minted for itself past the shipped range. `transaction_types` update and delete were briefly gated on session alone, on the reasoning that protection already refused all 12 shipped rows so only a self-minted row was reachable. That had the sign backwards: a self-minted row is exactly the user-owned reference data the KPI classification depends on.
 
 ### Adding a new reference row
 
@@ -158,11 +183,31 @@ If it is a fixture row that only tests need, it goes in [`init-db/seeds/finances
 shared-lookups.sql          finances-test-mock-data.sql
   (app-owned: id 6)           (Finances_Test fixture rows)
         ▲                              ▲          ▲
-        │ SEED_REFERENCES              │ pinned   │ must be a subset of
-        │ must match                   │ IDs must │ (it is drift-correction,
-        │                              │ exist in │  not a definition)
-  reference-ids.ts          liability-categories.ts   vitest-setup.ts
+        │ SEED_REFERENCES              │ every    │ must be a subset of
+        │ must match                   │ role     │ (it is drift-correction,
+        │                              │ covered  │  not a definition)
+  reference-ids.ts          reporting-roles.ts      vitest-setup.ts
 ```
+
+> **Do not add a column to those `INSERT` blocks.** The gate's parser reads
+> `(<id>, '<name>')` tuples and nothing else, so a third column does not raise an
+> error — every row in the block stops matching, the block parses to zero rows,
+> and three of the checks above pass over an empty set while reporting success.
+> Carry extra columns in a separate `UPDATE`, as the `reporting_role` assignments
+> do. `npm run check:seed-references` now fails on an unreadable block rather
+> than relying on this paragraph being read.
+
+### Adding a reporting role
+
+Roles are declared as data, so a new one is two edits and a gate run:
+
+1. Add the entry to `REPORTING_ROLES` in [`app/lib/constants/reporting-roles.ts`](../app/lib/constants/reporting-roles.ts) — key (namespaced by domain), label and description. The label and description are what `/settings/categories` renders.
+2. If an aggregate should read it, add it to the relevant group constant in the same file (e.g. `DEBT_PAYMENT_ROLES`). A role in no group is a tag the UI offers that no query reads.
+3. Widen the `CHECK` on `transaction_categories` in [`app/drizzle/schema.ts`](../app/drizzle/schema.ts), then `npm run db:generate -- --name <description>` so a migration carries it.
+4. Tag at least one category with it in [`init-db/seeds/finances-test-mock-data.sql`](../init-db/seeds/finances-test-mock-data.sql), via a separate `UPDATE` — the gate requires it, because an aggregate reading a role no fixture row carries is one the integration suite cannot tell apart from zero.
+5. Run `npm run check:seed-references`. It fails if the registry and the CHECK disagree in either direction, or if a role has no fixture coverage.
+
+A role for a **new domain** (assets, income) is the same five steps; nothing is liability-specific. What it additionally needs is a query that reads it — a permitted value no aggregate consumes is the "convenience seed" cell of the taxonomy, and the question to ask is why it exists.
 
 ## Roles & Privileges
 

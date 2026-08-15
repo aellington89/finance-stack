@@ -36,6 +36,20 @@
       "when": 1785383912268,
       "tag": "0004_add_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786831882649,
+      "tag": "0005_add_transaction_category_reporting_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786832929042,
+      "tag": "0006_add_users_role_check",
+      "breakpoints": true
     }
   ]
 }

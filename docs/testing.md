@@ -16,9 +16,13 @@ docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh Fi
 
 The integration test `beforeAll` (in [`app/tests/integration/vitest-setup.ts`](../app/tests/integration/vitest-setup.ts)) upserts the full production row set for `account_type_categories` (6 rows), `transaction_types` (12 rows) and the `transaction_categories` rows tests depend on, before any test runs. This is a drift-correction safety net — the seed files already populate these tables on first launch. No manual seed step is required.
 
-**That hook is a safety net, not a definition — and CI now enforces the difference (Issue #178).** A fixture row belongs in [`init-db/seeds/finances-test-mock-data.sql`](../init-db/seeds/finances-test-mock-data.sql), which is what the `migrate` service actually applies to `Finances_Test`. `npm run check:seed-references` asserts that every `transaction_categories` row the `beforeAll` upserts also exists in that seed with the same name, and that every category ID pinned by [`liability-categories.ts`](../app/lib/queries/liability-categories.ts) is in there too.
+**That hook is a safety net, not a definition — and CI now enforces the difference (Issue #178).** A fixture row belongs in [`init-db/seeds/finances-test-mock-data.sql`](../init-db/seeds/finances-test-mock-data.sql), which is what the `migrate` service actually applies to `Finances_Test`. `npm run check:seed-references` asserts that every `transaction_categories` row the `beforeAll` upserts also exists in that seed with the same name, and that the seed tags at least one category with **every reporting role** the query layer can filter on.
 
 The check is directional: the seed may hold rows the hook does not bother re-converging, but never the reverse. Adding a row *only* to `vitest-setup.ts` fails the gate — which is the point. Four liability categories (ids 7, 8, 75 and 76) were pinned by shipping queries and missing from the seed for four releases, and the suite passed anyway because this hook supplied them at startup; the tests were asserting debt totals over a short set without anyone noticing.
+
+The role-coverage half is that same guarantee re-expressed after Issue #111 replaced the pinned IDs with `transaction_categories.reporting_role`. A role no fixture category carries is a role whose aggregate the suite cannot distinguish from zero, so a test asserting over it proves nothing — exactly the shape of the ids 7/8/75/76 gap. The hook re-converges the roles too, unconditionally rather than guarded on `IS NULL`, because a test that retags or clears a category must not leave the next file asserting over a changed set.
+
+> **The `transaction_categories` `INSERT` blocks must stay `(<id>, '<name>')` tuples**, in both the fixture and the hook. The gate's parser reads nothing else, so a third column makes every row in the block stop matching and the checks pass over an empty set — silently. Roles are applied by separate `UPDATE` statements for that reason, and the gate now fails on a block it cannot read rather than trusting the convention to hold.
 
 At runtime, [`/api/health/seed-data`](../app/app/api/health/seed-data/route.ts) performs the equivalent check live: it verifies every ID referenced from [`app/lib/constants/reference-ids.ts`](../app/lib/constants/reference-ids.ts) still resolves to its canonical seed-row name, and returns 503 with a `drift[]` array if any row is missing or renamed. It requires a session and answers 401 without one. Its sibling [`/api/health`](../app/app/api/health/route.ts) is liveness only — one `SELECT 1` plus the build stamp — and is the endpoint the Docker healthcheck and the release smoke test poll (Issue #191). See the Issue #123 changelog entry for the drift response shape.
 
@@ -57,6 +61,8 @@ npm run test:coverage
 
 Every server action starts with a `requireActionUser()` session check (Issue #120), so [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) mocks `@/auth` with a default **authenticated** session — action tests exercise business logic without any sign-in ceremony.
 
+That hook also inserts the matching row into `users`, and since [Issue #87](https://github.com/aellington89/finance-stack/issues/87) both halves are load-bearing: `requireAdminUser()` reads the role from the **database** rather than from the session token, so a mocked session with no backing row is refused by every admin-gated action. If a lookup-table test starts failing with "You do not have permission", that is the gate working rather than the mock being wrong.
+
 To test the unauthenticated path, override the mock for a single call:
 
 ```ts
@@ -73,6 +79,8 @@ it("rejects an unauthenticated call", async () => {
 ```
 
 See [`tests/integration/actions/account-auth.test.ts`](../app/tests/integration/actions/account-auth.test.ts) for the authed + unauthed pair, and [`tests/integration/auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) for credential verification against the real `users` table (created rows are cleaned up in `afterAll`).
+
+To test a **role**, create the `users` row you want to be and point the mock at it — the role check reads that row, so mocking the token's claim alone proves nothing. Use `mockResolvedValue` rather than `...Once`, because the admin path reads the session twice (the session/rate gate, then the role lookup), and restore the default session in `afterEach`: `fileParallelism: false` means a leaked mock reaches the next file. See [`tests/integration/actions/categories-admin.test.ts`](../app/tests/integration/actions/categories-admin.test.ts), including the stale-token case where the cookie claims `admin` and the row says `user`.
 
 ## Rate Limiting in Tests
 

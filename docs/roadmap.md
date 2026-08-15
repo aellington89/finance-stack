@@ -111,7 +111,7 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > phases below: a milestone maps to a version *band*, and you cut when ready.
 
 ### v0.3.0 — Phase 2 (Auth-gated lookup-table protection)
-- [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users
+- [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users *(superseded by #87 — see the note below)*
 - [#87](https://github.com/aellington89/finance-stack/issues/87) Restrict user-level editing of static lookup tables
 - [#109](https://github.com/aellington89/finance-stack/issues/109) Protect the lookup rows the app owns; drop Transaction Type creation
 - [#178](https://github.com/aellington89/finance-stack/issues/178) Define the seed-data taxonomy
@@ -135,6 +135,21 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > shipped rows locked, and `account_type_categories` has no UI to restrict. What
 > is left of #87 is the role gate and the admin screen — which is also where a
 > legitimate future `transaction_types` insert would live.
+>
+> **#111 and #87 then closed the milestone, and #111 removed a piece of #109.**
+> The liability pins are gone — `transaction_categories.reporting_role` carries
+> what the ids used to mean, so those fifteen rows are ordinary user data again
+> and the second protection rule went with them. #87 landed as the role gate plus
+> `/settings/admin`, and restored `createTransactionType` behind it.
+>
+> **#81 is superseded rather than outstanding.** It proposed gating all of
+> `/settings/categories` on `admin`, which contradicts #87's requirement that
+> `transaction_categories` and `account_types` CRUD stay available to regular
+> users — and #111 sharpened the conflict, since that page is now where a
+> category is tagged with a reporting role. #87 won: the two restricted tables
+> moved to their own admin-only page and the rest stayed open, which meets #81's
+> acceptance criteria in substance. An integration test asserts the regular-user
+> CRUD still works, so the decision cannot be quietly reversed.
 
 ### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
 - [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*

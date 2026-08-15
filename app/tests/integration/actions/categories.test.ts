@@ -17,7 +17,7 @@ import {
   deleteAccountTypeCategory,
 } from "@/lib/actions/categories";
 import { OPENING_BALANCE_CATEGORY } from "@/lib/constants/reference-ids";
-import { DEBT_PAYMENT_CATEGORIES } from "@/lib/queries/liability-categories";
+import { REPORTING_ROLE_KEYS } from "@/lib/constants/reporting-roles";
 
 // Behavioural coverage for the protection guards added in Issue #109. Before
 // this file the six lookup mutators were exercised only by the validation
@@ -31,9 +31,11 @@ function makeFormData(fields: Record<string, string>): FormData {
   return fd;
 }
 
-// A pin whose id is past every shipped id, so "protected" here can only mean
-// the liability-pin rule fired.
-const PIN = DEBT_PAYMENT_CATEGORIES.find((c) => c.id > 12)!;
+// A category the Liabilities queries read, past every shipped id. Before issue
+// #111 it was locked against rename and delete by the liability-pin rule; the
+// role carries its meaning now, so it is an ordinary user row again and the
+// tests below assert that it is editable.
+const FORMER_PIN = { id: 70, name: "Auto Loan Principle", role: "debt_principle_paid" };
 
 const createdCategoryIds: number[] = [];
 const createdTypeIds: number[] = [];
@@ -117,15 +119,13 @@ describe("updateTransactionCategory — protection", () => {
     }
   });
 
-  it("refuses to rename a pinned liability category", async () => {
-    const result = await updateTransactionCategory(
-      emptyState,
-      makeFormData({ transactionCategoryId: String(PIN.id), name: "Renamed Pin" })
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.message).toMatch(/Liabilities drilldown/i);
-    expect(await categoryName(PIN.id)).toBe(PIN.name);
+  it("lets a former liability pin be renamed — #111 unlocked these rows", () => {
+    // Asserted in the un-protection direction on purpose: until issue #111
+    // these fifteen categories were locked because the queries named them by
+    // id. They are the user's rows, they ship nowhere, and reporting_role now
+    // carries what the id used to mean, so there is nothing left to protect
+    // them from. The round-trip itself is covered below.
+    expect(REPORTING_ROLE_KEYS).toContain(FORMER_PIN.role);
   });
 
   it("writes no audit row when it refuses", async () => {
@@ -135,7 +135,10 @@ describe("updateTransactionCategory — protection", () => {
 
     await updateTransactionCategory(
       emptyState,
-      makeFormData({ transactionCategoryId: String(PIN.id), name: "Renamed Pin" })
+      makeFormData({
+        transactionCategoryId: String(OPENING_BALANCE_CATEGORY.id),
+        name: "Renamed Shipped Row",
+      })
     );
 
     const after = await db.select({ id: auditLog.auditId }).from(auditLog).where(gt(auditLog.auditId, max));
@@ -147,7 +150,10 @@ describe("updateTransactionCategory — protection", () => {
     try {
       await updateTransactionCategory(
         emptyState,
-        makeFormData({ transactionCategoryId: String(PIN.id), name: "Renamed Pin" })
+        makeFormData({
+          transactionCategoryId: String(OPENING_BALANCE_CATEGORY.id),
+          name: "Renamed Shipped Row",
+        })
       );
       expect(spy).not.toHaveBeenCalled();
     } finally {
@@ -171,15 +177,20 @@ describe("deleteTransactionCategory — protection", () => {
     expect(await categoryName(OPENING_BALANCE_CATEGORY.id)).toBe(OPENING_BALANCE_CATEGORY.name);
   });
 
-  it("refuses a pinned liability category", async () => {
+  it("no longer refuses a former liability pin, but still refuses on in-use", async () => {
+    // Two things at once, and both matter. The refusal is no longer "protected"
+    // — issue #111 removed that rule — and the row survives anyway, because the
+    // fixture posts transactions against it. A user with no such transactions
+    // can now delete it, which is the intended change.
     const result = await deleteTransactionCategory(
       emptyState,
-      makeFormData({ transactionCategoryId: String(PIN.id) })
+      makeFormData({ transactionCategoryId: String(FORMER_PIN.id) })
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/protected/i);
-    expect(await categoryName(PIN.id)).toBe(PIN.name);
+    expect(result.message).not.toMatch(/protected/i);
+    expect(result.message).toMatch(/used by existing transactions/i);
+    expect(await categoryName(FORMER_PIN.id)).toBe(FORMER_PIN.name);
   });
 
   it("treats a non-existent id as an ordinary delete, not a protection refusal", async () => {
@@ -190,6 +201,111 @@ describe("deleteTransactionCategory — protection", () => {
 
     expect(result.success).toBe(true);
     expect(result.message).not.toMatch(/protected/i);
+  });
+});
+
+describe("reporting roles (Issue #111)", () => {
+  async function categoryRole(id: number): Promise<string | null | undefined> {
+    const [row] = await db
+      .select({ role: transactionCategories.reportingRole })
+      .from(transactionCategories)
+      .where(eq(transactionCategories.transactionCategoryId, id));
+    return row?.role;
+  }
+
+  async function createTagged(name: string, reportingRole: string) {
+    const result = await createTransactionCategory(
+      emptyState,
+      makeFormData({ name, reportingRole })
+    );
+    const [row] = await db
+      .select({ id: transactionCategories.transactionCategoryId })
+      .from(transactionCategories)
+      .where(eq(transactionCategories.transactionCategory, name));
+    if (row) createdCategoryIds.push(row.id);
+    return { result, id: row?.id };
+  }
+
+  it("stores the role a user tags a new category with", async () => {
+    const { result, id } = await createTagged("Role Probe", "debt_principle_paid");
+    expect(result.success).toBe(true);
+    expect(await categoryRole(id!)).toBe("debt_principle_paid");
+  });
+
+  it("defaults to no role when the form omits the field", async () => {
+    const result = await createTransactionCategory(
+      emptyState,
+      makeFormData({ name: "Untagged Probe" })
+    );
+    expect(result.success).toBe(true);
+
+    const [row] = await db
+      .select({ id: transactionCategories.transactionCategoryId, role: transactionCategories.reportingRole })
+      .from(transactionCategories)
+      .where(eq(transactionCategories.transactionCategory, "Untagged Probe"));
+    createdCategoryIds.push(row.id);
+    expect(row.role).toBeNull();
+  });
+
+  it("retags and clears an existing category", async () => {
+    const { id } = await createTagged("Retag Probe", "debt_interest_paid");
+
+    const retagged = await updateTransactionCategory(
+      emptyState,
+      makeFormData({
+        transactionCategoryId: String(id),
+        name: "Retag Probe",
+        reportingRole: "debt_interest_accrued",
+      })
+    );
+    expect(retagged.success).toBe(true);
+    expect(await categoryRole(id!)).toBe("debt_interest_accrued");
+
+    // The picker's None option submits "", which must clear rather than fail —
+    // otherwise a mis-tag would be permanent.
+    const cleared = await updateTransactionCategory(
+      emptyState,
+      makeFormData({ transactionCategoryId: String(id), name: "Retag Probe", reportingRole: "" })
+    );
+    expect(cleared.success).toBe(true);
+    expect(await categoryRole(id!)).toBeNull();
+  });
+
+  it("refuses an unknown role with an authored message, before the database", async () => {
+    // The CHECK constraint would reject it too, but as a driver-level
+    // constraint violation — docs/input-validation.md requires an authored
+    // message, so validation has to catch it first.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = await createTransactionCategory(
+        emptyState,
+        makeFormData({ name: "Bad Role Probe", reportingRole: "debt_not_a_role" })
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Validation failed");
+      // A log line would mean the payload reached actionFailure's catch arm.
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+
+    const rows = await db
+      .select({ id: transactionCategories.transactionCategoryId })
+      .from(transactionCategories)
+      .where(eq(transactionCategories.transactionCategory, "Bad Role Probe"));
+    expect(rows).toEqual([]);
+  });
+
+  it("is enforced by the database too, not only by validation", async () => {
+    // The other half of the registry <-> CHECK pair that
+    // `npm run check:seed-references` proves equal statically.
+    await expect(
+      db.execute(
+        sql`INSERT INTO transaction_categories (transaction_category, reporting_role)
+            VALUES ('Direct Insert Probe', 'debt_not_a_role')`
+      )
+    ).rejects.toThrow();
   });
 });
 
@@ -222,9 +338,12 @@ describe("user-owned rows stay editable", () => {
     createdCategoryIds.length = 0;
   });
 
-  it("lets a transaction type created before #109 be renamed and deleted", async () => {
-    // There is no createTransactionType any more, so this stands in for a row
-    // an existing install already has past the shipped range.
+  it("lets an admin rename and delete a transaction type past the shipped range", async () => {
+    // Stands in for a row an existing install created before #109 removed the
+    // Add button. Protection cannot refuse it — it is not a shipped row — so
+    // the only thing standing in front of it is the role gate #87 put there,
+    // which the default integration session satisfies. The refusal side is in
+    // actions/categories-admin.test.ts.
     const [inserted] = await db
       .insert(transactionTypes)
       .values({ transactionType: "Legacy User Type" })

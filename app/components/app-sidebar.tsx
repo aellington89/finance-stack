@@ -14,7 +14,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { LayoutDashboardIcon, LandmarkIcon, SettingsIcon, InfoIcon, LogOutIcon } from "lucide-react";
+import { LayoutDashboardIcon, LandmarkIcon, SettingsIcon, InfoIcon, LogOutIcon, ShieldIcon } from "lucide-react";
 import { VersionBadge } from "@/components/version-badge";
 import { signOutAction } from "@/lib/actions/auth";
 
@@ -35,14 +35,24 @@ const navItems = [
     icon: SettingsIcon,
   },
   {
+    title: "Admin",
+    href: "/settings/admin",
+    icon: ShieldIcon,
+    // Rendered only for admins (Issue #87). This is UX, not enforcement — the
+    // page notFound()s a non-admin and every action behind it re-checks the
+    // role against the database.
+    adminOnly: true,
+  },
+  {
     title: "About",
     href: "/settings/about",
     icon: InfoIcon,
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <Sidebar>
@@ -56,7 +66,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {visibleItems.map((item) => {
                 const isActive =
                   item.href === "/dashboard"
                     ? pathname.startsWith("/dashboard")

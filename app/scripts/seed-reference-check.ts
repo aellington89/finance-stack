@@ -48,24 +48,97 @@ export interface Mismatch {
 // `VALUES ... ON CONFLICT` and are ignored. Names are single-quoted with SQL ''
 // escaping; the seed file is hand-authored and stable, so per-block regex is
 // sufficient (see #155).
+//
+// [\s\S]*? (rather than the `s`/dotAll flag) keeps the multi-line VALUES body
+// match compatible with the ES2017 tsconfig target. matchAll clones the regex
+// rather than advancing this one's lastIndex, so sharing it across the two
+// functions below is safe.
+const BLOCK_RE =
+  /INSERT\s+INTO\s+(\w+)\s*\([^)]*\)\s*(?:OVERRIDING\s+SYSTEM\s+VALUE\s+)?VALUES\s*([\s\S]*?)\s*ON\s+CONFLICT/gi;
+
+// The 2-tuple contract: exactly `(<integer>, '<name>')`. A third column makes a
+// row group stop matching — see findUnparsedSeedBlocks.
+const ROW_RE = /\(\s*(\d+)\s*,\s*'((?:[^']|'')*)'\s*\)/g;
+
 export function parseSeedRows(sql: string): Map<string, Map<number, string>> {
   const tables = new Map<string, Map<number, string>>();
-  // [\s\S]*? (rather than the `s`/dotAll flag) keeps the multi-line VALUES body
-  // match compatible with the ES2017 tsconfig target.
-  const blockRe =
-    /INSERT\s+INTO\s+(\w+)\s*\([^)]*\)\s*(?:OVERRIDING\s+SYSTEM\s+VALUE\s+)?VALUES\s*([\s\S]*?)\s*ON\s+CONFLICT/gi;
-  const rowRe = /\(\s*(\d+)\s*,\s*'((?:[^']|'')*)'\s*\)/g;
 
-  for (const block of sql.matchAll(blockRe)) {
+  for (const block of sql.matchAll(BLOCK_RE)) {
     const table = block[1].toLowerCase();
     const rows = tables.get(table) ?? new Map<number, string>();
-    for (const row of block[2].matchAll(rowRe)) {
+    for (const row of block[2].matchAll(ROW_RE)) {
       rows.set(Number(row[1]), row[2].replace(/''/g, "'"));
     }
     tables.set(table, rows);
   }
 
   return tables;
+}
+
+// ── Parser blind-spot guard ───────────────────────────────────────────────
+// parseSeedRows reads `(id, 'name')` and nothing else, which makes its failure
+// mode silence rather than noise: give one of these INSERT blocks a third
+// column and every row in it stops matching, the block parses to zero rows, and
+// each gate built on top — reference agreement, the shipped set, fixture
+// agreement — passes over an empty set while reporting success.
+//
+// That is not hypothetical. Issue #111 needed a reporting_role on
+// transaction_categories, and the obvious way to seed it was a third column in
+// the fixture's VALUES list, which would have quietly blinded three of the four
+// checks in this file. Roles are applied by separate UPDATE statements instead,
+// and this guard is what makes that a rule rather than a thing someone
+// remembered once.
+//
+// Counting is done after blanking string literals, so a parenthesis inside a
+// category name cannot be mistaken for the start of a row group.
+//
+// Scoped to the three lookup tables whose parsed rows a gate actually reads.
+// The seed files also insert into account_types, accounts and transactions with
+// four to seven columns apiece, and parseSeedRows has always returned nothing
+// for those — harmlessly, because nothing looks them up. Flagging them would be
+// a false positive that trains people to ignore this check, which is the one
+// outcome worse than not having it.
+
+export const PARSED_TABLES: ReadonlySet<string> = new Set([
+  "transaction_categories",
+  "transaction_types",
+  "account_type_categories",
+]);
+
+export interface UnparsedBlock {
+  table: string;
+  /** Row groups present in the VALUES body. */
+  declared: number;
+  /** Rows parseSeedRows actually read out of it. */
+  parsed: number;
+}
+
+function countRowGroups(valuesBody: string): number {
+  const withoutLiterals = valuesBody.replace(/'(?:[^']|'')*'/g, "''");
+  return (withoutLiterals.match(/\(/g) ?? []).length;
+}
+
+/**
+ * One entry per gate-relevant INSERT block whose VALUES body holds row groups
+ * parseSeedRows could not read. Empty means every such block matches the
+ * 2-tuple contract.
+ */
+export function findUnparsedSeedBlocks(sql: string): UnparsedBlock[] {
+  const unparsed: UnparsedBlock[] = [];
+
+  for (const block of sql.matchAll(BLOCK_RE)) {
+    const table = block[1].toLowerCase();
+    if (!PARSED_TABLES.has(table)) continue;
+
+    const declared = countRowGroups(block[2]);
+    const parsed = [...block[2].matchAll(ROW_RE)].length;
+
+    if (declared !== parsed) {
+      unparsed.push({ table, declared, parsed });
+    }
+  }
+
+  return unparsed;
 }
 
 // Cross-check each SEED_REFERENCES (table, id, name) against the parsed seed.
@@ -185,47 +258,71 @@ export function findShippedSetMismatches(
 // service actually applies. The two checks below make the other consumers
 // agree with it rather than quietly diverging:
 //
-//   * every ID pinned by liability-categories.ts must exist in (2) with a
-//     matching name — ids 7/8/75/76 were pinned by shipping queries and absent
-//     from the fixture, so tests asserted debt totals over a short set;
+//   * every reporting role the query layer reads must be carried by at least
+//     one fixture category, so a test asserting a debt total is asserting over
+//     a set that actually contains something;
 //   * (3) must be a subset of (2) with matching names — it is what hid the gap,
 //     by upserting a superset at test-suite startup.
 //
 // (3)'s SQL is a template literal in a .ts file, but it is the same
 // hand-authored INSERT shape, so parseSeedRows reads it without special-casing.
+//
+// The first check used to assert that every transaction_category_id pinned by
+// liability-categories.ts existed in the fixture under the expected name. Issue
+// #111 deleted those pins — the roles replaced them — but the property they
+// were protecting outlived them, and is the reason this half exists at all:
+// ids 7, 8, 75 and 76 were pinned by shipping queries and missing from the
+// fixture for four releases, so the debt-service tests quietly asserted totals
+// over a short set. Role coverage is the same guarantee re-expressed against
+// what the queries now filter on. A role the fixture never assigns is a role
+// whose aggregate no test can distinguish from zero.
 
 export type FixtureGapReason =
-  | "pin-missing"
-  | "pin-name"
+  | "role-uncovered"
   | "setup-missing"
   | "setup-name";
 
 export interface FixtureGap {
   reason: FixtureGapReason;
-  id: number;
-  expected: string;
-  // The fixture-side name for a "*-name" gap; null when the row is absent.
+  // Set for "role-uncovered"; null for the setup-* reasons.
+  role: string | null;
+  // Set for the setup-* reasons; null for "role-uncovered".
+  id: number | null;
+  expected: string | null;
+  // The fixture-side name for "setup-name"; null otherwise.
   actual: string | null;
 }
 
 const FIXTURE_TABLE = "transaction_categories";
 
-// pins: the (id, name) pairs liability-categories.ts filters on.
+// Roles are assigned by standalone `UPDATE transaction_categories SET
+// reporting_role = '<key>' WHERE ...` statements rather than by a third column
+// in the INSERT block, because parseSeedRows reads `(id, 'name')` tuples only —
+// see findUnparsedSeedBlocks for what a third column would silently do to every
+// other check in this file.
+const ROLE_ASSIGNMENT_RE =
+  /UPDATE\s+transaction_categories\s+SET\s+reporting_role\s*=\s*'((?:[^']|'')*)'/gi;
+
+export function parseFixtureRoleAssignments(sql: string): Set<string> {
+  return new Set(
+    [...sql.matchAll(ROLE_ASSIGNMENT_RE)].map((m) => m[1].replace(/''/g, "'")),
+  );
+}
+
+// roles: every reporting-role key the query layer can filter on.
 // fixtureSql / setupSql: finances-test-mock-data.sql and vitest-setup.ts.
 export function findFixtureGaps(
-  pins: ReadonlyArray<{ id: number; name: string }>,
+  roles: ReadonlyArray<string>,
   fixtureSql: string,
   setupSql: string,
 ): FixtureGap[] {
   const gaps: FixtureGap[] = [];
   const fixture = parseSeedRows(fixtureSql).get(FIXTURE_TABLE) ?? new Map<number, string>();
+  const assigned = parseFixtureRoleAssignments(fixtureSql);
 
-  for (const { id, name } of pins) {
-    const actual = fixture.get(id);
-    if (actual === undefined) {
-      gaps.push({ reason: "pin-missing", id, expected: name, actual: null });
-    } else if (actual !== name) {
-      gaps.push({ reason: "pin-name", id, expected: name, actual });
+  for (const role of roles) {
+    if (!assigned.has(role)) {
+      gaps.push({ reason: "role-uncovered", role, id: null, expected: null, actual: null });
     }
   }
 
@@ -236,13 +333,69 @@ export function findFixtureGaps(
   for (const [id, name] of setup) {
     const actual = fixture.get(id);
     if (actual === undefined) {
-      gaps.push({ reason: "setup-missing", id, expected: name, actual: null });
+      gaps.push({ reason: "setup-missing", role: null, id, expected: name, actual: null });
     } else if (actual !== name) {
-      gaps.push({ reason: "setup-name", id, expected: name, actual });
+      gaps.push({ reason: "setup-name", role: null, id, expected: name, actual });
     }
   }
 
   return gaps;
+}
+
+// ── Reporting-role agreement ──────────────────────────────────────────────
+// The fifth assertion (issue #111). The set of valid reporting roles is written
+// twice and cannot be written once: lib/constants/reporting-roles.ts declares
+// it in TypeScript, and drizzle/schema.ts spells it again in the CHECK
+// constraint on transaction_categories. Building the second from the first
+// would need sql.raw to interpolate the list into the constraint expression,
+// and eslint.config.mjs bans sql.raw repo-wide — docs/input-validation.md is
+// explicit that the ban is absolute rather than a rule with exceptions, which
+// is what lets it be enforced by lint at all.
+//
+// So the two are proved equal instead, exactly as SHIPPED_ROWS is proved equal
+// to shared-lookups.sql. Both directions matter and for different reasons: a
+// role in the registry but not the constraint is a value the UI offers and the
+// database rejects, and a role in the constraint but not the registry is a
+// value the database accepts that no query will ever read.
+//
+// This gate covers registry -> schema.ts. The CI schema-drift gate carries
+// schema.ts -> the applied migrations, and an integration test asserts the live
+// database rejects an unknown role, so the chain runs end to end.
+
+export type RoleSetReason = "missing-in-schema" | "missing-in-registry" | "no-constraint";
+
+export interface RoleSetMismatch {
+  reason: RoleSetReason;
+  /** null only for "no-constraint". */
+  role: string | null;
+}
+
+const ROLE_CHECK_RE =
+  /transaction_categories_reporting_role_check[\s\S]*?ARRAY\s*\[([\s\S]*?)\]/;
+
+export function findReportingRoleMismatches(
+  registryKeys: ReadonlyArray<string>,
+  schemaTs: string,
+): RoleSetMismatch[] {
+  const block = ROLE_CHECK_RE.exec(schemaTs);
+  if (!block) {
+    return [{ reason: "no-constraint", role: null }];
+  }
+
+  const schemaRoles = new Set(
+    [...block[1].matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1].replace(/''/g, "'")),
+  );
+  const registry = new Set(registryKeys);
+  const mismatches: RoleSetMismatch[] = [];
+
+  for (const role of registry) {
+    if (!schemaRoles.has(role)) mismatches.push({ reason: "missing-in-schema", role });
+  }
+  for (const role of schemaRoles) {
+    if (!registry.has(role)) mismatches.push({ reason: "missing-in-registry", role });
+  }
+
+  return mismatches;
 }
 
 // ── Seed safety contract ──────────────────────────────────────────────────
