@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-15
+
 ### Added
 
 - **A role gate on the two lookup tables every KPI is computed from, and an admin screen to manage them.** `account_type_categories` and `transaction_types` define the balance-sheet groupings and the transaction classification the dashboard, accounting and work-expense views all report on, so a wrong edit there is not one bad row — it is every view at once. `users.role` had existed since [#120](https://github.com/aellington89/finance-stack/issues/120) with a default of `admin` and **nothing gated on it**; it is now a two-value vocabulary (`admin`, `user`) with a `CHECK` constraint, a new `requireAdminUser()` guard composing the existing session-and-rate-limit one, a new admin-only `/settings/admin` page carrying both tables, and a `--role admin|user` flag on `npm run auth:create-user`. All six mutators across the two tables sit behind the gate. `createTransactionType` — deleted outright by [#109](https://github.com/aellington89/finance-stack/issues/109) — is restored behind it, which is exactly where that issue said a legitimate insert belonged, taking the mutating-action count in [docs/input-validation.md](docs/input-validation.md) back from 17 to 18.
@@ -213,7 +215,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aellington89/finance-stack/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aellington89/finance-stack/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/aellington89/finance-stack/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/aellington89/finance-stack/compare/v0.1.3...v0.1.4
