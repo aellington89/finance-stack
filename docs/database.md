@@ -160,7 +160,9 @@ One rule, in [`lib/constants/protected-rows.ts`](../app/lib/constants/protected-
 
 **It is an application guard, not a database one.** A `BEFORE UPDATE OR DELETE` trigger was considered and rejected: [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) re-converges these rows with `ON CONFLICT DO UPDATE`, and the manual `UPDATE` above is the documented repair path. Both are legitimate, and a trigger would break them to stop a mistake nobody makes through `psql`.
 
-`transaction_types` additionally accepts no new rows: the Add button is gone from `/settings/categories` and `createTransactionType` was deleted rather than guarded, because a thirteenth type is a row nothing in the codebase would recognise. Rows an install already created past id 12 are untouched and stay editable.
+`transaction_types` takes no new rows from `/settings/categories`: the Add button is gone from that page and `createTransactionType` was deleted rather than guarded, because a thirteenth type created there is a row nothing in the codebase would recognise. Rows an install already created past id 12 are untouched and stay editable.
+
+**Where a legitimate insert lives.** [Issue #87](https://github.com/aellington89/finance-stack/issues/87) restored `createTransactionType` behind `/settings/admin`, which requires `role = 'admin'`. The three `account_type_categories` mutators moved there too — that table has never had a card on `/settings/categories`. Both tables are the basis of every KPI, so a wrong edit is not one bad row but every dashboard at once; see [Roles](auth.md#roles) for why the split lands there rather than on the whole settings page.
 
 ### Adding a new reference row
 

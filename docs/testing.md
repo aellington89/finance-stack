@@ -61,6 +61,8 @@ npm run test:coverage
 
 Every server action starts with a `requireActionUser()` session check (Issue #120), so [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) mocks `@/auth` with a default **authenticated** session — action tests exercise business logic without any sign-in ceremony.
 
+That hook also inserts the matching row into `users`, and since [Issue #87](https://github.com/aellington89/finance-stack/issues/87) both halves are load-bearing: `requireAdminUser()` reads the role from the **database** rather than from the session token, so a mocked session with no backing row is refused by every admin-gated action. If a lookup-table test starts failing with "You do not have permission", that is the gate working rather than the mock being wrong.
+
 To test the unauthenticated path, override the mock for a single call:
 
 ```ts
@@ -77,6 +79,8 @@ it("rejects an unauthenticated call", async () => {
 ```
 
 See [`tests/integration/actions/account-auth.test.ts`](../app/tests/integration/actions/account-auth.test.ts) for the authed + unauthed pair, and [`tests/integration/auth/verify-credentials.test.ts`](../app/tests/integration/auth/verify-credentials.test.ts) for credential verification against the real `users` table (created rows are cleaned up in `afterAll`).
+
+To test a **role**, create the `users` row you want to be and point the mock at it — the role check reads that row, so mocking the token's claim alone proves nothing. Use `mockResolvedValue` rather than `...Once`, because the admin path reads the session twice (the session/rate gate, then the role lookup), and restore the default session in `afterEach`: `fileParallelism: false` means a leaked mock reaches the next file. See [`tests/integration/actions/categories-admin.test.ts`](../app/tests/integration/actions/categories-admin.test.ts), including the stale-token case where the cookie claims `admin` and the row says `user`.
 
 ## Rate Limiting in Tests
 

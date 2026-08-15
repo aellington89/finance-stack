@@ -56,6 +56,21 @@ beforeEach(() => {
 // CASCADE would wipe seeded accounts/transactions/account_balance_history
 // that other tests rely on.
 beforeAll(async () => {
+  // The session mocked above has to correspond to a real `users` row, because
+  // requireAdminUser() reads the role from the database rather than from the
+  // session token (Issue #87) — sessions are 30-day JWTs with no server-side
+  // revocation, so trusting the token would leave a demoted admin privileged
+  // for a month. Without this row every admin-gated action in the suite is
+  // refused, which is the gate working rather than a mock being wrong.
+  //
+  // Deliberately not deleted afterwards: it is the identity the whole
+  // integration project runs as, and the audit rows it produces name it.
+  await db.execute(sql`
+    INSERT INTO users (user_id, username, password_hash, role)
+    VALUES ('00000000-0000-0000-0000-000000000000', 'integration-test-user', 'not-a-real-hash', 'admin')
+    ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role
+  `);
+
   await db.execute(sql`
     INSERT INTO account_type_categories (account_type_category_id, account_type_category)
     OVERRIDING SYSTEM VALUE VALUES

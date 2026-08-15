@@ -11,6 +11,7 @@
 
 import { config } from "dotenv";
 import { resolve } from "node:path";
+import { DEFAULT_ROLE, USER_ROLES, isUserRole } from "@/lib/auth/roles";
 
 config({ path: resolve(process.cwd(), ".env.local") });
 
@@ -44,15 +45,34 @@ function askHidden(question: string): Promise<string> {
   });
 }
 
+// `--role <admin|user>`, anywhere after the username. Defaults to admin, which
+// keeps the first-user flow and every existing script unchanged — a lone
+// operator on a single-user install should not have to know roles exist to set
+// their own account up (issue #87).
+function parseRole(argv: string[]): string {
+  const flag = argv.indexOf("--role");
+  if (flag === -1) return DEFAULT_ROLE;
+
+  const value = (argv[flag + 1] ?? "").trim();
+  if (!isUserRole(value)) {
+    console.error(`--role must be one of: ${USER_ROLES.join(", ")}`);
+    process.exit(1);
+  }
+  return value;
+}
+
 async function main() {
-  const username = (process.argv[2] ?? "").trim();
+  const args = process.argv.slice(2);
+  const username = (args.find((a) => !a.startsWith("--")) ?? "").trim();
   if (!username) {
-    console.error("Usage: npm run auth:create-user -- <username>");
+    console.error("Usage: npm run auth:create-user -- <username> [--role admin|user]");
     console.error(
       "Password is prompted interactively, or read from CREATE_USER_PASSWORD."
     );
     process.exit(1);
   }
+
+  const role = parseRole(args);
 
   let password = process.env.CREATE_USER_PASSWORD ?? "";
   if (!password) {
@@ -83,17 +103,23 @@ async function main() {
 
   const passwordHash = await hashPassword(password);
 
+  // The role is written on the upsert path too, so re-running this is how you
+  // promote or demote an existing account as well as how you reset a password.
+  // Omitting --role on a re-run therefore resets the role to admin — stated in
+  // the output below rather than left to be discovered.
   const [row] = await db
     .insert(users)
-    .values({ username, passwordHash })
+    .values({ username, passwordHash, role })
     .onConflictDoUpdate({
       target: users.username,
-      set: { passwordHash },
+      set: { passwordHash, role },
     })
     .returning({ userId: users.userId, createdAt: users.createdAt });
 
   const dbName = new URL(process.env.DATABASE_URL ?? "").pathname.slice(1);
-  console.log(`✓ User "${username}" is ready in ${dbName} (id ${row.userId}).`);
+  console.log(
+    `✓ User "${username}" is ready in ${dbName} (id ${row.userId}, role ${role}).`
+  );
   process.exit(0);
 }
 

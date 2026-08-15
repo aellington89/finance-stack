@@ -20,7 +20,7 @@ import {
 import { parseEntityId } from "@/lib/validations/id";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
-import { requireActionUser } from "@/lib/auth/guard";
+import { requireActionUser, requireAdminUser } from "@/lib/auth/guard";
 import { protectionFor, protectionRefusal } from "@/lib/constants/protected-rows";
 
 // Every write below goes through auditedTransaction() even where it is a single
@@ -183,13 +183,41 @@ export async function deleteTransactionCategory(
 
 // ─── Transaction Types ────────────────────────────────────────────────────────
 //
-// There is deliberately no createTransactionType (Issue #109). All 12 rows this
-// table ships are protected, and a thirteenth is a row no query, importer parser
-// or SEED_REFERENCES entry would ever recognise — the same code-depends-on-a-row-
-// the-user-owns defect the seed-data taxonomy names in docs/database.md. The
-// affordance is gone from /settings/categories rather than the action being kept
-// and made to always refuse. A legitimate future insert belongs behind the admin
-// screen in #87, with a role check of its own.
+// createTransactionType was deleted outright by Issue #109 rather than kept and
+// made to always refuse: all 12 rows this table ships are protected, and a
+// thirteenth created from /settings/categories was a row no query, importer
+// parser or SEED_REFERENCES entry would recognise. That issue named where a
+// legitimate insert would live — "behind the admin screen in #87, with a role
+// check of its own" — and this is it.
+//
+// Update and delete stay open to any signed-in user, guarded by protectionFor()
+// as before. The distinction is not arbitrary: those two can only reach a row
+// past id 12, i.e. one an install already created for itself, while an insert
+// mints new reference data.
+
+export async function createTransactionType(
+  prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const denied = await requireAdminUser();
+  if (denied) return denied;
+
+  const result = parseNameForm(formData);
+  if (!result.success) {
+    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
+  }
+
+  try {
+    await auditedTransaction(async (tx) => {
+      await tx.insert(transactionTypes).values({ transactionType: result.data.name });
+    });
+  } catch (error) {
+    return actionFailure("createTransactionType", error, "Failed to create type. Please try again.");
+  }
+
+  revalidateCategoryPaths();
+  return { success: true, errors: {}, message: "Type created" };
+}
 
 export async function updateTransactionType(
   prevState: ActionState,
@@ -276,12 +304,18 @@ export async function deleteTransactionType(
 }
 
 // ─── Account Type Categories ──────────────────────────────────────────────────
+//
+// Admin-only (Issue #87). This table defines the balance-sheet groupings every
+// KPI rolls up through — Current Asset, Current Liability and the rest — so a
+// wrong edit here is not one bad row but every dashboard at once. It has never
+// had a card on /settings/categories; the affordance now lives on
+// /settings/admin, and these three refuse a non-admin whatever the UI does.
 
 export async function createAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const result = parseNameForm(formData);
@@ -305,7 +339,7 @@ export async function updateAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("accountTypeCategoryId"));
@@ -344,7 +378,7 @@ export async function deleteAccountTypeCategory(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("accountTypeCategoryId"));

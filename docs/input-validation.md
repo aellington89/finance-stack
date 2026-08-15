@@ -12,9 +12,9 @@ The rules every server action and page boundary follows, and the two CI gates th
 
 ## The validation checklist
 
-All 17 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
+All 18 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
 
-There is no `createTransactionType()`: every row that table holds ships in `shared-lookups.sql`, so it was removed rather than guarded ([Issue #109](https://github.com/aellington89/finance-stack/issues/109)).
+Four of them open with `requireAdminUser()` instead, which composes it ([Issue #87](https://github.com/aellington89/finance-stack/issues/87)): `createTransactionType()` and the three `*AccountTypeCategory()` actions. Those two tables are the basis of every KPI, so they are reachable only from `/settings/admin` and only by an admin. `createTransactionType()` was removed entirely by [Issue #109](https://github.com/aellington89/finance-stack/issues/109) and restored here behind that gate, which is where that issue said a legitimate insert belonged.
 
 `parseEntityId()` ([`lib/validations/id.ts`](../app/lib/validations/id.ts)) narrows an ID to a positive `int4`, returning `null` for anything else. It exists because the guard it replaced (`!id || id <= 0`) accepted `1.5`, `Infinity`, and values past the `int4` ceiling — all of which bind cleanly in JavaScript and then raise `22P02` / `22003` in the driver.
 
@@ -29,6 +29,7 @@ There is no `createTransactionType()`: every row that table holds ships in `shar
 | `createTransactionCategory()` | `transactionCategorySchema` | — | Failed to create category. Please try again. |
 | `updateTransactionCategory()` | `transactionCategorySchema` | `transactionCategoryId` | Failed to update category. Please try again. |
 | `deleteTransactionCategory()` | — | `transactionCategoryId` | Failed to delete category. Please try again. |
+| `createTransactionType()` | `entityNameSchema` | — | Failed to create type. Please try again. |
 | `updateTransactionType()` | `entityNameSchema` | `transactionTypeId` | Failed to update type. Please try again. |
 | `deleteTransactionType()` | — | `transactionTypeId` | Failed to delete type. Please try again. |
 | `createAccountTypeCategory()` | `entityNameSchema` | — | Failed to create category. Please try again. |

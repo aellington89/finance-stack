@@ -110,6 +110,10 @@ export const users = pgTable("users", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 }, () => [
 	check("users_username_not_blank", sql`username <> ''`),
+	// The role vocabulary from lib/auth/roles.ts (issue #87). Spelled out here
+	// rather than interpolated for the same reason as the reporting_role check
+	// above: sql.raw is banned repo-wide.
+	check("users_role_valid", sql`role = ANY (ARRAY['admin'::text, 'user'::text])`),
 ]);
 
 // Written only by the audit_row_change() trigger installed in migration

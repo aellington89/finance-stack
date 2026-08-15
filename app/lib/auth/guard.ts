@@ -1,5 +1,9 @@
 import { auth } from "@/auth";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users } from "@/drizzle/schema";
 import type { ActionState } from "@/lib/actions/utils";
+import { isAdminRole } from "@/lib/auth/roles";
 import { log } from "@/lib/log";
 import { RATE_LIMITS, isRateLimited, recordEvent } from "@/lib/security/rate-limit";
 
@@ -56,6 +60,84 @@ export async function requireActionUser(): Promise<ActionState | null> {
   }
 
   recordEvent(key, RATE_LIMITS.action);
+
+  return null;
+}
+
+/**
+ * The signed-in user's role, read from the database.
+ *
+ * **Not from the session token, and that is the point.** Sessions here are
+ * 30-day JWTs with no server-side revocation (docs/auth.md) — the cookie is
+ * only re-issued when Auth.js refreshes it. So a user demoted from `admin` to
+ * `user` would keep a cookie asserting `admin` for up to a month, which would
+ * make the gate below a suggestion rather than a control. One indexed lookup on
+ * a path taken only by lookup-table mutations is the right price for the answer
+ * being current.
+ *
+ * The token's `role` claim is still populated and is still fine for rendering
+ * the nav, where being a frame stale costs nothing.
+ *
+ * Returns null when there is no session, or when the row has been deleted out
+ * from under a live cookie.
+ */
+export async function roleForUser(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.userId, userId))
+    .limit(1);
+
+  return row?.role ?? null;
+}
+
+export async function currentUserRole(): Promise<string | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  return roleForUser(session.user.id);
+}
+
+/**
+ * Entry gate for server actions that administer the lookup tables (Issue #87).
+ *
+ *   const denied = await requireAdminUser();
+ *   if (denied) return denied;
+ *
+ * Composes requireActionUser() rather than repeating it, so the session check
+ * and the mutation rate limit both still apply — and apply *first*, which is
+ * deliberate: a signed-out caller gets "you must be signed in" rather than a
+ * permission message that would confirm the endpoint exists, and a runaway
+ * client is still bounded whether or not it is an admin.
+ *
+ * `account_type_categories` and `transaction_types` are the tables behind this
+ * gate. They are the basis of the balance-sheet groupings and the transaction
+ * classification every KPI reads, so a wrong edit there is not one bad row —
+ * it is every dashboard at once.
+ */
+export async function requireAdminUser(): Promise<ActionState | null> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
+  // requireActionUser() has already established there is a session; this reads
+  // it again rather than threading it through, which costs one JWT decode and
+  // keeps that function's signature — and its "anything guarded is limited"
+  // property — untouched.
+  const session = await auth();
+  const userId = session?.user?.id;
+  const role = userId ? await roleForUser(userId) : null;
+
+  if (!isAdminRole(role)) {
+    log.warn("Server action rejected by role gate", {
+      scope: "action",
+      user_id: userId,
+    });
+
+    return {
+      success: false,
+      errors: {},
+      message: "You do not have permission to perform this action.",
+    };
+  }
 
   return null;
 }
