@@ -16,17 +16,20 @@
 // Both are legitimate, and a trigger would break them to stop a mistake nobody
 // makes through psql.
 //
-// ── The two rules ────────────────────────────────────────────────────────
+// ── The rule ─────────────────────────────────────────────────────────────
 //
 // APP-OWNED (SHIPPED_ROWS) — matched by id. These arrive identically on every
 // install, so the id is stable and a name match would be too weak.
 //
-// LIABILITY-PIN (liability-categories.ts) — matched by id AND name. Those rows
-// are the user's, ship nowhere, and are pinned by id only because the queries
-// have no better handle on them yet (#111). Locking by id alone would lock
-// whatever unrelated row happens to occupy id 7 on someone else's install; the
-// name match makes protection self-limiting — a fresh install matches nothing
-// and locks nothing.
+// There used to be a second rule. LIABILITY-PIN locked the fifteen
+// transaction_categories rows the Debt Service and Debt Waterfall queries named
+// by id, matched on id AND name together so that protection was self-limiting
+// on an install where those ids held unrelated rows. Issue #111 removed it,
+// along with the pins themselves: the meaning those rows carried now lives in
+// transaction_categories.reporting_role, so renaming "Mortgage Principle" no
+// longer drops it out of an aggregate and there is nothing left to protect it
+// from. They are the user's rows and are once again fully editable, which is
+// what the seed-data taxonomy always said they were.
 //
 // ── Renaming back is always allowed ──────────────────────────────────────
 //
@@ -38,17 +41,13 @@
 // restores the canonical name. Deletes are refused unconditionally.
 
 import { SHIPPED_ROWS } from "@/lib/constants/reference-ids";
-import {
-  DEBT_INTEREST_CATEGORIES,
-  DEBT_PAYMENT_CATEGORIES,
-} from "@/lib/queries/liability-categories";
 
 export type ProtectedTable =
   | "transaction_categories"
   | "transaction_types"
   | "account_type_categories";
 
-export type ProtectionReason = "app-owned" | "liability-pin";
+export type ProtectionReason = "app-owned";
 
 export interface Protection {
   reason: ProtectionReason;
@@ -67,34 +66,17 @@ const SHIPPED_BY_TABLE: ReadonlyMap<string, ReadonlyMap<number, string>> = new M
   ]),
 );
 
-// id -> pinned name, for transaction_categories only.
-const PINNED_CATEGORIES: ReadonlyMap<number, string> = new Map(
-  [...DEBT_PAYMENT_CATEGORIES, ...DEBT_INTEREST_CATEGORIES].map((c) => [c.id, c.name]),
-);
-
 /**
  * Why this row is protected, or null if it is the user's to edit.
  *
- * `currentName` is the name the row carries in the database right now, which
- * is what the liability-pin rule matches on. The app-owned rule ignores it —
- * a shipped row stays protected under a drifted name, and `canonicalName`
- * comes back as the name it should have.
+ * The rule ignores the row's current name — a shipped row stays protected under
+ * a drifted name, and `canonicalName` comes back as the name it should have,
+ * which is what makes the rename-back repair possible.
  */
-export function protectionFor(
-  table: ProtectedTable,
-  id: number,
-  currentName: string,
-): Protection | null {
+export function protectionFor(table: ProtectedTable, id: number): Protection | null {
   const shippedName = SHIPPED_BY_TABLE.get(table)?.get(id);
   if (shippedName !== undefined) {
     return { reason: "app-owned", canonicalName: shippedName };
-  }
-
-  if (table === "transaction_categories") {
-    const pinnedName = PINNED_CATEGORIES.get(id);
-    if (pinnedName !== undefined && pinnedName === currentName) {
-      return { reason: "liability-pin", canonicalName: pinnedName };
-    }
   }
 
   return null;
@@ -103,12 +85,10 @@ export function protectionFor(
 /** Hover text for the lock icon in /settings/categories. */
 export const PROTECTION_TOOLTIP: Record<ProtectionReason, string> = {
   "app-owned": "Ships with the app — renaming or deleting it would put this database out of step with a clean install.",
-  "liability-pin": "The Liabilities drilldown reports on this category by name. Renaming or deleting it would silently drop it from Debt Service and the Debt Waterfall.",
 };
 
 const REASON_CLAUSE: Record<ProtectionReason, string> = {
   "app-owned": "it ships with the app",
-  "liability-pin": "the Liabilities drilldown depends on it",
 };
 
 /**

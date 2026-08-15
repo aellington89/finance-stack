@@ -32,6 +32,27 @@ export function valueList(values: readonly (string | number)[]): SQL {
 }
 
 /**
+ * The categories carrying any of `roles`, as a subquery for an `IN (…)`:
+ *
+ *   sql`t.transaction_category_id IN (${categoryIdsWithRoles(DEBT_PAYMENT_ROLES)})`
+ *
+ * This is what replaced the hard-coded id lists the Liabilities drilldown used
+ * to filter on (issue #111). Resolving membership in the database rather than
+ * in TypeScript is the point: the set is whatever the user has tagged at query
+ * time, so a category they add and tag today is counted today, with no code
+ * change and no second round trip to fetch ids first.
+ *
+ * Every role is bound as a parameter, so this composes under the `sql.raw` ban
+ * the same way `valueList` does (see docs/input-validation.md).
+ */
+export function categoryIdsWithRoles(roles: readonly string[]): SQL {
+  return sql`
+    SELECT transaction_category_id FROM transaction_categories
+    WHERE reporting_role IN (${valueList(roles)})
+  `;
+}
+
+/**
  * Pattern A — sum a transaction amount for a single transaction type:
  *
  *   SUM(CASE WHEN t.transaction_type_id = <typeId> [AND <predicate>]

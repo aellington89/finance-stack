@@ -81,7 +81,21 @@ export const accountTypeCategories = pgTable("account_type_categories", {
 export const transactionCategories = pgTable("transaction_categories", {
 	transactionCategoryId: integer("transaction_category_id").primaryKey().generatedAlwaysAsIdentity({ name: "transaction_type_categories_transaction_type_category_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
 	transactionCategory: text("transaction_category").notNull(),
-});
+	// What this category means to the reporting layer (issue #111). NULL for
+	// most rows — a category only carries a role when the user opts it into an
+	// aggregate. Same shape as account_types.liquidity_class below: nullable
+	// text with a CHECK, which leaves `= ANY (ARRAY[...])` NULL-permissive on
+	// its own.
+	//
+	// The value set is spelled out here rather than built from
+	// lib/constants/reporting-roles.ts because interpolating it would need
+	// sql.raw, which eslint.config.mjs bans repo-wide. `npm run
+	// check:seed-references` proves this list and REPORTING_ROLE_KEYS equal in
+	// both directions instead, so the duplication cannot drift.
+	reportingRole: text("reporting_role"),
+}, () => [
+	check("transaction_categories_reporting_role_check", sql`reporting_role = ANY (ARRAY['debt_principle_paid'::text, 'debt_interest_paid'::text, 'debt_interest_accrued'::text, 'debt_cash_paydown'::text])`),
+]);
 
 export const transactionTypes = pgTable("transaction_types", {
 	transactionTypeId: integer("transaction_type_id").primaryKey().generatedAlwaysAsIdentity({ name: "transaction_types_transaction_type_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),

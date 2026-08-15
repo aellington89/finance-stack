@@ -1,57 +1,29 @@
-// Pinned IDs the Liabilities drilldown depends on.
+// The account_type_category ids that make an account a liability.
 //
-// account_type_category_id values come from init-db/seeds/shared-lookups.sql
-// and are stable across deployments. transaction_category_id values are
-// pinned by ID to the production Finances DB rather than matched by name —
-// this avoids fragility from rename/pattern mismatches but means the seeded
-// rows must not be deleted via /settings/categories.
+// These are pinned by id and that is correct: account_type_categories ships
+// with the application in init-db/seeds/shared-lookups.sql, arrives identical
+// on every install, and is protected against rename and delete (issue #109).
+// Under the seed-data taxonomy in docs/database.md that is app-owned reference
+// data — the bucket where code depending on a specific row is legitimate.
 //
-// Categorization scheme (see the seed-data taxonomy in docs/database.md):
-//   • DEBT_INTEREST_CATEGORY_IDS — interest charges that ADD to the
-//     liability balance. Posted on the liability side as a NEGATIVE amount
-//     (added debt). Includes the "Accrued *" categories for loans and
-//     "Credit Card Interest" finance charges (credit cards don't split into
-//     accrued/paid the way installment loans do — the finance charge is the
-//     accrual).
-//   • DEBT_PAYMENT_CATEGORY_IDS — paid principal/interest expenses on the
-//     liability side, plus "Applied Credit" for credit-card paydowns. Posted
-//     as POSITIVE on the liability side (paydown). Cash-side "*Payment"
-//     categories (1/2/3/4/54/58/79) are intentionally excluded — they only
-//     appear on the checking leg and would never match the liability-side
-//     WHERE filter.
+// ── What used to live here ───────────────────────────────────────────────
 //
-// SCHEMA LIMITATION — and the taxonomy answer for it (issue #178).
+// Until issue #111 this module also held two lists of literal
+// transaction_category_id values naming the categories the Debt Service and
+// Debt Waterfall aggregates read: DEBT_PAYMENT_CATEGORIES and
+// DEBT_INTEREST_CATEGORIES, fifteen rows between them, pinned by id and name.
 //
-// These rows are USER DATA that the app reads as if it were app-owned
-// reference data, which is the one combination the seed-data taxonomy in
-// docs/database.md calls a defect rather than a category. Whether you carry a
-// HELOC is yours to decide; "this category is paid principal on a liability"
-// is an application concept. Pinning the second to the first means a user who
-// adds "Personal Loan Principle" via /settings/categories is silently left out
-// of the debt-service / waterfall aggregates, and a fresh install — which has
-// none of these rows — reports zeros.
+// Those rows were the user's. Whether you carry a HELOC is your business, and
+// they ship nowhere — so the pins put them in the one cell the taxonomy calls a
+// defect rather than a category: user data that code hard-depends on. A fresh
+// install reported zeros across the Liabilities tab because none of those ids
+// existed in it, and a user who added "Personal Loan Principle" was silently
+// left out of the totals with no error and no way to opt in short of a code
+// change.
 //
-// The resolution is #111: a liability_role attribute a user-owned row can opt
-// into, replacing these lists entirely. Deliberately NOT resolved by shipping
-// these rows in shared-lookups.sql — that would bake one person's loan
-// portfolio into every install and still leave the set unextensible without a
-// code change. Only id 6 'Other' ships there, because the app writes it
-// itself; see that file's header.
-//
-// Until #111 lands, the names below are load-bearing rather than decorative,
-// in two ways.
-//
-// First, `npm run check:seed-references` asserts each (id, name) against
-// init-db/seeds/finances-test-mock-data.sql, so a pin that no fixture provides
-// fails CI instead of silently contributing nothing to a test's totals — which
-// is how ids 7, 8, 75 and 76 went four releases missing from that fixture.
-//
-// Second, since #109 these (id, name) pairs are what /settings/categories locks
-// against rename and delete. The name is half the match on purpose: these rows
-// are the user's and ship nowhere, so locking by id alone would lock whatever
-// unrelated category occupies id 7 on someone else's install. That hardens the
-// defect described above — a pinned row can no longer be renamed out from under
-// the queries — but it does not fix it. #111 still owns the fix.
+// They are gone. transaction_categories.reporting_role carries the meaning now,
+// the queries filter on it at query time, and the set is whatever the user has
+// tagged — see lib/constants/reporting-roles.ts.
 
 import {
   CURRENT_LIABILITY_CATEGORY,
@@ -65,44 +37,3 @@ export const LIABILITY_CATEGORY_IDS = [
   LIABILITY_CURRENT_CATEGORY_ID,
   LIABILITY_NON_CURRENT_CATEGORY_ID,
 ] as const;
-
-// One pinned category. `name` is the fixture contract, not documentation: the
-// seed-reference gate looks the id up in finances-test-mock-data.sql and fails
-// when the name there disagrees.
-export interface PinnedCategory {
-  id: number;
-  name: string;
-}
-
-// Paid principal + paid interest legs that post to the liability account.
-// `principalPaid = totalPayments + interestAccrued` reconciles because the
-// paid-interest categories (8/13/68/76) offset the accrued-interest
-// categories (9/14/69/74) when summed in the same period.
-export const DEBT_PAYMENT_CATEGORIES: ReadonlyArray<PinnedCategory> = [
-  { id: 7, name: "HELOC Principle" },
-  { id: 8, name: "HELOC Interest" },
-  { id: 12, name: "Mortgage Principle" },
-  { id: 13, name: "Mortgage Interest" },
-  { id: 29, name: "Applied Credit" }, // credit-card paydown
-  { id: 57, name: "Epic Loan Interest" },
-  { id: 68, name: "Auto Loan Interest" },
-  { id: 70, name: "Auto Loan Principle" },
-  { id: 75, name: "Student Loan Principle" },
-  { id: 76, name: "Student Loan Interest" },
-];
-
-// Interest charges that add to the liability balance (posted negative).
-export const DEBT_INTEREST_CATEGORIES: ReadonlyArray<PinnedCategory> = [
-  { id: 9, name: "Accrued HELOC Interest" },
-  { id: 14, name: "Accrued Mortgage Interest" },
-  { id: 69, name: "Accrued Auto Loan Interest" },
-  { id: 74, name: "Accrued Student Loan Interest" },
-  { id: 80, name: "Credit Card Interest" },
-];
-
-// The query layer filters on IDs alone; the names above exist for the gate.
-export const DEBT_PAYMENT_CATEGORY_IDS: readonly number[] =
-  DEBT_PAYMENT_CATEGORIES.map((c) => c.id);
-
-export const DEBT_INTEREST_CATEGORY_IDS: readonly number[] =
-  DEBT_INTEREST_CATEGORIES.map((c) => c.id);

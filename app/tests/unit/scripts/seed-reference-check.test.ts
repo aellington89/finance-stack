@@ -3,15 +3,14 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SeedReferenceGroup } from "@/lib/constants/reference-ids";
-import {
-  DEBT_INTEREST_CATEGORIES,
-  DEBT_PAYMENT_CATEGORIES,
-} from "@/lib/queries/liability-categories";
+import { REPORTING_ROLE_KEYS } from "@/lib/constants/reporting-roles";
 import {
   parseSeedRows,
   findFixtureGaps,
+  findReportingRoleMismatches,
   findSeedReferenceMismatches,
   findShippedSetMismatches,
+  findUnparsedSeedBlocks,
   findUnsafeSeedStatements,
   TABLES_ALLOWED_ABSENT,
 } from "@/scripts/seed-reference-check";
@@ -335,7 +334,16 @@ OVERRIDING SYSTEM VALUE VALUES
     (6,  'Other'),
     (7,  'HELOC Principle'),
     (13, 'Mortgage Interest')
-ON CONFLICT (transaction_category_id) DO NOTHING;`;
+ON CONFLICT (transaction_category_id) DO NOTHING;
+
+UPDATE transaction_categories SET reporting_role = 'debt_principle_paid'
+    WHERE reporting_role IS NULL AND transaction_category_id IN (7);
+UPDATE transaction_categories SET reporting_role = 'debt_interest_paid'
+    WHERE reporting_role IS NULL AND transaction_category_id IN (13);`;
+
+  // The two roles FIXTURE assigns, so a coverage assertion can name a set the
+  // fixture satisfies without depending on the shipped registry's size.
+  const FIXTURE_ROLES = ["debt_principle_paid", "debt_interest_paid"];
 
   // vitest-setup.ts writes the same INSERT shape in a template literal, with
   // DO UPDATE rather than DO NOTHING. parseSeedRows reads it unchanged.
@@ -350,36 +358,30 @@ ${rows}
 
   const IN_SYNC = setup(`      (6,  'Other'),\n      (7,  'HELOC Principle')`);
 
-  it("returns nothing when the pins and the setup hook both agree with the fixture", () => {
-    const pins = [{ id: 7, name: "HELOC Principle" }];
-    expect(findFixtureGaps(pins, FIXTURE, IN_SYNC)).toEqual([]);
+  it("returns nothing when the roles are covered and the setup hook agrees with the fixture", () => {
+    expect(findFixtureGaps(FIXTURE_ROLES, FIXTURE, IN_SYNC)).toEqual([]);
   });
 
-  it("flags a pinned category the fixture does not provide — the 7/8/75/76 regression", () => {
-    const pins = [{ id: 75, name: "Student Loan Principle" }];
-    expect(findFixtureGaps(pins, FIXTURE, IN_SYNC)).toEqual([
-      { reason: "pin-missing", id: 75, expected: "Student Loan Principle", actual: null },
-    ]);
-  });
-
-  it("flags a pinned id whose fixture row carries a different name", () => {
-    const pins = [{ id: 13, name: "Mortgage Principle" }];
-    expect(findFixtureGaps(pins, FIXTURE, IN_SYNC)).toEqual([
-      { reason: "pin-name", id: 13, expected: "Mortgage Principle", actual: "Mortgage Interest" },
+  it("flags a role no fixture category carries — the 7/8/75/76 regression, re-expressed", () => {
+    // The pinned-id era's version of this was "a pinned category the fixture
+    // does not provide". Same failure: an aggregate the integration suite
+    // cannot tell apart from zero, so a test asserting over it proves nothing.
+    expect(findFixtureGaps([...FIXTURE_ROLES, "debt_cash_paydown"], FIXTURE, IN_SYNC)).toEqual([
+      { reason: "role-uncovered", role: "debt_cash_paydown", id: null, expected: null, actual: null },
     ]);
   });
 
   it("flags a setup-hook row absent from the fixture — the hook must not be a second definition", () => {
     const withExtra = setup(`      (6,  'Other'),\n      (8,  'HELOC Interest')`);
     expect(findFixtureGaps([], FIXTURE, withExtra)).toEqual([
-      { reason: "setup-missing", id: 8, expected: "HELOC Interest", actual: null },
+      { reason: "setup-missing", role: null, id: 8, expected: "HELOC Interest", actual: null },
     ]);
   });
 
   it("flags a setup-hook row whose name disagrees with the fixture", () => {
     const renamed = setup(`      (13, 'Mortgage Principle')`);
     expect(findFixtureGaps([], FIXTURE, renamed)).toEqual([
-      { reason: "setup-name", id: 13, expected: "Mortgage Principle", actual: "Mortgage Interest" },
+      { reason: "setup-name", role: null, id: 13, expected: "Mortgage Principle", actual: "Mortgage Interest" },
     ]);
   });
 
@@ -393,10 +395,151 @@ ${rows}
       readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../", rel), "utf8");
     expect(
       findFixtureGaps(
-        [...DEBT_PAYMENT_CATEGORIES, ...DEBT_INTEREST_CATEGORIES],
+        REPORTING_ROLE_KEYS,
         repo("init-db/seeds/finances-test-mock-data.sql"),
         repo("app/tests/integration/vitest-setup.ts"),
       ),
     ).toEqual([]);
+  });
+});
+
+// ── findUnparsedSeedBlocks ────────────────────────────────────────────────
+//
+// The guard over the parser's own blind spot. parseSeedRows reads `(id, 'name')`
+// tuples and nothing else, so a third column does not raise an error — it makes
+// every row in that block stop matching, and the checks above then pass over an
+// empty set while reporting success. That is the failure this suite exists to
+// make impossible, because it is invisible in a green CI run.
+
+describe("findUnparsedSeedBlocks", () => {
+  const twoColumn = `
+INSERT INTO transaction_categories (transaction_category_id, transaction_category)
+OVERRIDING SYSTEM VALUE VALUES
+    (6,  'Other'),
+    (7,  'HELOC Principle')
+ON CONFLICT (transaction_category_id) DO NOTHING;`;
+
+  it("passes a block that matches the 2-tuple contract", () => {
+    expect(findUnparsedSeedBlocks(twoColumn)).toEqual([]);
+  });
+
+  it("flags a third column instead of silently reading nothing", () => {
+    // Exactly the edit issue #111 would have made if the reporting_role were
+    // seeded inline rather than by a separate UPDATE.
+    const threeColumn = `
+INSERT INTO transaction_categories (transaction_category_id, transaction_category, reporting_role)
+OVERRIDING SYSTEM VALUE VALUES
+    (6,  'Other', NULL),
+    (7,  'HELOC Principle', 'debt_principle_paid')
+ON CONFLICT (transaction_category_id) DO NOTHING;`;
+
+    // The silence being guarded against: the parser yields nothing at all.
+    expect(parseSeedRows(threeColumn).get("transaction_categories")?.size ?? 0).toBe(0);
+
+    expect(findUnparsedSeedBlocks(threeColumn)).toEqual([
+      { table: "transaction_categories", declared: 2, parsed: 0 },
+    ]);
+  });
+
+  it("flags a partially readable block", () => {
+    const mixed = `
+INSERT INTO transaction_types (transaction_type_id, transaction_type)
+OVERRIDING SYSTEM VALUE VALUES
+    (1, 'Internal Transfer'),
+    (2, 'Expense', 'extra')
+ON CONFLICT (transaction_type_id) DO NOTHING;`;
+
+    expect(findUnparsedSeedBlocks(mixed)).toEqual([
+      { table: "transaction_types", declared: 2, parsed: 1 },
+    ]);
+  });
+
+  it("is not fooled by a parenthesis inside a name", () => {
+    const parens = `
+INSERT INTO transaction_categories (transaction_category_id, transaction_category)
+OVERRIDING SYSTEM VALUE VALUES
+    (1, 'Stock (or Bond)'),
+    (2, 'Other')
+ON CONFLICT (transaction_category_id) DO NOTHING;`;
+
+    expect(findUnparsedSeedBlocks(parens)).toEqual([]);
+  });
+
+  it("ignores tables no gate parses, so multi-column inserts are not false positives", () => {
+    // account_types, accounts and transactions are inserted with four to seven
+    // columns and have always parsed to nothing, harmlessly — nothing looks
+    // them up. Flagging them would train people to ignore this check.
+    const accountTypes = `
+INSERT INTO account_types (account_type_id, account_type, account_type_category_id, liquidity_class)
+OVERRIDING SYSTEM VALUE VALUES
+    (1, 'Cash & Cash Equivalent', 1, 'liquid')
+ON CONFLICT (account_type_id) DO NOTHING;`;
+
+    expect(findUnparsedSeedBlocks(accountTypes)).toEqual([]);
+  });
+
+  it("accepts the shipped files", () => {
+    const repo = (rel: string) =>
+      readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../", rel), "utf8");
+    for (const rel of [
+      "init-db/seeds/shared-lookups.sql",
+      "init-db/seeds/finances-test-mock-data.sql",
+      "app/tests/integration/vitest-setup.ts",
+    ]) {
+      expect(findUnparsedSeedBlocks(repo(rel)), rel).toEqual([]);
+    }
+  });
+});
+
+// ── findReportingRoleMismatches ───────────────────────────────────────────
+//
+// The reporting-role set is written twice and cannot be written once: the CHECK
+// constraint would need sql.raw to be built from the registry, and that is
+// banned repo-wide. So the two are proved equal, in both directions.
+
+describe("findReportingRoleMismatches", () => {
+  const schemaWith = (roles: string[]) => `
+export const transactionCategories = pgTable("transaction_categories", {
+	transactionCategory: text("transaction_category").notNull(),
+	reportingRole: text("reporting_role"),
+}, () => [
+	check("transaction_categories_reporting_role_check", sql\`reporting_role = ANY (ARRAY[${roles
+    .map((r) => `'${r}'::text`)
+    .join(", ")}])\`),
+]);`;
+
+  it("returns nothing when the registry and the constraint agree", () => {
+    expect(
+      findReportingRoleMismatches(["debt_principle_paid", "debt_cash_paydown"],
+        schemaWith(["debt_principle_paid", "debt_cash_paydown"])),
+    ).toEqual([]);
+  });
+
+  it("flags a registry role the database would reject", () => {
+    expect(
+      findReportingRoleMismatches(["debt_principle_paid", "income_interest_earned"],
+        schemaWith(["debt_principle_paid"])),
+    ).toEqual([{ reason: "missing-in-schema", role: "income_interest_earned" }]);
+  });
+
+  it("flags a constraint value no query reads", () => {
+    expect(
+      findReportingRoleMismatches(["debt_principle_paid"],
+        schemaWith(["debt_principle_paid", "debt_orphan"])),
+    ).toEqual([{ reason: "missing-in-registry", role: "debt_orphan" }]);
+  });
+
+  it("flags the constraint going missing entirely", () => {
+    expect(findReportingRoleMismatches(["debt_principle_paid"], "export const x = 1;")).toEqual([
+      { reason: "no-constraint", role: null },
+    ]);
+  });
+
+  it("accepts the shipped schema", () => {
+    const schema = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../drizzle/schema.ts"),
+      "utf8",
+    );
+    expect(findReportingRoleMismatches(REPORTING_ROLE_KEYS, schema)).toEqual([]);
   });
 });

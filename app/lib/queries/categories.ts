@@ -12,6 +12,9 @@ export async function getTransactionCategories() {
     .select({
       transactionCategoryId: transactionCategories.transactionCategoryId,
       transactionCategory: transactionCategories.transactionCategory,
+      // What this category means to the aggregates, or null for most rows
+      // (Issue #111). /settings/categories renders and edits it.
+      reportingRole: transactionCategories.reportingRole,
     })
     .from(transactionCategories)
     .orderBy(asc(transactionCategories.transactionCategory));

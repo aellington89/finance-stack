@@ -5,7 +5,7 @@ import {
   accountBalanceHistory,
   transactions,
 } from "@/drizzle/schema";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   getDebtServiceSummary,
   getDebtWaterfall,
@@ -29,9 +29,24 @@ function findDebtServiceAccount(
   return undefined;
 }
 import {
-  DEBT_INTEREST_CATEGORY_IDS,
-  DEBT_PAYMENT_CATEGORY_IDS,
-} from "@/lib/queries/liability-categories";
+  DEBT_ACCRUAL_ROLES,
+  DEBT_PAYMENT_ROLES,
+} from "@/lib/constants/reporting-roles";
+import { transactionCategories } from "@/drizzle/schema";
+
+// Which categories carry a role is now a fact about the database rather than a
+// constant in the codebase (Issue #111), so the tests below that used to
+// iterate the pinned id lists read the same set back out instead. Against the
+// Finances_Test fixture that is the same fifteen categories, so the totals
+// these assertions produce are unchanged from the pinned-id era — which is the
+// point: the refactor was meant to move no numbers.
+async function categoryIdsForRoles(roles: readonly string[]): Promise<number[]> {
+  const rows = await db
+    .select({ id: transactionCategories.transactionCategoryId })
+    .from(transactionCategories)
+    .where(inArray(transactionCategories.reportingRole, [...roles]));
+  return rows.map((r) => r.id);
+}
 
 // Test dates — outside the 12-month mock-data window so queries scoped to
 // these dates only return rows this file inserts.
@@ -47,6 +62,17 @@ const TYPE_AUTO_LOAN = 19; // Non-current Liability
 
 const createdAccountIds: number[] = [];
 const createdTxIds: number[] = [];
+const createdCategoryIds: number[] = [];
+
+// A category the user invents, of the kind the pinned-id era could never count.
+async function createCategory(name: string, role: string | null): Promise<number> {
+  const [row] = await db
+    .insert(transactionCategories)
+    .values({ transactionCategory: name, reportingRole: role })
+    .returning({ id: transactionCategories.transactionCategoryId });
+  createdCategoryIds.push(row.id);
+  return row.id;
+}
 
 async function createAccount(
   name: string,
@@ -110,6 +136,12 @@ afterEach(async () => {
       .delete(accounts)
       .where(inArray(accounts.accountId, createdAccountIds));
     createdAccountIds.length = 0;
+  }
+  if (createdCategoryIds.length > 0) {
+    await db
+      .delete(transactionCategories)
+      .where(inArray(transactionCategories.transactionCategoryId, createdCategoryIds));
+    createdCategoryIds.length = 0;
   }
 });
 
@@ -296,16 +328,25 @@ describe("getLiabilityTrendDecomposition", () => {
 // ────────────────────────────────────────────────────────────────────
 
 describe("getDebtServiceSummary", () => {
-  it("aggregates payments and interest from every pinned category ID", async () => {
+  it("aggregates payments and interest from every category carrying a debt role", async () => {
     const cardId = await createAccount("Service Card", TYPE_CREDIT_CARD);
     const mortgageId = await createAccount("Service Mortgage", TYPE_MORTGAGE);
 
+    const paymentCategoryIds = await categoryIdsForRoles(DEBT_PAYMENT_ROLES);
+    const accrualCategoryIds = await categoryIdsForRoles(DEBT_ACCRUAL_ROLES);
+
+    // The fixture tags the same fifteen categories the pinned lists used to
+    // name, so these counts — and every total below — are what this test
+    // asserted before the roles landed.
+    expect(paymentCategoryIds).toHaveLength(10);
+    expect(accrualCategoryIds).toHaveLength(5);
+
     // One $100 payment in every payment category, on a liability account.
-    for (const catId of DEBT_PAYMENT_CATEGORY_IDS) {
+    for (const catId of paymentCategoryIds) {
       await insertTx(cardId, "2020-06-01", "100.00", catId);
     }
     // One $50 interest accrual in every interest category, on a liability account.
-    for (const catId of DEBT_INTEREST_CATEGORY_IDS) {
+    for (const catId of accrualCategoryIds) {
       await insertTx(mortgageId, "2020-06-15", "-50.00", catId);
     }
     // A non-debt-service category on a liability account — must be excluded.
@@ -313,25 +354,82 @@ describe("getDebtServiceSummary", () => {
 
     const result = await getDebtServiceSummary(PERF_START, PERF_END);
 
-    expect(result.totalPayments).toBeCloseTo(
-      100 * DEBT_PAYMENT_CATEGORY_IDS.length,
-      2
-    );
-    expect(result.interestAccrued).toBeCloseTo(
-      -50 * DEBT_INTEREST_CATEGORY_IDS.length,
-      2
-    );
+    expect(result.totalPayments).toBeCloseTo(100 * paymentCategoryIds.length, 2);
+    expect(result.interestAccrued).toBeCloseTo(-50 * accrualCategoryIds.length, 2);
     expect(result.principalPaid).toBeCloseTo(
       result.totalPayments + result.interestAccrued,
       2
     );
   });
 
+  // The acceptance criterion for Issue #111. Before roles, the aggregates
+  // filtered on a hard-coded list of transaction_category_id values, so a
+  // category the user added could not reach them without a code change — and a
+  // fresh install, holding none of those ids, reported zeros.
+  it("counts a category the user created and tagged, with no code change", async () => {
+    const loanId = await createAccount("Personal Loan", TYPE_MORTGAGE);
+
+    const principalId = await createCategory(
+      "Personal Loan Principle",
+      "debt_principle_paid"
+    );
+    const accruedId = await createCategory(
+      "Accrued Personal Loan Interest",
+      "debt_interest_accrued"
+    );
+    // Same shape of category, deliberately left untagged: it must not count.
+    const untaggedId = await createCategory("Personal Loan Fees", null);
+
+    await insertTx(loanId, "2020-06-01", "300.00", principalId);
+    await insertTx(loanId, "2020-06-15", "-40.00", accruedId);
+    await insertTx(loanId, "2020-06-20", "-15.00", untaggedId);
+
+    const result = await getDebtServiceSummary(PERF_START, PERF_END);
+    const account = findDebtServiceAccount(result, loanId);
+
+    expect(account).toBeDefined();
+    expect(account!.totalPayments).toBeCloseTo(300, 2);
+    expect(account!.interestAccrued).toBeCloseTo(-40, 2);
+    // 300 + (-40): the untagged $15 is absent from both, which is what proves
+    // the filter is the role rather than the account.
+    expect(account!.principalPaid).toBeCloseTo(260, 2);
+  });
+
+  it("reaches the waterfall too, not just the debt-service table", async () => {
+    const loanId = await createAccount("Waterfall Loan", TYPE_MORTGAGE);
+    const paydownId = await createCategory("Personal Loan Paydown", "debt_cash_paydown");
+
+    await insertBalance(loanId, PERF_START, "-1000.00");
+    await insertBalance(loanId, PERF_END, "-800.00");
+    await insertTx(loanId, "2020-06-01", "200.00", paydownId);
+
+    const result = await getDebtWaterfall(PERF_START, PERF_END);
+
+    expect(result.payments).toBeCloseTo(200, 2);
+  });
+
+  it("ignores a tagged category once the tag is cleared", async () => {
+    const loanId = await createAccount("Retag Loan", TYPE_MORTGAGE);
+    const categoryId = await createCategory("Retag Principle", "debt_principle_paid");
+    await insertTx(loanId, "2020-06-01", "500.00", categoryId);
+
+    const before = await getDebtServiceSummary(PERF_START, PERF_END);
+    expect(findDebtServiceAccount(before, loanId)?.totalPayments).toBeCloseTo(500, 2);
+
+    await db
+      .update(transactionCategories)
+      .set({ reportingRole: null })
+      .where(eq(transactionCategories.transactionCategoryId, categoryId));
+
+    const after = await getDebtServiceSummary(PERF_START, PERF_END);
+    expect(findDebtServiceAccount(after, loanId)).toBeUndefined();
+  });
+
   it("ignores transactions on non-liability accounts", async () => {
     const checkingId = await createAccount("Service Checking", TYPE_CHECKING);
-    // Cat 12 (Mortgage Principle) is in DEBT_PAYMENT_CATEGORY_IDS — but
-    // posting it to a checking account should still be filtered out by
-    // the account_type_category_id IN (5,6) clause.
+    // Cat 12 (Mortgage Principle) carries debt_principle_paid — but posting it
+    // to a checking account should still be filtered out by the
+    // account_type_category_id IN (5,6) clause.
     await insertTx(checkingId, "2020-06-01", "100.00", 12);
     await insertTx(checkingId, "2020-06-10", "50.00", 51); // Interest Earned
 

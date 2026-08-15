@@ -26,8 +26,8 @@ There is no `createTransactionType()`: every row that table holds ships in `shar
 | `createAccount()` | `accountFormSchema` | — | Failed to create account. Please try again. |
 | `updateAccount()` | `accountFormSchema` | `accountId` | Failed to update account. Please try again. |
 | `deleteAccount()` | — | `accountId` | Failed to delete account. Please try again. |
-| `createTransactionCategory()` | `entityNameSchema` | — | Failed to create category. Please try again. |
-| `updateTransactionCategory()` | `entityNameSchema` | `transactionCategoryId` | Failed to update category. Please try again. |
+| `createTransactionCategory()` | `transactionCategorySchema` | — | Failed to create category. Please try again. |
+| `updateTransactionCategory()` | `transactionCategorySchema` | `transactionCategoryId` | Failed to update category. Please try again. |
 | `deleteTransactionCategory()` | — | `transactionCategoryId` | Failed to delete category. Please try again. |
 | `updateTransactionType()` | `entityNameSchema` | `transactionTypeId` | Failed to update type. Please try again. |
 | `deleteTransactionType()` | — | `transactionTypeId` | Failed to delete type. Please try again. |

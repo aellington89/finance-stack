@@ -12,17 +12,16 @@ import {
   accounts,
 } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
-import { entityNameSchema, accountTypeSchema } from "@/lib/validations/categories";
+import {
+  entityNameSchema,
+  accountTypeSchema,
+  transactionCategorySchema,
+} from "@/lib/validations/categories";
 import { parseEntityId } from "@/lib/validations/id";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
-import { protectionRefusal } from "@/lib/constants/protected-rows";
-import {
-  accountTypeCategoryProtection,
-  transactionCategoryProtection,
-  transactionTypeProtection,
-} from "@/lib/queries/protected-rows";
+import { protectionFor, protectionRefusal } from "@/lib/constants/protected-rows";
 
 // Every write below goes through auditedTransaction() even where it is a single
 // statement: that helper is what names the actor for the audit trigger, and a
@@ -32,13 +31,20 @@ import {
 // inside the `try` (Issue #179), so a read that fails returns an ActionState
 // rather than escaping the action as an unhandled throw.
 //
-// The protection pre-checks (Issue #109) follow the same placement, and sit
-// after parseEntityId/safeParse so a malformed payload is still refused before
-// the database is reached — tests/integration/actions/validation-contract.test.ts
-// asserts exactly that. In the delete actions they run before the `inUse` read:
-// a protected row is nearly always in use, and "it is protected" is the more
-// actionable of the two messages. See lib/constants/protected-rows.ts for why
-// rename-to-canonical is the one edit that gets through.
+// The protection pre-checks (Issue #109) sit after parseEntityId/safeParse so a
+// malformed payload is still refused before the database is reached —
+// tests/integration/actions/validation-contract.test.ts asserts exactly that. In
+// the delete actions they run before the `inUse` read: a protected row is nearly
+// always in use, and "it is protected" is the more actionable of the two
+// messages. See lib/constants/protected-rows.ts for why rename-to-canonical is
+// the one edit that gets through.
+//
+// protectionFor() is a pure predicate over SHIPPED_ROWS and reaches no database.
+// It needed one until issue #111: the liability-pin rule matched on the row's
+// current name, so the guard had to fetch the database's copy of it — the name
+// in the submitted form is what the user wants it to become, not what it is.
+// With that rule gone the three reads in lib/queries/protected-rows.ts had no
+// remaining caller and the module was deleted.
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
   revalidatePath("/dashboard/transactions");
@@ -47,6 +53,16 @@ function revalidateCategoryPaths() {
 
 function parseNameForm(formData: FormData) {
   return entityNameSchema.safeParse({ name: formData.get("name") as string });
+}
+
+// Transaction categories carry a reporting role as well as a name (Issue #111).
+// `formData.get()` yields null when the field is absent, which the schema treats
+// as "no role" — same as the picker's "None".
+function parseCategoryForm(formData: FormData) {
+  return transactionCategorySchema.safeParse({
+    name: formData.get("name") as string,
+    reportingRole: formData.get("reportingRole") as string | null,
+  });
 }
 
 // ─── Transaction Categories ───────────────────────────────────────────────────
@@ -58,14 +74,17 @@ export async function createTransactionCategory(
   const denied = await requireActionUser();
   if (denied) return denied;
 
-  const result = parseNameForm(formData);
+  const result = parseCategoryForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   try {
     await auditedTransaction(async (tx) => {
-      await tx.insert(transactionCategories).values({ transactionCategory: result.data.name });
+      await tx.insert(transactionCategories).values({
+        transactionCategory: result.data.name,
+        reportingRole: result.data.reportingRole,
+      });
     });
   } catch (error) {
     return actionFailure("createTransactionCategory", error, "Failed to create category. Please try again.");
@@ -85,13 +104,13 @@ export async function updateTransactionCategory(
   const id = parseEntityId(formData.get("transactionCategoryId"));
   if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
-  const result = parseNameForm(formData);
+  const result = parseCategoryForm(formData);
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   try {
-    const protection = await transactionCategoryProtection(id);
+    const protection = protectionFor("transaction_categories", id);
     if (protection && protection.canonicalName !== result.data.name) {
       return {
         success: false,
@@ -103,7 +122,10 @@ export async function updateTransactionCategory(
     await auditedTransaction(async (tx) => {
       await tx
         .update(transactionCategories)
-        .set({ transactionCategory: result.data.name })
+        .set({
+          transactionCategory: result.data.name,
+          reportingRole: result.data.reportingRole,
+        })
         .where(eq(transactionCategories.transactionCategoryId, id));
     });
   } catch (error) {
@@ -125,7 +147,7 @@ export async function deleteTransactionCategory(
   if (id === null) return { success: false, errors: {}, message: "Invalid category ID" };
 
   try {
-    const protection = await transactionCategoryProtection(id);
+    const protection = protectionFor("transaction_categories", id);
     if (protection) {
       return {
         success: false,
@@ -185,7 +207,7 @@ export async function updateTransactionType(
   }
 
   try {
-    const protection = await transactionTypeProtection(id);
+    const protection = protectionFor("transaction_types", id);
     if (protection && protection.canonicalName !== result.data.name) {
       return {
         success: false,
@@ -219,7 +241,7 @@ export async function deleteTransactionType(
   if (id === null) return { success: false, errors: {}, message: "Invalid type ID" };
 
   try {
-    const protection = await transactionTypeProtection(id);
+    const protection = protectionFor("transaction_types", id);
     if (protection) {
       return {
         success: false,
@@ -295,7 +317,7 @@ export async function updateAccountTypeCategory(
   }
 
   try {
-    const protection = await accountTypeCategoryProtection(id);
+    const protection = protectionFor("account_type_categories", id);
     if (protection && protection.canonicalName !== result.data.name) {
       return {
         success: false,
@@ -329,7 +351,7 @@ export async function deleteAccountTypeCategory(
   if (id === null) return { success: false, errors: {}, message: "Invalid account type category ID" };
 
   try {
-    const protection = await accountTypeCategoryProtection(id);
+    const protection = protectionFor("account_type_categories", id);
     if (protection) {
       return {
         success: false,

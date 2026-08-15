@@ -129,6 +129,33 @@ beforeAll(async () => {
       SET transaction_category = EXCLUDED.transaction_category
   `);
 
+  // Re-converge the reporting roles the Liabilities queries filter on (Issue
+  // #111), for the same reason as the names above: a test that clears or
+  // retags a category must not leave the next file asserting debt totals over
+  // a changed set.
+  //
+  // Unconditional rather than guarded on IS NULL — unlike the fixture seed,
+  // this hook's whole job is drift correction, so a role a test changed has to
+  // come back. Kept as separate UPDATEs rather than a third column in the
+  // upsert above because parseSeedRows reads `(id, 'name')` tuples only; see
+  // the fixture seed's own note.
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_principle_paid'
+      WHERE transaction_category_id IN (7, 12, 70, 75)
+  `);
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_interest_paid'
+      WHERE transaction_category_id IN (8, 13, 57, 68, 76)
+  `);
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_interest_accrued'
+      WHERE transaction_category_id IN (9, 14, 69, 74, 80)
+  `);
+  await db.execute(sql`
+    UPDATE transaction_categories SET reporting_role = 'debt_cash_paydown'
+      WHERE transaction_category_id IN (29)
+  `);
+
   // Advance the IDENTITY sequences past the highest explicit ID so subsequent
   // auto-generated inserts do not collide with the values seeded above.
   await db.execute(

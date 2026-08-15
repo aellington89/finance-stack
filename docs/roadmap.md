@@ -135,6 +135,11 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > shipped rows locked, and `account_type_categories` has no UI to restrict. What
 > is left of #87 is the role gate and the admin screen — which is also where a
 > legitimate future `transaction_types` insert would live.
+>
+> **#111 then removed a piece of #109.** The liability pins are gone —
+> `transaction_categories.reporting_role` carries what the ids used to mean, so
+> those fifteen rows are ordinary user data again and the second protection rule
+> went with them.
 
 ### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
 - [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*

@@ -7,12 +7,6 @@ import {
   type ProtectedTable,
 } from "@/lib/constants/protected-rows";
 import { SEED_REFERENCES, SHIPPED_ROWS } from "@/lib/constants/reference-ids";
-import {
-  DEBT_INTEREST_CATEGORIES,
-  DEBT_PAYMENT_CATEGORIES,
-} from "@/lib/queries/liability-categories";
-
-const PINS = [...DEBT_PAYMENT_CATEGORIES, ...DEBT_INTEREST_CATEGORIES];
 
 function shippedGroup(table: string) {
   const group = SHIPPED_ROWS.find((g) => g.table === table);
@@ -24,7 +18,7 @@ describe("protectionFor — app-owned rows", () => {
   it("protects every row shared-lookups.sql ships", () => {
     for (const group of SHIPPED_ROWS) {
       for (const { id, name } of group.expected) {
-        const protection = protectionFor(group.table as ProtectedTable, id, name);
+        const protection = protectionFor(group.table as ProtectedTable, id);
         expect(protection, `${group.table} id=${id}`).not.toBeNull();
         expect(protection?.reason).toBe("app-owned");
         expect(protection?.canonicalName).toBe(name);
@@ -43,7 +37,7 @@ describe("protectionFor — app-owned rows", () => {
     );
     expect(named.has(3)).toBe(false);
 
-    const protection = protectionFor("transaction_types", 3, "Refund");
+    const protection = protectionFor("transaction_types", 3);
     expect(protection?.reason).toBe("app-owned");
   });
 
@@ -51,7 +45,7 @@ describe("protectionFor — app-owned rows", () => {
     // An install that renamed id 6 before Issue #109 landed keeps its name. The
     // row must still be protected, and must still know what it should be called
     // — that is what makes the rename-back repair possible.
-    const protection = protectionFor("transaction_categories", 6, "Miscellaneous");
+    const protection = protectionFor("transaction_categories", 6);
     expect(protection?.reason).toBe("app-owned");
     expect(protection?.canonicalName).toBe("Other");
   });
@@ -59,57 +53,64 @@ describe("protectionFor — app-owned rows", () => {
   it("does not leak ids across tables", () => {
     // account_type_categories ships ids 1-6; transaction_categories ships only
     // id 6. Asking the wrong table must not find a row.
-    expect(protectionFor("transaction_categories", 1, "Current Asset")).toBeNull();
-    expect(protectionFor("transaction_categories", 5, "Current Liability")).toBeNull();
+    expect(protectionFor("transaction_categories", 1)).toBeNull();
+    expect(protectionFor("transaction_categories", 5)).toBeNull();
   });
 
   it("leaves ids past the shipped range alone", () => {
     const maxTypeId = Math.max(...shippedGroup("transaction_types").expected.map((r) => r.id));
-    expect(protectionFor("transaction_types", maxTypeId + 1, "My Own Type")).toBeNull();
-    expect(protectionFor("account_type_categories", 999, "Intangible Asset")).toBeNull();
+    expect(protectionFor("transaction_types", maxTypeId + 1)).toBeNull();
+    expect(protectionFor("account_type_categories", 999)).toBeNull();
   });
 });
 
-describe("protectionFor — liability pins", () => {
-  it("protects each pin under its canonical name", () => {
-    for (const { id, name } of PINS) {
-      const protection = protectionFor("transaction_categories", id, name);
-      expect(protection, `pin id=${id}`).not.toBeNull();
-      expect(protection?.canonicalName).toBe(name);
-    }
-  });
+// Issue #111 removed the second protection rule. The Liabilities aggregates
+// used to name fifteen transaction_categories rows by id, so those rows were
+// locked against rename and delete even though they are the user's and ship
+// nowhere. The meaning now lives in transaction_categories.reporting_role, so
+// renaming one drops it out of nothing and there is no reason left to lock it.
+//
+// These assert the un-protection, because it is the user-visible half of #111:
+// rows that could not be edited before this landed can be edited now.
+describe("protectionFor — the former liability pins are ordinary user rows", () => {
+  // The ids the deleted DEBT_PAYMENT_CATEGORIES / DEBT_INTEREST_CATEGORIES
+  // lists held, spelled out rather than imported — the constants are gone, and
+  // the point of the test is that nothing in the codebase knows these numbers
+  // any more.
+  const FORMER_PINS = [
+    { id: 7, name: "HELOC Principle" },
+    { id: 8, name: "HELOC Interest" },
+    { id: 9, name: "Accrued HELOC Interest" },
+    { id: 12, name: "Mortgage Principle" },
+    { id: 13, name: "Mortgage Interest" },
+    { id: 14, name: "Accrued Mortgage Interest" },
+    { id: 29, name: "Applied Credit" },
+    { id: 57, name: "Epic Loan Interest" },
+    { id: 68, name: "Auto Loan Interest" },
+    { id: 69, name: "Accrued Auto Loan Interest" },
+    { id: 70, name: "Auto Loan Principle" },
+    { id: 74, name: "Accrued Student Loan Interest" },
+    { id: 75, name: "Student Loan Principle" },
+    { id: 76, name: "Student Loan Interest" },
+    { id: 80, name: "Credit Card Interest" },
+  ];
 
-  it("does not protect a pinned id carrying a different name", () => {
-    // The rule that keeps protection correct on somebody else's database: id 7
-    // is "HELOC Principle" here and could be anything there.
-    for (const { id } of PINS) {
-      expect(protectionFor("transaction_categories", id, "Coffee"), `pin id=${id}`).toBeNull();
-    }
-  });
-
-  it("applies only to transaction_categories", () => {
-    // Past the shipped id ranges of the other two tables, so an app-owned hit
-    // cannot mask the thing being asserted. (Low pin ids like 7 DO come back
-    // protected for transaction_types — id 7 there is the shipped 'Other' —
-    // which is the app-owned rule working, not the pin rule leaking.)
-    const highestShipped = Math.max(
-      ...SHIPPED_ROWS.flatMap((g) => g.expected.map((r) => r.id))
-    );
-    const pin = PINS.find((p) => p.id > highestShipped);
-    expect(pin, "expected at least one pin past the shipped id range").toBeDefined();
-
-    expect(protectionFor("transaction_types", pin!.id, pin!.name)).toBeNull();
-    expect(protectionFor("account_type_categories", pin!.id, pin!.name)).toBeNull();
-  });
-
-  it("reports app-owned rather than liability-pin where the two could overlap", () => {
+  it("leaves every former pin editable", () => {
     const shippedCategoryIds = new Set(
       shippedGroup("transaction_categories").expected.map((r) => r.id)
     );
-    const overlapping = PINS.filter((p) => shippedCategoryIds.has(p.id));
-    // There is no overlap today; if a pin is ever also shipped, app-owned is
-    // the stronger rule and must win.
-    expect(overlapping).toEqual([]);
+
+    for (const { id } of FORMER_PINS) {
+      // None of them is also a shipped row, so a null here can only mean the
+      // pin rule is gone rather than that some other rule is covering for it.
+      expect(shippedCategoryIds.has(id), `id=${id} should not be shipped`).toBe(false);
+      expect(protectionFor("transaction_categories", id), `former pin id=${id}`).toBeNull();
+    }
+  });
+
+  it("still protects the one category that does ship", () => {
+    // The counterweight: #111 unlocked the pins, not the app-owned rule.
+    expect(protectionFor("transaction_categories", 6)?.reason).toBe("app-owned");
   });
 });
 
@@ -128,7 +129,6 @@ describe("SEED_REFERENCES ⊆ SHIPPED_ROWS", () => {
 
 describe("protectionRefusal", () => {
   const appOwned = { reason: "app-owned" as const, canonicalName: "Other" };
-  const pin = { reason: "liability-pin" as const, canonicalName: "Mortgage Interest" };
 
   it("refuses a delete without offering a way through", () => {
     expect(protectionRefusal(appOwned, "delete", "category")).toBe(
@@ -142,16 +142,11 @@ describe("protectionRefusal", () => {
     expect(message).toMatch(/renamed back/i);
   });
 
-  it("gives the liability reason for a pinned row", () => {
-    expect(protectionRefusal(pin, "delete", "category")).toContain("Liabilities drilldown");
-  });
-
   it("uses the caller's entity label", () => {
     expect(protectionRefusal(appOwned, "delete", "type")).toContain("this type");
   });
 
   it("has tooltip copy for every reason", () => {
     expect(PROTECTION_TOOLTIP["app-owned"]).toBeTruthy();
-    expect(PROTECTION_TOOLTIP["liability-pin"]).toBeTruthy();
   });
 });
