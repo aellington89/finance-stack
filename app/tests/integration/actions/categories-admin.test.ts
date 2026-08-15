@@ -16,6 +16,8 @@ import {
   updateAccountTypeCategory,
   deleteAccountTypeCategory,
   createTransactionType,
+  updateTransactionType,
+  deleteTransactionType,
   createTransactionCategory,
   createAccountType,
 } from "@/lib/actions/categories";
@@ -128,6 +130,22 @@ const ADMIN_ONLY = [
   {
     name: "createTransactionType",
     run: () => createTransactionType(emptyState, makeFormData({ name: "Gate Probe Type" })),
+  },
+  {
+    // Reachable only for a row an install created past id 12 — protectionFor()
+    // refuses all 12 shipped ones regardless. That row is still user-minted
+    // reference data the KPI classification depends on, which is what put these
+    // two behind the gate alongside create.
+    name: "updateTransactionType",
+    run: () =>
+      updateTransactionType(
+        emptyState,
+        makeFormData({ transactionTypeId: "1", name: "Internal Transfer" })
+      ),
+  },
+  {
+    name: "deleteTransactionType",
+    run: () => deleteTransactionType(emptyState, makeFormData({ transactionTypeId: "1" })),
   },
 ];
 

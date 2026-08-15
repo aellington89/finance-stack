@@ -47,6 +47,7 @@ import { protectionFor, protectionRefusal } from "@/lib/constants/protected-rows
 // remaining caller and the module was deleted.
 function revalidateCategoryPaths() {
   revalidatePath("/settings/categories");
+  revalidatePath("/settings/admin");
   revalidatePath("/dashboard/transactions");
   revalidatePath("/accounts/new");
 }
@@ -183,17 +184,22 @@ export async function deleteTransactionCategory(
 
 // ─── Transaction Types ────────────────────────────────────────────────────────
 //
-// createTransactionType was deleted outright by Issue #109 rather than kept and
-// made to always refuse: all 12 rows this table ships are protected, and a
-// thirteenth created from /settings/categories was a row no query, importer
-// parser or SEED_REFERENCES entry would recognise. That issue named where a
-// legitimate insert would live — "behind the admin screen in #87, with a role
-// check of its own" — and this is it.
+// Admin-only, all three (Issue #87). createTransactionType was deleted outright
+// by Issue #109 rather than kept and made to always refuse: all 12 rows this
+// table ships are protected, and a thirteenth created from /settings/categories
+// was a row no query, importer parser or SEED_REFERENCES entry would recognise.
+// That issue named where a legitimate insert would live — "behind the admin
+// screen in #87, with a role check of its own" — and this is it.
 //
-// Update and delete stay open to any signed-in user, guarded by protectionFor()
-// as before. The distinction is not arbitrary: those two can only reach a row
-// past id 12, i.e. one an install already created for itself, while an insert
-// mints new reference data.
+// Update and delete were briefly left open to any signed-in user on the
+// reasoning that protectionFor() already refuses all 12 shipped rows, so the
+// only thing they could reach was a row an install created for itself past id
+// 12. That reasoning had the sign backwards: such a row is user-minted
+// reference data that the classification every KPI reads depends on, which is
+// precisely what this issue says a regular user must not edit. The card is gone
+// from /settings/categories — with no create button and every shipped row
+// locked, it was twelve padlocks and no action — and the table is managed
+// whole on /settings/admin.
 
 export async function createTransactionType(
   prevState: ActionState,
@@ -223,7 +229,7 @@ export async function updateTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("transactionTypeId"));
@@ -262,7 +268,7 @@ export async function deleteTransactionType(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const denied = await requireActionUser();
+  const denied = await requireAdminUser();
   if (denied) return denied;
 
   const id = parseEntityId(formData.get("transactionTypeId"));

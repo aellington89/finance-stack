@@ -1,6 +1,5 @@
 import {
   getTransactionCategories,
-  getTransactionTypes,
   getAccountTypeCategories,
   getAccountTypes,
 } from "@/lib/queries/categories";
@@ -8,8 +7,6 @@ import {
   createTransactionCategory,
   updateTransactionCategory,
   deleteTransactionCategory,
-  updateTransactionType,
-  deleteTransactionType,
   createAccountType,
   updateAccountType,
   deleteAccountType,
@@ -49,26 +46,27 @@ function roleBadge(key: string | null) {
   return role ? { key: role.key, label: role.label } : null;
 }
 
+// Transaction Types is deliberately absent from this page (Issue #87).
+//
+// It rendered a list of twelve padlocks: every row the table ships is protected
+// against rename and delete, and #109 removed the Add button, so on a clean
+// install the card offered no action at all. The only rows it could still act on
+// were ones an install created past id 12 before that — and those are exactly
+// what a regular user must not edit, since transaction_types drives the
+// classification every KPI reads. The whole table now lives on /settings/admin,
+// where the create affordance already had to be.
 export default async function CategoriesPage() {
-  const [txnCategories, txnTypes, acctTypeCategories, acctTypes] =
-    await Promise.all([
-      getTransactionCategories(),
-      getTransactionTypes(),
-      getAccountTypeCategories(),
-      getAccountTypes(),
-    ]);
+  const [txnCategories, acctTypeCategories, acctTypes] = await Promise.all([
+    getTransactionCategories(),
+    getAccountTypeCategories(),
+    getAccountTypes(),
+  ]);
 
   const txnCategoryItems = txnCategories.map((r) => ({
     id: r.transactionCategoryId,
     name: r.transactionCategory,
     lockedReason: lockedReason("transaction_categories", r.transactionCategoryId),
     role: roleBadge(r.reportingRole),
-  }));
-
-  const txnTypeItems = txnTypes.map((r) => ({
-    id: r.transactionTypeId,
-    name: r.transactionType,
-    lockedReason: lockedReason("transaction_types", r.transactionTypeId),
   }));
 
   const acctTypeCategoryItems = acctTypeCategories.map((r) => ({
@@ -79,9 +77,9 @@ export default async function CategoriesPage() {
   return (
     <div className="p-6 w-3/4 mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold">Categories &amp; Types</h1>
+        <h1 className="text-xl font-semibold">Categories &amp; Account Types</h1>
       </div>
-      <div className="grid grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-2 gap-6 items-start">
         <EntityCard
           title="Transaction Categories"
           entityLabel="Category"
@@ -91,15 +89,6 @@ export default async function CategoriesPage() {
           updateAction={updateTransactionCategory}
           deleteAction={deleteTransactionCategory}
           roleOptions={ROLE_OPTIONS}
-        />
-        {/* No createAction: the full set ships with the app (Issue #109). */}
-        <EntityCard
-          title="Transaction Types"
-          entityLabel="Type"
-          idFieldName="transactionTypeId"
-          items={txnTypeItems}
-          updateAction={updateTransactionType}
-          deleteAction={deleteTransactionType}
         />
         <AccountTypesCard
           accountTypes={acctTypes}

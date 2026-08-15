@@ -338,9 +338,12 @@ describe("user-owned rows stay editable", () => {
     createdCategoryIds.length = 0;
   });
 
-  it("lets a transaction type created before #109 be renamed and deleted", async () => {
-    // There is no createTransactionType any more, so this stands in for a row
-    // an existing install already has past the shipped range.
+  it("lets an admin rename and delete a transaction type past the shipped range", async () => {
+    // Stands in for a row an existing install created before #109 removed the
+    // Add button. Protection cannot refuse it — it is not a shipped row — so
+    // the only thing standing in front of it is the role gate #87 put there,
+    // which the default integration session satisfies. The refusal side is in
+    // actions/categories-admin.test.ts.
     const [inserted] = await db
       .insert(transactionTypes)
       .values({ transactionType: "Legacy User Type" })

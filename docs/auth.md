@@ -27,7 +27,7 @@ Deliberately public: the landing page (`/`), `/login`, Auth.js's own `/api/auth/
 | Role | May |
 |---|---|
 | `user` | Everything the app does day to day, including full CRUD on their own `transaction_categories` (and their reporting roles) and `account_types` |
-| `admin` | The above, plus `account_type_categories` and `transaction_types` — via `/settings/admin` |
+| `admin` | The above, plus **every** mutation on `account_type_categories` and `transaction_types` — via `/settings/admin`, the only page that carries them |
 
 **Why those two tables and not the whole settings page.** `account_type_categories` and `transaction_types` are the basis of the balance-sheet groupings and the transaction classification every KPI reads, so a wrong edit is not one bad row but every dashboard at once. Naming your own transaction categories is ordinary use by comparison — and since [#111](https://github.com/aellington89/finance-stack/issues/111) `/settings/categories` is also where a category is tagged with a reporting role, which a regular user must be able to do. [#81](https://github.com/aellington89/finance-stack/issues/81) proposed gating that whole page on `admin`; it is superseded by this split, and `tests/integration/actions/categories-admin.test.ts` asserts the regular-user CRUD still works so a later change cannot quietly reverse it.
 
