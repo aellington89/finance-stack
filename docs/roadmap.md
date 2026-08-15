@@ -113,7 +113,7 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 ### v0.3.0 — Phase 2 (Auth-gated lookup-table protection)
 - [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users
 - [#87](https://github.com/aellington89/finance-stack/issues/87) Restrict user-level editing of static lookup tables
-- [#109](https://github.com/aellington89/finance-stack/issues/109) Protect pinned transaction_categories rows
+- [#109](https://github.com/aellington89/finance-stack/issues/109) Protect the lookup rows the app owns; drop Transaction Type creation
 - [#178](https://github.com/aellington89/finance-stack/issues/178) Define the seed-data taxonomy
 - [#111](https://github.com/aellington89/finance-stack/issues/111) User-defined liability categories *(moved from Phase 6 by #178)*
 
@@ -162,6 +162,15 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
+- [#271](https://github.com/aellington89/finance-stack/issues/271) `transaction_types` id 9 ships as `Accrued Amoritized Interest` — *amortized* is misspelled *(new — from #109)*
+- [#273](https://github.com/aellington89/finance-stack/issues/273) `importer/parsers/paystubs.py` hardcodes 17 lookup ids; five categories and the pay account are absent from the test fixture *(new — from #109)*
+
+> **#273 is importer hardening's real prerequisite.** #124 and #132 above treat
+> the importer as a service to make idempotent and containerize; #273 is the data
+> coupling underneath it — a second, undocumented instance of the defect cell in
+> the [seed-data taxonomy](database.md#seed-data-taxonomy), left open when #109
+> closed the first. Worth sequencing before #124, since resolving it changes what
+> a retried import is keyed on.
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx
@@ -186,7 +195,6 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#139](https://github.com/aellington89/finance-stack/issues/139) Receipt attachments + transaction tagging
 - [#140](https://github.com/aellington89/finance-stack/issues/140) Settings: theme, currency, profile
 - [#110](https://github.com/aellington89/finance-stack/issues/110) Liabilities schema expansion
-- [#111](https://github.com/aellington89/finance-stack/issues/111) User-defined liability categories
 
 ## Notes
 
