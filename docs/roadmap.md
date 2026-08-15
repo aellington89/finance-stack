@@ -191,10 +191,20 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#135](https://github.com/aellington89/finance-stack/issues/135) Recurring transactions / scheduled entries
 - [#137](https://github.com/aellington89/finance-stack/issues/137) Transaction search + CSV export
 - [#241](https://github.com/aellington89/finance-stack/issues/241) Duplicate a transaction with field modifications
+- [#274](https://github.com/aellington89/finance-stack/issues/274) Totals Over Time: plot the total of any transaction type (e.g. Refunds) *(new)*
 - [#138](https://github.com/aellington89/finance-stack/issues/138) Forecasting + savings-rate KPIs
 - [#139](https://github.com/aellington89/finance-stack/issues/139) Receipt attachments + transaction tagging
 - [#140](https://github.com/aellington89/finance-stack/issues/140) Settings: theme, currency, profile
 - [#110](https://github.com/aellington89/finance-stack/issues/110) Liabilities schema expansion
+
+> **#274 is the smallest thing in this phase, and it has a sequencing tie.** It is
+> a feature rather than UX debt — Income/Expenses/Investments are compiled into
+> `getAccountingTimeSeries()` and the chart component alike, so making the series
+> selectable widens the query's row shape, not just the legend — which is why it
+> sits here rather than in Phase 5. But it is small enough to ride along with
+> another minor if one is being cut anyway. It also lands in the same file as
+> [#128](https://github.com/aellington89/finance-stack/issues/128) (Phase 4, chart
+> consolidation); doing #128 first avoids reworking the series plumbing twice.
 
 ## Notes
 
