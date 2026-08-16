@@ -16,7 +16,7 @@ jobs:
         # version that actually ships (Issue #131). Workflow service containers
         # are read by neither the `docker` nor the `docker-compose` Dependabot
         # ecosystem, so this pin is bumped by hand alongside compose.
-        image: postgres:18.4
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
@@ -500,21 +500,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # `docker compose build`, not a bare `docker build`: the runner stage does
-      # `COPY --from=changelog CHANGELOG.md`, which needs the `changelog` entry
-      # in compose's additional_contexts (CHANGELOG.md lives outside ./app).
-      # This matches how release.yml builds the image.
-      - name: Build app image
+      # `docker compose build`, not a bare `docker build`: the runner and migrate
+      # stages both do `COPY --from=repo …`, which needs the `repo` entry in
+      # compose's additional_contexts (those files live outside ./app). This
+      # matches how release.yml builds the images.
+      #
+      # All four services, not just finance-app (#224). The migrate stage was
+      # never built here — `build finance-app` only walks the runner stage's
+      # dependencies — so a broken COPY in it reached master undetected, and #224
+      # added four of them. importer and pg-backup are new Dockerfiles that would
+      # otherwise first be compiled on a release tag.
+      - name: Build service images
         env:
           # Absolute path, for the same reason release.yml sets it: a relative
           # additional_contexts path is resolved against ./app rather than the
-          # repo root on some Compose/buildx versions, and CHANGELOG.md is at
-          # the root.
-          CHANGELOG_CONTEXT: ${{ github.workspace }}
-        run: docker compose build finance-app
+          # repo root on some Compose/buildx versions, and the files it carries
+          # are at the root.
+          REPO_CONTEXT: ${{ github.workspace }}
+        run: docker compose build finance-app migrate importer pg-backup
 
       # Actions are SHA-pinned repo-wide (Issue #131) — mutable tags are exactly
       # how this action was used to ship malware in March 2026.
+      #
+      # Deliberately scoped to finance-app. finance-migrate, finance-importer and
+      # finance-backup are compiled above but not scanned: their postgres and
+      # python:3.14-slim bases carry OS CVEs on a different fix cadence, and
+      # turning that into a merge gate here — before #226 decides what a published
+      # image has to clear — would buy a permanently red job rather than safety.
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

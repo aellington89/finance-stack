@@ -1,6 +1,7 @@
 # Dependabot configuration (Issue #131).
 #
-# Five ecosystems cover every dependency manifest in the repo. Note that
+# Five ecosystems cover every dependency manifest in the repo, across seven
+# entries — `docker` is declared once per Dockerfile directory. Note that
 # `docker` and `docker-compose` are distinct ecosystems: `docker` reads
 # Dockerfiles, `docker-compose` reads compose files, and we need both.
 #
@@ -117,10 +118,34 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
-  # Service images in docker-compose.yml (postgres, python, metabase).
+  # Base image in importer/Dockerfile (python:3.14-slim). Issue #224 moved this
+  # pin out of docker-compose.yml, where the `docker-compose` ecosystem below was
+  # reading it — without this entry the importer's base would silently stop being
+  # tracked.
+  - package-ecosystem: docker
+    directory: /importer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Base image in scripts/Dockerfile (postgres:18.4). Same reasoning as
+  # /importer above, plus a hard constraint: pg_dump must be version-matched to
+  # the server, so a bump here is only correct alongside the `postgres` service
+  # in docker-compose.yml and the `postgres:` service containers in ci.yml and
+  # backup-smoke.yml. Do not merge it on its own — see scripts/Dockerfile.
+  - package-ecosystem: docker
+    directory: /scripts
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Service images in docker-compose.yml (postgres, metabase). Since #224 the
+  # python and backup images are built from Dockerfiles, so their bases arrive
+  # through the `docker` entries above rather than here.
   # Bumping postgres here needs a matching manual bump of the `postgres:`
-  # service image in .github/workflows/ci.yml and backup-smoke.yml, which
-  # Dependabot does not read.
+  # service image in .github/workflows/ci.yml and backup-smoke.yml — which
+  # Dependabot does not read — and of scripts/Dockerfile, which it reads as a
+  # separate ecosystem and will not group with this PR.
   - package-ecosystem: docker-compose
     directory: /
     schedule:

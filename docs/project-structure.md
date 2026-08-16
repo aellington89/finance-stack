@@ -208,8 +208,10 @@ finance-stack/
 │   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance, drilldowns)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
-│   ├── poll.py                            # Polling loop and parser dispatcher (committed)
-│   └── parsers/                           # One module per import type (gitignored)
+│   ├── Dockerfile                         # finance-importer image — bakes poll.py + pinned deps, non-root (#224)
+│   ├── requirements.txt                   # Pinned Python deps, installed at build time (Dependabot `pip`)
+│   ├── poll.py                            # Polling loop and parser dispatcher (committed, baked into the image)
+│   └── parsers/                           # One module per import type (gitignored, bind-mounted)
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
 ├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests
@@ -218,7 +220,7 @@ finance-stack/
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── caddy/
 │   └── Caddyfile                         # Reverse proxy / automatic TLS for exposed deployments (--profile edge, #182)
-├── init-db/
+├── init-db/                              # Baked into the finance-migrate image at /init-db, /roles, /seeds (#224)
 │   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
 │   ├── roles/                            # Least-privilege service roles (#130), applied by the `migrate` service
 │   │   ├── 01-create-roles.sql           # finance_app / finance_importer / finance_bi (cluster-global)
@@ -229,8 +231,10 @@ finance-stack/
 │       ├── finances-test-mock-data.sql   # account_types, transaction_categories, accounts, ~400 txns (Finances_Test only)
 │       └── rebuild-balance-history.sql   # Balance history rebuild for Finances_Test post-seed
 └── scripts/
-    ├── update-account-balance-history.sql   # Balance history rebuild script (manual / --profile init)
-    ├── backup.sh                            # Scheduled pg_dump with retention pruning (pg-backup service)
-    ├── restore.sh                           # Restore a dump into a clean database (#122)
-    └── verify-db-roles.sh                   # Grant matrix + behavioural privilege check per role (#130)
+    ├── Dockerfile                           # finance-backup image (FROM postgres — pg_dump must match the server) (#224)
+    ├── build.sh                             # Stamped local build of all four images
+    ├── update-account-balance-history.sql   # Balance history rebuild script (manual / --profile init) — baked at /scripts
+    ├── backup.sh                            # Scheduled pg_dump with retention pruning (pg-backup service) — baked at /scripts
+    ├── restore.sh                           # Restore a dump into a clean database (#122) — baked at /scripts
+    └── verify-db-roles.sh                   # Grant matrix + behavioural privilege check per role (#130) — baked into finance-migrate
 ```
