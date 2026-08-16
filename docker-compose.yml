@@ -320,7 +320,7 @@ services:
   # configured to match in .github/dependabot.yml. Each major bump runs a one-way
   # migration on the metabase DB — roll back by restoring it from ./backups.
   metabase:
-    image: metabase/metabase:v0.58.24
+    image: metabase/metabase:v0.58.28
     container_name: metabase
     profiles: ["bi"]                   # Not started by default; run with --profile bi
     restart: unless-stopped
