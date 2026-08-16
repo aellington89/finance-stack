@@ -8,11 +8,12 @@ restore.
 The `pg-backup` service runs a scheduled `pg_dump` of each configured database
 into `./backups/` on the host, pruning old dumps on a retention window. It runs
 by default (`docker compose up`) alongside Postgres, from the `finance-backup`
-image built by [`scripts/Dockerfile`](../scripts/Dockerfile) — which is
-`FROM postgres:18.4`, so `pg_dump`/`pg_restore` stay version-matched to the
-server. That version match is a hard requirement, not an optimization:
+image built by [`scripts/Dockerfile`](../scripts/Dockerfile) — which is `FROM
+postgres:<the same tag the server runs>`, so `pg_dump`/`pg_restore` stay
+version-matched. That version match is a hard requirement, not an optimization:
 `pg_dump` refuses to dump a server newer than itself, so bump that base image in
-step with the `postgres` service.
+step with the `postgres` service in `docker-compose.yml`. Dependabot raises the
+two as separate PRs — see [CONTRIBUTING.md](../CONTRIBUTING.md#dependabot-prs).
 
 `backup.sh` and `restore.sh` are **baked into that image** at `/scripts` since
 [Issue #224](https://github.com/aellington89/finance-stack/issues/224) — they

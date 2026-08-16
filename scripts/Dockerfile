@@ -15,7 +15,11 @@
 # stage — its postgresql-client is not version-matched. Bump this tag in step
 # with the `postgres` service in docker-compose.yml and the `postgres:` service
 # containers in ci.yml and backup-smoke.yml.
-FROM postgres:18.4
+#
+# Dependabot reads this file under the `docker` ecosystem and docker-compose.yml
+# under `docker-compose`, so it raises those as two separate PRs that must be
+# merged together — see CONTRIBUTING.md "Dependabot PRs".
+FROM postgres:18.6
 
 COPY backup.sh restore.sh /scripts/
 # Consumed by the one-shot `init-script` service (--profile init), which runs it

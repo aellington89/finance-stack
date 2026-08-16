@@ -24,7 +24,7 @@ services:
 
   # Primary PostgreSQL database that stores all financial data.
   postgres:
-    image: postgres:18.4
+    image: postgres:18.6
     container_name: postgres
     restart: unless-stopped              # Auto-restart on crash or Docker daemon restart
     environment:                         # All credentials sourced from .env — see .env.example for the template
@@ -269,8 +269,9 @@ services:
 
   # Scheduled logical backups. Runs pg_dump (custom format) of each database in
   # BACKUP_DBS to ./backups/ on a loop, pruning dumps older than the retention
-  # window. Built FROM postgres:18.4 so pg_dump stays version-matched to the
-  # server. Restore a dump with /scripts/restore.sh. See docs/backups.md.
+  # window. Built FROM postgres (see scripts/Dockerfile) so pg_dump stays
+  # version-matched to the `postgres` service above — bump the two together.
+  # Restore a dump with /scripts/restore.sh. See docs/backups.md.
   pg-backup:
     build:                               # backup.sh + restore.sh baked in at /scripts (#224)
       context: ./scripts
@@ -334,7 +335,7 @@ services:
   # configured to match in .github/dependabot.yml. Each major bump runs a one-way
   # migration on the metabase DB — roll back by restoring it from ./backups.
   metabase:
-    image: metabase/metabase:v0.58.24
+    image: metabase/metabase:v0.58.28
     container_name: metabase
     profiles: ["bi"]                   # Not started by default; run with --profile bi
     restart: unless-stopped
