@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import { parseChangelog } from "@/lib/changelog";
 import {
   checkChangelog,
+  checkMigrationMarkers,
   checkTag,
+  newestRelease,
   newestReleaseVersion,
 } from "@/scripts/check-changelog-core";
 
 // Representative CHANGELOG.md fragment with both Unreleased and released entries.
+// Released sections carry a **Migration:** marker; [Unreleased] deliberately does
+// not, mirroring the real file — that section is exempt (Issue #277).
 const SAMPLE = `\
 ## [Unreleased]
 
@@ -17,11 +21,15 @@ const SAMPLE = `\
 
 ## [0.1.3] - 2026-05-17
 
+**Migration:** backward-compatible
+
 ### Added
 
 - Liabilities drill-down page.
 
 ## [0.1.0] - 2026-03-29
+
+**Migration:** none
 
 ### Added
 
@@ -51,6 +59,25 @@ describe("newestReleaseVersion", () => {
 
   it("returns null for an empty array", () => {
     expect(newestReleaseVersion([])).toBeNull();
+  });
+});
+
+describe("newestRelease", () => {
+  it("returns the release object, not just its version", () => {
+    const release = newestRelease(parseChangelog(SAMPLE));
+    expect(release).toMatchObject({
+      version: "0.1.3",
+      date: "2026-05-17",
+      migration: "backward-compatible",
+    });
+  });
+
+  it("skips [Unreleased] the same way newestReleaseVersion does", () => {
+    expect(newestRelease(parseChangelog(UNRELEASED_ONLY))).toBeNull();
+  });
+
+  it("returns null for an empty array", () => {
+    expect(newestRelease([])).toBeNull();
   });
 });
 
@@ -89,6 +116,101 @@ describe("checkChangelog", () => {
     const problems = checkChangelog("0.1.0", []);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatchObject({ kind: "no-releases" });
+  });
+
+  it("returns missing-migration-marker when the version agrees but no marker is declared", () => {
+    const md = `## [0.1.3] - 2026-05-17\n\n### Added\n\n- Something.\n`;
+    const problems = checkChangelog("0.1.3", parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ kind: "missing-migration-marker", version: "0.1.3" });
+  });
+
+  it("suppresses marker problems while the version still mismatches", () => {
+    const md = `## [0.1.3] - 2026-05-17\n\n**Migration:** sideways\n`;
+    const problems = checkChangelog("0.1.4", parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ kind: "version-mismatch" });
+  });
+});
+
+// Issue #277. A marker is *required* only on the release being tagged, but a
+// value that is present and unrecognized is rejected wherever it appears —
+// [Unreleased] included — so a typo fails on the branch that introduced it
+// rather than resurfacing as a missing marker when that section is closed.
+describe("checkMigrationMarkers", () => {
+  it("returns [] when the newest release declares a legal kind", () => {
+    expect(checkMigrationMarkers(parseChangelog(SAMPLE))).toEqual([]);
+  });
+
+  it("accepts each of the three legal kinds", () => {
+    for (const kind of ["none", "backward-compatible", "breaking"]) {
+      const md = `## [0.1.0] - 2026-01-01\n\n**Migration:** ${kind}\n`;
+      expect(checkMigrationMarkers(parseChangelog(md))).toEqual([]);
+    }
+  });
+
+  it("returns missing-migration-marker when the newest release has none", () => {
+    const md = `## [0.1.0] - 2026-01-01\n\n### Added\n\n- Something.\n`;
+    const problems = checkMigrationMarkers(parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ kind: "missing-migration-marker", version: "0.1.0" });
+  });
+
+  it("returns bad-migration-marker carrying the value it rejected", () => {
+    const md = `## [0.1.0] - 2026-01-01\n\n**Migration:** sideways\n`;
+    const problems = checkMigrationMarkers(parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({
+      kind: "bad-migration-marker",
+      version: "0.1.0",
+      value: "sideways",
+    });
+  });
+
+  it("reports an empty marker value as malformed rather than missing", () => {
+    const md = `## [0.1.0] - 2026-01-01\n\n**Migration:**\n`;
+    const problems = checkMigrationMarkers(parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({
+      kind: "bad-migration-marker",
+      version: "0.1.0",
+      value: "",
+    });
+  });
+
+  it("exempts [Unreleased] from the required-marker rule", () => {
+    const md = `## [Unreleased]\n\n### Added\n\n- WIP.\n\n## [0.1.0] - 2026-01-01\n\n**Migration:** none\n`;
+    expect(checkMigrationMarkers(parseChangelog(md))).toEqual([]);
+  });
+
+  it("still rejects a malformed marker on [Unreleased]", () => {
+    const md = `## [Unreleased]\n\n**Migration:** oops\n\n## [0.1.0] - 2026-01-01\n\n**Migration:** none\n`;
+    const problems = checkMigrationMarkers(parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({
+      kind: "bad-migration-marker",
+      version: "Unreleased",
+      value: "oops",
+    });
+  });
+
+  it("rejects a malformed marker on an older, already-released section", () => {
+    const md = `## [0.2.0] - 2026-02-02\n\n**Migration:** none\n\n## [0.1.0] - 2026-01-01\n\n**Migration:** nonsense\n`;
+    const problems = checkMigrationMarkers(parseChangelog(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({
+      kind: "bad-migration-marker",
+      version: "0.1.0",
+      value: "nonsense",
+    });
+  });
+
+  it("does not require a marker when there is no released section at all", () => {
+    expect(checkMigrationMarkers(parseChangelog(UNRELEASED_ONLY))).toEqual([]);
+  });
+
+  it("returns [] for an empty releases array", () => {
+    expect(checkMigrationMarkers([])).toEqual([]);
   });
 });
 

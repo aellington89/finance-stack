@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Migration-reversibility marker: each release section in this file now carries a `**Migration:** none | backward-compatible | breaking` line declaring whether rolling back across it needs a dump restore. `drizzle-kit` generates no down migrations, so that question previously had no answer an operator could look up. The line is parsed into `ChangelogRelease.migration`, enforced by the changelog gate (missing on the release being tagged, or an unrecognized value anywhere, fails CI), shown as a badge on `/settings/about`, and carried into the published GitHub Release body. All eight prior releases were backfilled ([Issue #277](https://github.com/aellington89/finance-stack/issues/277)).
+
 ## [0.3.0] - 2026-08-15
+
+**Migration:** backward-compatible
 
 ### Added
 
@@ -41,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Four liability categories the Liabilities drilldown pins were missing from the `Finances_Test` seed**, so the debt-service and waterfall integration tests had been asserting totals computed over a short set since the drilldown shipped in v0.1.2. `finances-test-mock-data.sql` lacked ids 7 `HELOC Principle`, 8 `HELOC Interest`, 75 `Student Loan Principle` and 76 `Student Loan Interest` while claiming in a comment that "all of the relevant rows must be present here". The suite passed regardless, because `vitest-setup.ts` upserts a 24-row superset at startup and papered over the gap — which is precisely the failure mode the new fixture agreement gate exists to catch. The rows are added and the false comment corrected ([Issue #178](https://github.com/aellington89/finance-stack/issues/178)).
 
 ## [0.2.0] - 2026-08-09
+
+**Migration:** backward-compatible
 
 ### Added
 
@@ -116,11 +124,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.5] - 2026-07-10
 
+**Migration:** backward-compatible
+
 ### Added
 
 - Database `CHECK` constraints (`transactions_transaction_description_not_blank`, `accounts_account_name_not_blank`) rejecting empty-string `transaction_description` / `account_name` — closing the gap where `NOT NULL` still permitted `''` that the app's `min(1)` validators reject. The `0002` migration backfills any pre-existing empty rows to a sentinel before enforcing the constraint. The columns and their FKs were already `NOT NULL`/constrained, so this empty-string tightening is the substantive change ([Issue #147](https://github.com/aellington89/finance-stack/issues/147)).
 
 ## [0.1.4] - 2026-07-05
+
+**Migration:** backward-compatible
 
 ### Added
 
@@ -150,6 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3] - 2026-05-17
 
+**Migration:** none
+
 ### Added
 
 - Liabilities drill-down page at `/dashboard/liabilities`: KPI strip, allocation treemap, category decomposition, debt waterfall, debt-service summary, and a 3-level performance table ([Issue #112](https://github.com/aellington89/finance-stack/issues/112)).
@@ -169,6 +183,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - 2026-05-01
 
+**Migration:** none
+
 ### Added
 
 - Assets drill-down page at `/dashboard/assets` plus per-type/per-account liquidity classification ([Issue #102](https://github.com/aellington89/finance-stack/issues/102)).
@@ -180,6 +196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made the Net Worth KPI and historical-trends chart obviously clickable with a visible hover affordance and a chevron ([Issue #97](https://github.com/aellington89/finance-stack/issues/97)).
 
 ## [0.1.1] - 2026-04-16
+
+**Migration:** none
 
 ### Added
 
@@ -204,6 +222,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a SQL-injection vulnerability in `accounting.ts` and `work-expenses.ts` by parameterizing all user-controlled filter values, and blocked self-referential transactions ([Issue #79](https://github.com/aellington89/finance-stack/issues/79)).
 
 ## [0.1.0] - 2026-03-29
+
+**Migration:** none
 
 ### Added
 

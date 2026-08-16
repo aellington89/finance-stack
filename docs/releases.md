@@ -39,9 +39,11 @@ Rules:
 ## GitHub Releases
 
 Every `vX.Y.Z` tag has a matching GitHub Release whose **body is the
-corresponding `CHANGELOG.md` section** (the `### Added/Changed/Fixed/Security`
-lists, with their `([Issue #N])` links preserved) plus a `**Full Changelog**`
-compare link.
+corresponding `CHANGELOG.md` section** — the `**Migration:**` marker followed by
+the `### Added/Changed/Fixed/Security` lists, with their `([Issue #N])` links
+preserved — plus a `**Full Changelog**` compare link. The workflow slices
+everything between the release heading and the next one, so the marker reaches
+the published Release without any extra step.
 
 **Pushing an annotated tag triggers the automated release workflow**
 (`.github/workflows/release.yml`, [Issue #175](https://github.com/aellington89/finance-stack/issues/175)),
@@ -62,8 +64,10 @@ gh release edit v0.1.4 --notes-file <changelog-section.md>
 The repeatable steps for cutting a new release `vX.Y.Z`. The CI changelog gate
 (`npm run check:changelog`, runs on every push/PR and on `v*` tag pushes —
 [#173](https://github.com/aellington89/finance-stack/issues/173)) enforces that
-`package.json` version == the newest `CHANGELOG.md` release, and that a pushed tag
-is a well-formed `vX.Y.Z` matching that version.
+`package.json` version == the newest `CHANGELOG.md` release, that the release
+carries a valid `**Migration:**` marker
+([#277](https://github.com/aellington89/finance-stack/issues/277)), and that a
+pushed tag is a well-formed `vX.Y.Z` matching that version.
 
 Set the version once:
 
@@ -93,6 +97,39 @@ ver=0.1.4
    above it, and update the reference links at the bottom (add
    `[X.Y.Z]: …/compare/<prev>...vX.Y.Z` and repoint `[Unreleased]` to
    `vX.Y.Z...HEAD`). Commit on the release commit.
+
+   **Declare the migration impact** in the same edit — a `**Migration:**` line
+   directly under the new heading, before the first `###`:
+
+   ```markdown
+   ## [X.Y.Z] - YYYY-MM-DD
+
+   **Migration:** backward-compatible
+
+   ### Added
+   ```
+
+   | Value | Meaning |
+   |---|---|
+   | `none` | No migration in this release. |
+   | `backward-compatible` | The previous app version runs fine against the new schema, so re-pinning the previous image is a sufficient rollback. |
+   | `breaking` | Rolling back requires restoring the pre-upgrade dump. |
+
+   This line is mandatory because `app/drizzle/migrations/` contains only `up`
+   SQL — drizzle-kit does not generate down migrations. Reverting a schema change
+   means a dump restore, not an image re-pin, and this is where an operator learns
+   that *before* upgrading rather than during a failed rollback
+   ([#277](https://github.com/aellington89/finance-stack/issues/277)).
+
+   Choose by asking whether the **previous** app version still runs against the
+   **new** schema. Additive DDL — new tables, nullable columns, indexes — is
+   normally `backward-compatible`; dropping or renaming a column, or adding a
+   constraint the old app would violate, is `breaking`. If the release ships no
+   migration at all, it is `none`.
+
+   Values are exact and lower-case; `Breaking` fails the gate rather than being
+   read as `breaking`. `[Unreleased]` need not carry a marker, but if it does, the
+   value still has to be one of the three.
 
 3. **Tag** — annotated, `vX.Y.Z`, on that commit, then push (see
    [Tagging convention](#tagging-convention)):

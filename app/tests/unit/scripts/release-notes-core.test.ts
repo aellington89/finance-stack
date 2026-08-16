@@ -138,6 +138,14 @@ describe("formatChangelog", () => {
     expect(out).toContain("confirm before tagging");
   });
 
+  // Issue #277. The placeholder is deliberately not a legal kind, so pasting the
+  // block unedited trips the changelog gate instead of shipping an undeclared
+  // migration impact.
+  it("emits a Migration marker placeholder that is not itself a legal kind", () => {
+    const out = formatChangelog(issues, other, "0.1.4", "patch", slug, "2026-06-28");
+    expect(out).toContain("**Migration:** <none|backward-compatible|breaking>");
+  });
+
   it("links each issue to its GitHub URL", () => {
     const out = formatChangelog(issues, other, "0.1.4", "patch", slug, "2026-06-28");
     expect(out).toContain("https://github.com/aellington89/finance-stack/issues/150");

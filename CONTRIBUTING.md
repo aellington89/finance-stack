@@ -113,8 +113,9 @@ See [Roles & Privileges](docs/database.md#roles--privileges).
 ### Changelog gate
 
 Fails if `app/package.json` version doesn't equal the newest released version
-in `CHANGELOG.md`, or (on a `v*` tag push) if the tag isn't a well-formed
-`vX.Y.Z` matching that version.
+in `CHANGELOG.md`, if that release doesn't declare a valid `**Migration:**`
+marker, or (on a `v*` tag push) if the tag isn't a well-formed `vX.Y.Z` matching
+that version.
 
 **Fix:** run locally before pushing:
 
@@ -124,6 +125,23 @@ cd app && npm run check:changelog
 
 If you're not cutting a release, simply ensure you haven't accidentally bumped
 `package.json` without also closing the `CHANGELOG.md` section.
+
+**Migration marker** — every released section carries one line declaring how the
+release can be rolled back
+([#277](https://github.com/aellington89/finance-stack/issues/277)):
+
+```markdown
+## [0.3.0] - 2026-08-15
+
+**Migration:** backward-compatible
+```
+
+`none` (no migration) · `backward-compatible` (the previous app version runs fine
+against the new schema, so an image rollback suffices) · `breaking` (rolling back
+requires restoring a pre-upgrade dump — there are no down migrations). The gate
+requires the marker on the release being tagged and rejects an unrecognized value
+anywhere, `[Unreleased]` included; `[Unreleased]` is not required to carry one.
+Full guidance on picking a value is in [docs/releases.md](docs/releases.md).
 
 ### Docs index gate
 
@@ -314,11 +332,19 @@ subsection (`Added`, `Changed`, `Fixed`, or `Security`) — with an issue link:
 
 Format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 
+**If your PR ships a migration**, also set or escalate the `**Migration:**` marker
+on `## [Unreleased]` — `none` → `backward-compatible` → `breaking`, and never
+downgrade it. The marker describes the release as a whole, not the last PR to
+touch it, so a `breaking` already declared by an earlier PR stays `breaking`.
+`[Unreleased]` may carry no marker at all until something needs one, but once it
+does the value must be one of the three or the gate fails.
+
 ## Schema changes
 
-Edit `app/drizzle/schema.ts`, generate a migration, and commit both in one PR.
-The full procedure — including FK changes in `relations.ts`, reviewing generated
-SQL, and adopting migrations on an existing database — is in
+Edit `app/drizzle/schema.ts`, generate a migration, and commit both in one PR, and
+set or escalate the `**Migration:**` marker on `## [Unreleased]` to cover it. The
+full procedure — including FK changes in `relations.ts`, reviewing generated SQL,
+and adopting migrations on an existing database — is in
 [docs/schema-changes.md](docs/schema-changes.md).
 
 ## Releases
@@ -348,7 +374,9 @@ verified in CI, and never pushed anywhere.
 
 2. **Close the changelog section.** In `CHANGELOG.md`, rename
    `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh empty
-   `## [Unreleased]` above it. Update the reference links at the bottom.
+   `## [Unreleased]` above it. Update the reference links at the bottom. Make sure
+   the closed section declares its `**Migration:** none | backward-compatible |
+   breaking` marker directly under the heading — the changelog gate requires it.
 
 3. **Bump the version.** `cd app && npm version X.Y.Z --no-git-tag-version` —
    this keeps `package-lock.json` in step, which editing `app/package.json` by

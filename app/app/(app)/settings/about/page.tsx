@@ -1,5 +1,5 @@
 import { readChangelog } from "@/lib/changelog";
-import type { InlineToken } from "@/lib/changelog";
+import type { InlineToken, MigrationKind } from "@/lib/changelog";
 import { BUILD_INFO } from "@/lib/version";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,18 @@ import {
 } from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
+
+// How each release's declared migration impact reads on the card header. The
+// point is the rollback question: `breaking` means reverting to the previous
+// image is not enough, the pre-upgrade dump has to be restored (Issue #277).
+const MIGRATION_BADGE: Record<
+  MigrationKind,
+  { label: string; variant: "outline" | "secondary" | "destructive" }
+> = {
+  none: { label: "No migration", variant: "outline" },
+  "backward-compatible": { label: "Backward-compatible migration", variant: "secondary" },
+  breaking: { label: "Breaking migration", variant: "destructive" },
+};
 
 function renderTokens(tokens: InlineToken[]) {
   return tokens.map((token, i) => {
@@ -57,6 +69,10 @@ export default async function AboutPage() {
             const isCurrent =
               release.version !== "Unreleased" &&
               release.version === BUILD_INFO.version;
+            // null for [Unreleased] and for any value the parser did not
+            // recognize — the gate reports those, the page stays quiet.
+            const migrationBadge =
+              release.migration && MIGRATION_BADGE[release.migration];
             return (
               <Card
                 key={release.version}
@@ -76,6 +92,11 @@ export default async function AboutPage() {
                         </span>
                       )}
                       {isCurrent && <Badge variant="default">Current</Badge>}
+                      {migrationBadge && (
+                        <Badge variant={migrationBadge.variant}>
+                          {migrationBadge.label}
+                        </Badge>
+                      )}
                     </div>
                   </CardTitle>
                 </CardHeader>
