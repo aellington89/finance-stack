@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseChangelog, parseInline } from "@/lib/changelog";
+import { isMigrationKind, parseChangelog, parseInline } from "@/lib/changelog";
 
 // Representative CHANGELOG.md fragment matching the repo's Keep-a-Changelog format.
+// [Unreleased] deliberately carries no **Migration:** marker — that section is
+// exempt (Issue #277), and the real CHANGELOG.md looks the same way.
 const SAMPLE = `\
 # Changelog
 
@@ -20,6 +22,8 @@ All notable changes to this project are documented in this file.
 
 ## [0.1.3] - 2026-05-17
 
+**Migration:** backward-compatible
+
 ### Added
 
 - Liabilities drill-down page at \`/dashboard/liabilities\` ([Issue #112](https://github.com/example/repo/issues/112)).
@@ -29,6 +33,8 @@ All notable changes to this project are documented in this file.
 - Date Range filter UX fix ([Issue #61](https://github.com/example/repo/issues/61)).
 
 ## [0.1.0] - 2026-03-29
+
+**Migration:** none
 
 ### Added
 
@@ -125,6 +131,147 @@ describe("parseChangelog", () => {
     const releases = parseChangelog(withRef);
     expect(releases).toHaveLength(1);
     expect(releases[0].sections[0].items).toHaveLength(1);
+  });
+});
+
+// Issue #277. The marker is the one line shape the parser captures outside a
+// section, so its boundaries — where it may appear, and what an unrecognized
+// value becomes — are the whole contract the gate rests on.
+describe("parseChangelog — Migration marker", () => {
+  it("captures a recognized marker into both migration and migrationRaw", () => {
+    const releases = parseChangelog(SAMPLE);
+    expect(releases[1].version).toBe("0.1.3");
+    expect(releases[1].migration).toBe("backward-compatible");
+    expect(releases[1].migrationRaw).toBe("backward-compatible");
+  });
+
+  it("parses all three legal kinds", () => {
+    const all = `\
+## [0.3.0] - 2026-03-03
+
+**Migration:** breaking
+
+## [0.2.0] - 2026-02-02
+
+**Migration:** backward-compatible
+
+## [0.1.0] - 2026-01-01
+
+**Migration:** none
+`;
+    expect(parseChangelog(all).map((r) => r.migration)).toEqual([
+      "breaking",
+      "backward-compatible",
+      "none",
+    ]);
+  });
+
+  it("yields null for both fields when a release carries no marker", () => {
+    const releases = parseChangelog(SAMPLE);
+    expect(releases[0].version).toBe("Unreleased");
+    expect(releases[0].migration).toBeNull();
+    expect(releases[0].migrationRaw).toBeNull();
+  });
+
+  it("keeps an unrecognized value in migrationRaw without coercing migration", () => {
+    const releases = parseChangelog("## [0.1.0] - 2026-01-01\n\n**Migration:** frobnicate\n");
+    expect(releases[0].migration).toBeNull();
+    expect(releases[0].migrationRaw).toBe("frobnicate");
+  });
+
+  it("treats a wrong-case value as malformed rather than a synonym", () => {
+    const releases = parseChangelog("## [0.1.0] - 2026-01-01\n\n**Migration:** Breaking\n");
+    expect(releases[0].migration).toBeNull();
+    expect(releases[0].migrationRaw).toBe("Breaking");
+  });
+
+  it("treats an empty value as present-but-malformed, not missing", () => {
+    const releases = parseChangelog("## [0.1.0] - 2026-01-01\n\n**Migration:**\n");
+    expect(releases[0].migration).toBeNull();
+    expect(releases[0].migrationRaw).toBe("");
+  });
+
+  it("ignores a marker that appears after the first ### section", () => {
+    const late = `\
+## [0.1.0] - 2026-01-01
+
+### Added
+
+**Migration:** breaking
+
+- Something.
+`;
+    const releases = parseChangelog(late);
+    expect(releases[0].migration).toBeNull();
+    expect(releases[0].migrationRaw).toBeNull();
+  });
+
+  it("ignores a marker before the first release heading", () => {
+    const preamble = `\
+# Changelog
+
+**Migration:** breaking
+
+## [0.1.0] - 2026-01-01
+
+**Migration:** none
+`;
+    const releases = parseChangelog(preamble);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].migration).toBe("none");
+  });
+
+  it("keeps the first marker when a release carries two", () => {
+    const dup = `\
+## [0.1.0] - 2026-01-01
+
+**Migration:** none
+
+**Migration:** breaking
+`;
+    expect(parseChangelog(dup)[0].migration).toBe("none");
+  });
+
+  it("does not leak a marker into the following release", () => {
+    const mixed = `\
+## [0.2.0] - 2026-02-02
+
+**Migration:** breaking
+
+### Added
+
+- Something.
+
+## [0.1.0] - 2026-01-01
+
+### Added
+
+- Something else.
+`;
+    const releases = parseChangelog(mixed);
+    expect(releases[0].migration).toBe("breaking");
+    expect(releases[1].migration).toBeNull();
+    expect(releases[1].migrationRaw).toBeNull();
+  });
+
+  it("does not capture the marker line as a bullet item", () => {
+    const releases = parseChangelog(SAMPLE);
+    const added = releases[1].sections.find((s) => s.heading === "Added");
+    expect(added?.items).toHaveLength(1);
+  });
+});
+
+describe("isMigrationKind", () => {
+  it("accepts the three legal kinds", () => {
+    expect(isMigrationKind("none")).toBe(true);
+    expect(isMigrationKind("backward-compatible")).toBe(true);
+    expect(isMigrationKind("breaking")).toBe(true);
+  });
+
+  it("rejects anything else, including wrong case and empty", () => {
+    expect(isMigrationKind("Breaking")).toBe(false);
+    expect(isMigrationKind("backwards-compatible")).toBe(false);
+    expect(isMigrationKind("")).toBe(false);
   });
 });
 

@@ -1,19 +1,22 @@
 // CI gate (and `npm run check:changelog`): asserts package.json version matches the
-// newest CHANGELOG.md released entry, and — when running on a git tag push — that
-// the pushed tag is a well-formed vX.Y.Z equal to v<version>. Catches
-// package.json/CHANGELOG/tag drift at build time (e.g. bumping package.json without
-// closing the Unreleased section, or pushing a malformed tag like v.0.1.3). See
-// docs/releases.md and Issue #173. Mirrors the Seed-reference gate's ::error::
-// annotation + remediation-hint style.
+// newest CHANGELOG.md released entry, that that release declares its migration
+// impact, and — when running on a git tag push — that the pushed tag is a
+// well-formed vX.Y.Z equal to v<version>. Catches package.json/CHANGELOG/tag drift
+// at build time (e.g. bumping package.json without closing the Unreleased section,
+// or pushing a malformed tag like v.0.1.3), plus a release that ships a schema
+// change without saying whether it can be rolled back. See docs/releases.md and
+// Issues #173 and #277. Mirrors the Seed-reference gate's ::error:: annotation +
+// remediation-hint style.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseChangelog } from "@/lib/changelog";
+import { MIGRATION_KINDS, parseChangelog } from "@/lib/changelog";
 import {
   checkChangelog,
   checkTag,
+  newestRelease,
   type ChangelogProblem,
 } from "@/scripts/check-changelog-core";
 
@@ -57,6 +60,22 @@ function formatProblem(p: ChangelogProblem): string {
         `version (expected "${p.expected}"). Bump package.json and CHANGELOG.md to match, ` +
         `or push the correct tag.`
       );
+    case "missing-migration-marker":
+      return (
+        `::error::Migration marker: release [${p.version}] does not declare its migration ` +
+        `impact. Add a line directly under the "## [${p.version}]" heading, before the first ` +
+        `### section:\n` +
+        `    **Migration:** ${MIGRATION_KINDS.join(" | ")}\n` +
+        `  none = no migration; backward-compatible = the previous app version runs fine ` +
+        `against the new schema, so an image rollback suffices; breaking = rolling back ` +
+        `requires restoring a pre-upgrade dump. See docs/releases.md.`
+      );
+    case "bad-migration-marker":
+      return (
+        `::error::Migration marker: release [${p.version}] declares "${p.value}", which is ` +
+        `not a recognized value — expected one of ${MIGRATION_KINDS.join(", ")} ` +
+        `(exact, lower-case). See docs/releases.md.`
+      );
   }
 }
 
@@ -70,16 +89,24 @@ function main(): void {
 
   if (problems.length === 0) {
     const tagNote = tag ? ` (tag: ${tag})` : "";
-    console.log(`✓ Changelog gate: package.json "${pkgVersion}" matches CHANGELOG.md${tagNote}`);
+    // Echo the declared impact: on a release run this is the operator's
+    // confirmation of what they just committed to about rollback.
+    const migrationNote = newestRelease(releases)?.migration ?? "unknown";
+    console.log(
+      `✓ Changelog gate: package.json "${pkgVersion}" matches CHANGELOG.md${tagNote} ` +
+        `[migration: ${migrationNote}]`,
+    );
     return;
   }
 
   for (const p of problems) console.error(formatProblem(p));
   console.error("");
   console.error(
-    "version, changelog, and tag are out of sync. To release: rename [Unreleased] to " +
-      "[X.Y.Z] - YYYY-MM-DD in CHANGELOG.md, bump package.json version to X.Y.Z, and " +
-      "push an annotated tag vX.Y.Z. See docs/releases.md. Re-run `npm run check:changelog`.",
+    "CHANGELOG.md, package.json and the release tag must agree, and the release being " +
+      "tagged must declare its migration impact. To release: rename [Unreleased] to " +
+      "[X.Y.Z] - YYYY-MM-DD in CHANGELOG.md, add its **Migration:** marker, bump " +
+      "package.json version to X.Y.Z, and push an annotated tag vX.Y.Z. See " +
+      "docs/releases.md. Re-run `npm run check:changelog`.",
   );
   process.exit(1);
 }

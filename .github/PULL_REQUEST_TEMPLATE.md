@@ -16,7 +16,11 @@ Closes #
 - [ ] **CI gates green** — schema-drift, seed-reference, and changelog gates, plus
   lint and tests ([CI gates](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md#ci-gates)).
 - [ ] **Schema change?** — `app/drizzle/schema.ts` edits ship with a generated
-  migration in the same PR ([Schema changes](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md#schema-changes)).
+  migration in the same PR, **and** the `**Migration:**` marker on
+  `## [Unreleased]` is set or escalated to cover it (`none` →
+  `backward-compatible` → `breaking`, never downgraded — it describes the whole
+  release, not just this PR)
+  ([Schema changes](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md#schema-changes)).
 - [ ] **Tests** — added/updated unit or integration tests.
 
 ## Notes

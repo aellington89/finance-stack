@@ -123,8 +123,13 @@ export function formatChangelog(
 ): string {
   const lines: string[] = [];
 
+  // The migration placeholder is deliberately not one of the three legal values
+  // (Issue #277): a drafter who pastes the block without choosing one trips the
+  // changelog gate on their own branch rather than at tag time.
   lines.push(
     `## [${nextVersion}] - ${today}  <!-- Suggested: ${bump} bump — confirm before tagging -->`,
+    "",
+    `**Migration:** <none|backward-compatible|breaking>`,
     "",
     `<!-- Re-sort into Added / Changed / Fixed before committing to CHANGELOG.md -->`,
   );
