@@ -8,13 +8,30 @@ The `importer` service automates file-to-transaction ingestion. It polls subdire
 
 The `importer/poll.py` dispatcher is committed to the repo. The `importer/parsers/` directory and `imports/` drop folder are gitignored — parser logic is user-specific since the field mapping depends on how you categorize your transactions.
 
+## The image
+
+The service runs from `finance-importer`, built from [`importer/Dockerfile`](../importer/Dockerfile) (Issue #224). `poll.py` and the pinned dependencies are baked in; it runs as a non-root user and installs nothing at container start.
+
+What that leaves as a mount is only what cannot be baked:
+
+| Path | Source | Why it is a mount |
+| --- | --- | --- |
+| `/input` | `./imports` | user documents |
+| `/app/parsers` | `./importer/parsers` | gitignored and user-specific |
+
+`parsers/` is deliberately excluded from the build context by [`importer/.dockerignore`](../importer/.dockerignore), so your parsers never enter the image or the build cache. Because `poll.py` is now baked rather than mounted, **editing it takes effect only after a rebuild**:
+
+```sh
+docker compose build importer && docker compose up -d importer
+```
+
 ## Python dependencies
 
-Runtime dependencies live in [`importer/requirements.txt`](../importer/requirements.txt), pinned to exact versions. The `importer` Compose service installs them on start (`pip install -r /app/requirements.txt`) — the container uses the stock `python:3.13-slim` image, so there is no Dockerfile to rebuild.
+Runtime dependencies live in [`importer/requirements.txt`](../importer/requirements.txt), pinned to exact versions and installed at **build** time.
 
-To add a dependency: add the pinned line to `requirements.txt`, then `docker compose up -d --force-recreate importer`. Do **not** call `pip install` from inside a parser — the install is centralized so the dependency set is reproducible and so Dependabot's `pip` ecosystem can track it (see [CONTRIBUTING.md](../CONTRIBUTING.md#dependabot-prs)).
+To add a dependency: add the pinned line to `requirements.txt`, then rebuild with the command above — `--force-recreate` alone no longer picks it up, because there is no longer a runtime `pip install` to re-run. Do **not** call `pip install` from inside a parser: the install is centralized so the dependency set is reproducible and so Dependabot's `pip` ecosystem can track it (see [CONTRIBUTING.md](../CONTRIBUTING.md#dependabot-prs)).
 
-`pdfplumber` is pinned here even though its only consumer (the paystub parser) lives in the gitignored `importer/parsers/`, so the container has it ready without a parser having to self-install at import time.
+`pdfplumber` is pinned here even though its only consumer (the paystub parser) lives in the gitignored `importer/parsers/`, so the image has it ready without a parser having to self-install at import time.
 
 ## Adding a New Import Type
 

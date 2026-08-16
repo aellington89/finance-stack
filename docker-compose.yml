@@ -4,6 +4,12 @@
 # finance-app (Next.js UI), importer (file ingestion),
 # pg-backup (scheduled dumps), metabase (BI dashboards, --profile bi),
 # and caddy (TLS termination, --profile edge).
+#
+# Every service that runs this repo's own code runs it from an image, not a bind
+# mount (Issue #224) — so editing scripts/*.sh, init-db/roles|seeds/*.sql or
+# importer/poll.py needs a rebuild before it takes effect. Use scripts/build.sh,
+# or `docker compose build <service>`. Only data is mounted: ./imports,
+# ./backups, ./importer/parsers, and postgres's ./init-db (Issue #225).
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
@@ -66,6 +72,9 @@ services:
       context: ./app
       dockerfile: Dockerfile
       target: migrate
+      additional_contexts:                 # Supplies the repo-root init-db/ and scripts/ files this stage bakes in
+        repo: ${REPO_CONTEXT:-.}           # Same entry, same reasoning as finance-app below
+    image: finance-migrate:latest        # Stable local tag; #226 re-tags it for the registry
     container_name: finance-migrate
     restart: "no"                        # One-shot job — must not restart after exiting
     depends_on:
@@ -96,10 +105,9 @@ services:
       # only read the catalog back — the half of that check which proves
       # Metabase can still migrate its own database.
       MB_DB_PASS: ${MB_DB_PASS}
-    volumes:
-      - ./init-db/seeds:/seeds:ro        # Seed SQL files consumed by migrate-and-seed.sh
-      - ./init-db/roles:/roles:ro        # Role creation + grant SQL (#130)
-      - ./scripts:/scripts:ro            # For the on-demand role check — see scripts/verify-db-roles.sh
+    # No volumes: /seeds, /roles and /scripts/verify-db-roles.sh are baked into
+    # the image at those exact paths (#224). Edit them and rebuild — a stale
+    # migrate image applies the seeds it was built with, silently.
     networks:
       - appnet
     logging: *default-logging
@@ -117,7 +125,9 @@ services:
   # Behind the "init" profile — only runs when explicitly requested:
   #   docker compose --profile init run --rm init-script
   init-script:
-    image: postgres:18.4
+    build:                               # Same image as pg-backup — carries the SQL this runs (#224)
+      context: ./scripts
+    image: finance-backup:latest
     profiles: ["init"]                   # Not started by default; run with --profile init
     restart: "no"                        # One-shot job — must not restart after exiting
     depends_on:
@@ -130,8 +140,8 @@ services:
       PGHOST: postgres
       PGUSER: ${POSTGRES_USER}
       PGDATABASE: ${INIT_SCRIPT_DB:-Finances}
-    volumes:
-      - ./scripts:/scripts:ro            # Read-only mount — container should not modify scripts
+    # No volumes: update-account-balance-history.sql is baked into
+    # finance-backup at /scripts (#224).
     entrypoint: >
       bash -c "
       set -euo pipefail;
@@ -162,12 +172,16 @@ services:
       args:                                # Build-time version stamp (see scripts/build.sh); defaults keep `up` argument-free
         GIT_SHA: ${GIT_SHA:-dev}
         BUILD_TIME: ${BUILD_TIME:-}
-      additional_contexts:                 # Supplies repo-root CHANGELOG.md to the runner COPY --from=changelog
+      additional_contexts:                 # Supplies repo-root files to the COPY --from=repo lines in app/Dockerfile
+        # Named `repo` rather than `changelog` since #224: it now carries
+        # init-db/roles, init-db/seeds and scripts/verify-db-roles.sh for the
+        # migrate stage as well as CHANGELOG.md for the runner stage.
+        #
         # Default `.` = project dir (repo root) for local builds. CI overrides with an
-        # absolute path via $CHANGELOG_CONTEXT because some Compose/buildx versions resolve
+        # absolute path via $REPO_CONTEXT because some Compose/buildx versions resolve
         # a relative additional_contexts path against the build context (./app) rather than
-        # the project dir, which breaks `COPY --from=changelog CHANGELOG.md` (see release.yml).
-        changelog: ${CHANGELOG_CONTEXT:-.}
+        # the project dir, which breaks `COPY --from=repo CHANGELOG.md` (see release.yml).
+        repo: ${REPO_CONTEXT:-.}
     image: finance-app:latest            # Stable local tag so `build` and `up` share one image; the release workflow re-tags it finance-app:<version>/<sha>
     container_name: finance-app
     restart: unless-stopped
@@ -218,7 +232,9 @@ services:
   # Importer — polls subdirectories under imports/ every 60 seconds, routes
   # each file to a matching parser in importer/parsers/, and inserts transaction rows.
   importer:
-    image: python:3.14-slim
+    build:                               # poll.py + pinned deps baked in; no runtime pip install (#224, #132)
+      context: ./importer
+    image: finance-importer:latest
     container_name: importer
     restart: unless-stopped
     depends_on:
@@ -232,14 +248,11 @@ services:
       POLL_INTERVAL: 60
     volumes:
       - ./imports:/input                      # Host drop folder — each subdirectory is an import type
-      - ./importer:/app:ro                   # Poll script and parsers (read-only)
-    working_dir: /app
-    entrypoint: >
-      bash -c "
-      pip install --quiet -r /app/requirements.txt &&
-      echo 'importer ready — polling /input subdirectories every $${POLL_INTERVAL}s' &&
-      python poll.py
-      "
+      # Parsers only. They are gitignored and user-specific, so they stay a mount
+      # while poll.py is baked into the image (#224). Compose creates this
+      # directory if it does not exist; poll.py logs a warning per unmatched
+      # import type rather than failing.
+      - ./importer/parsers:/app/parsers:ro
     networks:
       - appnet
     logging: *default-logging
@@ -256,10 +269,12 @@ services:
 
   # Scheduled logical backups. Runs pg_dump (custom format) of each database in
   # BACKUP_DBS to ./backups/ on a loop, pruning dumps older than the retention
-  # window. Reuses the postgres:18.4 image so pg_dump stays version-matched to
-  # the server. Restore a dump with scripts/restore.sh. See docs/backups.md.
+  # window. Built FROM postgres:18.4 so pg_dump stays version-matched to the
+  # server. Restore a dump with /scripts/restore.sh. See docs/backups.md.
   pg-backup:
-    image: postgres:18.4
+    build:                               # backup.sh + restore.sh baked in at /scripts (#224)
+      context: ./scripts
+    image: finance-backup:latest
     container_name: pg-backup
     restart: unless-stopped
     depends_on:
@@ -276,7 +291,6 @@ services:
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
     volumes:
-      - ./scripts:/scripts:ro        # Read-only — container should not modify scripts
       - ./backups:/backups           # Host-visible dump output (gitignored — financial data)
     entrypoint: >
       bash -c "

@@ -20,6 +20,11 @@ on:
       # trigger it — verify-db-roles.sh was listed there and could not.
       - 'scripts/verify-db-roles.sh'
       - 'app/scripts/*.sh'
+      # The image these scripts now ship in (#224). This job exercises them from
+      # the checkout rather than the image, so it does not prove the image is
+      # right — but its base image is what keeps pg_dump version-matched to the
+      # server, so a change there should re-run the round trip.
+      - 'scripts/Dockerfile'
       - '.github/workflows/backup-smoke.yml'
 
 jobs:

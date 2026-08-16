@@ -4,6 +4,29 @@ Where this stack may safely run, what has to be true before it is reachable from
 the internet, and how the edge controls are verified. Added in
 [Issue #182](https://github.com/aellington89/finance-stack/issues/182).
 
+## What the stack is made of
+
+Every service that runs this repo's code runs it from an image
+([Issue #224](https://github.com/aellington89/finance-stack/issues/224)) — none
+of them reads code from the checkout any more:
+
+| Image | Built from | Carries |
+|---|---|---|
+| `finance-app` | `app/Dockerfile` (`runner`) | the Next.js standalone server |
+| `finance-migrate` | `app/Dockerfile` (`migrate`) | drizzle-kit, `/roles`, `/seeds`, `/scripts/verify-db-roles.sh` |
+| `finance-importer` | `importer/Dockerfile` | `poll.py` and its pinned deps |
+| `finance-backup` | `scripts/Dockerfile` | `backup.sh`, `restore.sh`, the balance-rebuild SQL |
+
+Only data is bind-mounted: `./imports`, `./backups`, `./importer/parsers`, and
+`postgres`'s first-run `./init-db` hook (folded into `migrate` by
+[#225](https://github.com/aellington89/finance-stack/issues/225)).
+
+Deploying still means running `docker compose up` from a checkout today. Pulling
+these images from a registry onto a host with no source tree — plus a versioned
+deployment bundle, an upgrade command, and health-gated rollback — is
+[#223](https://github.com/aellington89/finance-stack/issues/223), and #224 is its
+first step.
+
 ## Exposure posture
 
 The stack supports two postures. Pick one deliberately — the difference is not

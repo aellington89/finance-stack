@@ -29,6 +29,30 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json drizzle.config.ts ./
 COPY drizzle ./drizzle
 COPY scripts ./scripts
+
+# Roles, seeds and the role-verification script used to be bind-mounted by the
+# `migrate` service (Issue #224). They are baked in now so the stack can run from
+# a registry image with no source tree on the host. They come from the `repo`
+# additional context because they live at the repo root, outside this ./app
+# build context.
+#
+# The destination paths are exactly the paths they were mounted at, so nothing
+# that reads them had to change: app/scripts/migrate-and-seed.sh hardcodes
+# /roles/… and /seeds/…, and scripts/verify-db-roles.sh defaults ROLES_DIR to
+# /roles and is documented as `… --entrypoint bash migrate /scripts/verify-db-roles.sh`.
+#
+# Note this stage therefore has two script directories, as it did at runtime
+# before: /app/scripts from the ./app context (migrate-and-seed.sh,
+# preflight-superuser.sh) and /scripts from the repo root (verify-db-roles.sh).
+#
+# 01-create-databases.sh is baked but not yet invoked — it still runs only via
+# the postgres entrypoint hook. Issue #225 folds it into migrate-and-seed.sh as
+# step 0, which is what finally removes postgres's own ./init-db mount.
+COPY --from=repo init-db/roles /roles
+COPY --from=repo init-db/seeds /seeds
+COPY --from=repo init-db/01-create-databases.sh /init-db/01-create-databases.sh
+COPY --from=repo scripts/verify-db-roles.sh /scripts/verify-db-roles.sh
+
 ENTRYPOINT ["bash", "/app/scripts/migrate-and-seed.sh"]
 
 # --- Stage 3: Production runner ---
@@ -64,8 +88,9 @@ COPY --from=build /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 # CHANGELOG.md is at the repo root (outside the ./app build context).
-# Supplied via the `changelog` additional_contexts entry in docker-compose.yml.
-COPY --from=changelog --chown=nextjs:nodejs CHANGELOG.md ./CHANGELOG.md
+# Supplied via the `repo` additional_contexts entry in docker-compose.yml — the
+# same context the migrate stage above takes its roles and seeds from.
+COPY --from=repo --chown=nextjs:nodejs CHANGELOG.md ./CHANGELOG.md
 
 USER nextjs
 

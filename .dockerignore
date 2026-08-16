@@ -28,17 +28,22 @@ app/next-env.d.ts
 .claude
 
 # Credentials — every .env variant at any depth, not just the root file this
-# stack reads today (#181). Only CHANGELOG.md is copied out of this context (it
-# is the `changelog` additional_contexts entry), so this is defence in depth;
-# app/.dockerignore is what governs the image build itself.
+# stack reads today (#181). This is the `repo` additional_contexts entry, out of
+# which app/Dockerfile copies CHANGELOG.md (runner stage) plus init-db/roles,
+# init-db/seeds, init-db/01-create-databases.sh and scripts/verify-db-roles.sh
+# (migrate stage, #224) — every COPY names its source, so this is defence in
+# depth; app/.dockerignore is what governs the finance-app image itself.
 **/.env*
 secrets/
 
 # Documentation
 *.md
-# …but CHANGELOG.md must reach the image: this file is the `changelog` build
+# …but CHANGELOG.md must reach the image: this directory is the `repo` build
 # context (docker-compose.yml additional_contexts) that the runner stage copies
-# in for the /settings/about "What's New" page. Un-ignore it.
+# it from for the /settings/about "What's New" page. Un-ignore it.
+#
+# Nothing above excludes init-db/ or scripts/, which the migrate stage now copies
+# from this same context (#224). Check that before adding a pattern here.
 !CHANGELOG.md
 
 # Next.js development artifacts

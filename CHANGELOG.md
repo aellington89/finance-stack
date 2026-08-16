@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Migration:** none
+
 ### Added
 
 - Migration-reversibility marker: each release section in this file now carries a `**Migration:** none | backward-compatible | breaking` line declaring whether rolling back across it needs a dump restore. `drizzle-kit` generates no down migrations, so that question previously had no answer an operator could look up. The line is parsed into `ChangelogRelease.migration`, enforced by the changelog gate (missing on the release being tagged, or an unrecognized value anywhere, fails CI), shown as a badge on `/settings/about`, and carried into the published GitHub Release body. All eight prior releases were backfilled ([Issue #277](https://github.com/aellington89/finance-stack/issues/277)).
+- `importer/Dockerfile` and `scripts/Dockerfile`: the importer and backup services now run from built images (`finance-importer`, `finance-backup`) rather than stock `python`/`postgres` images with the repo mounted over them. The importer bakes in `poll.py` and its pinned dependencies and runs as a non-root user, so it no longer runs `pip install` — and no longer needs internet access — on every restart. `finance-backup` stays `FROM postgres:18.4` because `pg_dump` must be version-matched to the server ([Issue #224](https://github.com/aellington89/finance-stack/issues/224), closing the Dockerfile half of [#132](https://github.com/aellington89/finance-stack/issues/132)).
+
+### Changed
+
+- Every service now runs this repo's code from an image instead of a bind mount, which is the prerequisite for deploying from a registry onto a host with no source tree ([Issue #224](https://github.com/aellington89/finance-stack/issues/224), part of [#223](https://github.com/aellington89/finance-stack/issues/223)). The `migrate` image bakes in `init-db/roles/`, `init-db/seeds/`, `init-db/01-create-databases.sh` and `scripts/verify-db-roles.sh`; `finance-backup` bakes in `backup.sh`, `restore.sh` and the balance-rebuild SQL used by `--profile init`. Everything lands at the path it was previously mounted at, so no script changed and every documented command — `docker compose exec pg-backup /scripts/restore.sh …`, `docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh …` — still works verbatim. Only data stays mounted: `imports/`, `backups/`, `importer/parsers/`, and `postgres`'s first-run `init-db/` hook ([#225](https://github.com/aellington89/finance-stack/issues/225)).
+- **Editing `scripts/*.sh`, `init-db/roles|seeds/*.sql` or `importer/poll.py` now requires a rebuild** before it takes effect — previously the bind mounts made those edits live. `scripts/build.sh` builds all four images by default for this reason: a stale `finance-migrate` applies the seed and role SQL it was built with and reports success, which is a silent no-op rather than a failure. CI builds all four images on every PR, where it previously built only `finance-app` and so never compiled the `migrate` stage at all.
+- The `changelog` additional build context is now named `repo`, and `CHANGELOG_CONTEXT` is now `REPO_CONTEXT` — it carries `init-db/` and `scripts/` as well as `CHANGELOG.md`.
 
 ## [0.3.0] - 2026-08-15
 

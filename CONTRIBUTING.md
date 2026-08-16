@@ -234,9 +234,31 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
   --exit-code 1 --ignorefile /.trivyignore finance-app:latest
 ```
 
-If `docker compose build` can't find `CHANGELOG.md`, set
-`CHANGELOG_CONTEXT="$(pwd)"` — the `changelog` additional build context needs an
-absolute path on some Compose/buildx versions.
+If `docker compose build` can't find `CHANGELOG.md` (or `init-db/`, or
+`scripts/`), set `REPO_CONTEXT="$(pwd)"` — the `repo` additional build context
+needs an absolute path on some Compose/buildx versions.
+
+### What needs a rebuild
+
+Since [Issue #224](https://github.com/aellington89/finance-stack/issues/224)
+every service runs this repo's code from an **image**, not a bind mount, so a
+plain `docker compose up` will happily keep running the code the image was built
+with. Editing any of these means rebuilding before the change takes effect:
+
+| Edited | Rebuild |
+| --- | --- |
+| `app/**` | `docker compose build finance-app` |
+| `init-db/roles/*.sql`, `init-db/seeds/*.sql`, `app/scripts/*.sh`, `scripts/verify-db-roles.sh` | `docker compose build migrate` |
+| `importer/poll.py`, `importer/requirements.txt` | `docker compose build importer` |
+| `scripts/backup.sh`, `scripts/restore.sh`, `scripts/update-account-balance-history.sql` | `docker compose build pg-backup` |
+
+`scripts/build.sh` with no arguments builds all four, which is the safe default.
+The failure mode worth knowing is the quiet one: a stale `finance-migrate` image
+applies the seed and role SQL it was *built* with and reports success, so a seed
+edit appears to have been applied when it has not.
+
+Still bind-mounted, and therefore still live: `imports/`, `backups/`,
+`importer/parsers/`, and `postgres`'s `init-db/` first-run hook.
 
 ### Lint and tests
 
@@ -297,8 +319,8 @@ weekly:
 | --- | --- |
 | `npm` | `app/package.json` |
 | `pip` | `importer/requirements.txt` |
-| `docker` | base images in `app/Dockerfile` |
-| `docker-compose` | service images in `docker-compose.yml` |
+| `docker` | base images in `app/Dockerfile`, `importer/Dockerfile`, `scripts/Dockerfile` (one entry per directory) |
+| `docker-compose` | service images in `docker-compose.yml` (`postgres`, `metabase`) |
 | `github-actions` | workflow actions (SHA pins) |
 
 Two things to know when reviewing these:
@@ -315,7 +337,11 @@ Two things to know when reviewing these:
 
 Bumping `postgres` in `docker-compose.yml` also needs a manual bump of the
 `postgres:` service image in `.github/workflows/ci.yml` and
-`backup-smoke.yml` — Dependabot does not read workflow service containers.
+`backup-smoke.yml` — Dependabot does not read workflow service containers — and
+of `scripts/Dockerfile`, which it *does* read, but as a separate ecosystem, so it
+arrives as its own PR rather than grouped with the compose bump. Merge them
+together: `pg_dump` refuses to dump a server newer than itself, so a
+`finance-backup` image left a major behind stops producing backups.
 
 ## Changelog entries (day-to-day)
 

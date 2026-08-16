@@ -7,9 +7,21 @@ restore.
 
 The `pg-backup` service runs a scheduled `pg_dump` of each configured database
 into `./backups/` on the host, pruning old dumps on a retention window. It runs
-by default (`docker compose up`) alongside Postgres and reuses the
-`postgres:18.0` image, so `pg_dump`/`pg_restore` stay version-matched to the
-server.
+by default (`docker compose up`) alongside Postgres, from the `finance-backup`
+image built by [`scripts/Dockerfile`](../scripts/Dockerfile) — which is
+`FROM postgres:18.4`, so `pg_dump`/`pg_restore` stay version-matched to the
+server. That version match is a hard requirement, not an optimization:
+`pg_dump` refuses to dump a server newer than itself, so bump that base image in
+step with the `postgres` service.
+
+`backup.sh` and `restore.sh` are **baked into that image** at `/scripts` since
+[Issue #224](https://github.com/aellington89/finance-stack/issues/224) — they
+used to be bind-mounted from `./scripts`. Every command below is unchanged as a
+result, but editing either script now needs a rebuild before it takes effect:
+
+```sh
+docker compose build pg-backup && docker compose up -d pg-backup
+```
 
 Dumps use PostgreSQL's **custom format** (`pg_dump -Fc`): compressed and
 restorable with `pg_restore`. Files are named `<db>_<UTC-timestamp>.dump`, e.g.
