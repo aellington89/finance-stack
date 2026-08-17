@@ -45,12 +45,12 @@ COPY scripts ./scripts
 # before: /app/scripts from the ./app context (migrate-and-seed.sh,
 # preflight-superuser.sh) and /scripts from the repo root (verify-db-roles.sh).
 #
-# 01-create-databases.sh is baked but not yet invoked — it still runs only via
-# the postgres entrypoint hook. Issue #225 folds it into migrate-and-seed.sh as
-# step 0, which is what finally removes postgres's own ./init-db mount.
+# /roles also carries 00-create-databases.sql, which creates the databases
+# themselves. That used to be init-db/01-create-databases.sh, run by the postgres
+# entrypoint hook on an empty data directory only; Issue #225 made it step 0 of
+# migrate-and-seed.sh, which is what removed postgres's own ./init-db mount.
 COPY --from=repo init-db/roles /roles
 COPY --from=repo init-db/seeds /seeds
-COPY --from=repo init-db/01-create-databases.sh /init-db/01-create-databases.sh
 COPY --from=repo scripts/verify-db-roles.sh /scripts/verify-db-roles.sh
 
 ENTRYPOINT ["bash", "/app/scripts/migrate-and-seed.sh"]

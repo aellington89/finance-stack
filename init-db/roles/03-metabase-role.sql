@@ -4,7 +4,8 @@
 -- Re-asserts what MB_DB_USER — the role Metabase authenticates as against its
 -- OWN metadata database — is allowed to be, and (since #189) what it
 -- authenticates with. It is not one of the three service roles from #130; it is
--- created by init-db/01-create-databases.sh, which runs only on an empty
+-- created by 00-create-databases.sql, which since #225 runs from this same
+-- migrate job — it used to be a postgres initdb hook, firing only on an empty
 -- PGDATA. That is how the live cluster ended up with a
 -- SUPERUSER metabase_user carrying CREATEDB, CREATEROLE, REPLICATION and
 -- BYPASSRLS, widened out-of-band, with nothing in the repository to re-assert
@@ -18,7 +19,8 @@
 --
 -- Applied by the `migrate` Compose service (app/scripts/migrate-and-seed.sh),
 -- for the same reason 01-create-roles.sql is: migrate runs idempotently on
--- every `docker compose up`, so it reaches existing volumes. init-db/ cannot.
+-- every `docker compose up`, so it reaches existing volumes. An initdb hook
+-- cannot, which is why nothing in this stack is one any more (#225).
 --
 -- Required psql variables:
 --   mb_user      the Metabase metadata role name (MB_DB_USER), passed with -v

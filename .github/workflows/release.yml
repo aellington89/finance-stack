@@ -86,9 +86,10 @@ jobs:
       # then checked separately, since that is the signal #191 was about.
       - name: Boot stack and verify /api/health
         working-directory: .
-        # The postgres init script (init-db/01-create-databases.sh, run on first start
-        # under `set -euo pipefail`) needs POSTGRES_DB and the Metabase role vars to be
-        # non-empty, or `CREATE ROLE`/`--dbname ""` aborts and postgres never goes healthy.
+        # POSTGRES_DB is consumed by the postgres image itself at initdb. The Metabase
+        # role vars go to the migrate job, which since #225 creates every database this
+        # stack uses — MB_DB_PASS is what tells it to provision the metadata role at all,
+        # so leaving it empty here would skip it silently rather than fail.
         # Metabase itself is profile-gated (bi) so it never starts here; only the role is created.
         # FINANCE_APP_DB is deliberately unset, so the app runs against a brand-new, empty
         # `Finances` — the real first-install path. Until #191 split the endpoints this job

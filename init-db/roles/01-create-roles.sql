@@ -19,9 +19,11 @@
 -- maintenance database. Per-database privileges live in 02-grants.sql.
 --
 -- Applied by the `migrate` Compose service (app/scripts/migrate-and-seed.sh),
--- not by init-db/01-create-databases.sh: that script only runs on an empty data
--- directory, so an existing Postgres volume would never gain the roles. The
--- migrate service runs idempotently on every `docker compose up`.
+-- never by a postgres initdb hook: /docker-entrypoint-initdb.d/ only runs on an
+-- empty data directory, so an existing Postgres volume would never gain the
+-- roles. The migrate service runs idempotently on every `docker compose up`.
+-- Database creation joined it there under #225 for exactly this reason — see
+-- 00-create-databases.sql, which runs immediately before this file.
 --
 -- Required psql variables (passed with -v by the caller):
 --   app_password, importer_password, bi_password
@@ -30,7 +32,8 @@
 -- the SQL text, and quoted by format(%L) so a password containing a quote can
 -- neither break the statement nor inject SQL. Note that psql does NOT expand
 -- :variables inside dollar-quoted strings, which is why this uses \gexec rather
--- than a DO $$ ... $$ block (the pattern 01-create-databases.sh already uses).
+-- than a DO $$ ... $$ block — the same constraint every other file in this
+-- directory works around.
 --
 -- Each role gets two statements: a guarded CREATE, then an unconditional ALTER.
 -- The ALTER re-asserts the attribute set and syncs the password, so rotating a

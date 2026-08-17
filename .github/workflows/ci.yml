@@ -72,10 +72,30 @@ jobs:
       - name: Dependency audit (build-time)
         run: npm audit --audit-level=high
 
-      - name: Create test database
+      # Issues #130, #225. CI's postgres service is a bare image — it runs no
+      # initdb hook and never runs the migrate job — so stand the cluster up with
+      # the same files migrate does, rather than hand-written psql that can drift
+      # away from them. This is the creation half; the roles and grants follow
+      # below, in the order migrate-and-seed.sh applies them.
+      #
+      # mb_password is non-empty on purpose: it is what provisions metabase_user,
+      # and a cluster holding only the three service roles would make the #239
+      # "sweep every login role" gate a sweep over the same three, proving
+      # nothing. It also creates an (empty, unused) Finances alongside
+      # Finances_Test, which is simply what the real first install does.
+      - name: Create databases and the Metabase role
         env:
+          PGHOST: localhost
+          PGUSER: postgres
           PGPASSWORD: changeme
-        run: psql -h localhost -U postgres -c 'CREATE DATABASE "Finances_Test";'
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres \
+            -v app_db=Finances \
+            -v test_db=Finances_Test \
+            -v mb_user=metabase_user \
+            -v mb_dbname=metabase \
+            -v mb_password=ci-metabase-meta-pw \
+            -f ../init-db/roles/00-create-databases.sql
 
       - name: Apply Drizzle migrations
         env:
@@ -90,10 +110,8 @@ jobs:
           psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/finances-test-mock-data.sql
           psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/rebuild-balance-history.sql
 
-      # Issue #130. CI's postgres service is a bare image — it never runs
-      # init-db — so create the roles and apply the grants explicitly. These are
-      # the exact files the migrate service runs against the real databases: one
-      # authority, exercised twice.
+      # Issue #130. The other half of the step above: the exact files the migrate
+      # service runs against the real databases — one authority, exercised twice.
       - name: Create service roles and apply grants
         env:
           PGHOST: localhost
@@ -108,22 +126,17 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d "Finances_Test" \
             -v OWNER=postgres -f ../init-db/roles/02-grants.sql
 
-      # Issue #239. Stands up Metabase's metadata role and database the way
-      # init-db/01-create-databases.sh does, then applies the convergence file
-      # the migrate service applies. Without this the cluster holds exactly the
-      # three roles the gate used to name, so a sweep over "every login role"
-      # would be a sweep over the same three and would prove nothing — the
-      # second login role is the whole point.
-      - name: Create the Metabase metadata role and database
+      # Issue #239. Converges the Metabase metadata role the way the migrate
+      # service does — attributes, ownership, and its password — against the role
+      # and database the creation step above stood up. Kept a step of its own,
+      # after the service roles, because that is the order migrate-and-seed.sh
+      # applies these files in.
+      - name: Converge the Metabase metadata role
         env:
           PGHOST: localhost
           PGUSER: postgres
           PGPASSWORD: changeme
         run: |
-          psql -v ON_ERROR_STOP=1 -d postgres \
-            -c "CREATE ROLE metabase_user LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
-                  NOREPLICATION NOBYPASSRLS PASSWORD 'ci-metabase-meta-pw';" \
-            -c 'CREATE DATABASE metabase OWNER metabase_user;'
           psql -v ON_ERROR_STOP=1 -d metabase \
             -v mb_user=metabase_user -v mb_password=ci-metabase-meta-pw \
             -f ../init-db/roles/03-metabase-role.sql
@@ -200,7 +213,7 @@ jobs:
 
       # Issue #189, acceptance criterion 1. Proves the mechanic rather than the
       # intent: MB_DB_PASS was un-rotatable for the same reason POSTGRES_PASSWORD
-      # still is — the only file that set it (init-db/01-create-databases.sh) runs
+      # still is — the only file that set it was a postgres initdb hook, which ran
       # once, on an empty PGDATA. 03-metabase-role.sql now carries an unconditional
       # ALTER ROLE … PASSWORD, and the assertion that matters is the negative one:
       # the OLD credential must stop working. A gate that only checked the new

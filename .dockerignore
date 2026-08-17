@@ -30,9 +30,9 @@ app/next-env.d.ts
 # Credentials — every .env variant at any depth, not just the root file this
 # stack reads today (#181). This is the `repo` additional_contexts entry, out of
 # which app/Dockerfile copies CHANGELOG.md (runner stage) plus init-db/roles,
-# init-db/seeds, init-db/01-create-databases.sh and scripts/verify-db-roles.sh
-# (migrate stage, #224) — every COPY names its source, so this is defence in
-# depth; app/.dockerignore is what governs the finance-app image itself.
+# init-db/seeds and scripts/verify-db-roles.sh (migrate stage, #224) — every COPY
+# names its source, so this is defence in depth; app/.dockerignore is what
+# governs the finance-app image itself.
 **/.env*
 secrets/
 

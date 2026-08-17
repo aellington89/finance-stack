@@ -5,18 +5,24 @@
 # Runs in the `migrate` Compose service after postgres becomes
 # healthy. Idempotent: safe to re-run on every `docker compose up`.
 #
-# It first creates the least-privilege service roles from /roles/ (mounted from
-# init-db/roles) — those are cluster-global, so once per run. Then, for each
-# target database it:
+# It first creates the databases themselves (/roles/00-create-databases.sql),
+# then the least-privilege service roles (/roles/01-create-roles.sql) — both act
+# on the cluster, so both run once per job, against the maintenance database.
+# Then, for each target database it:
 #   1. Applies any pending Drizzle migrations (drizzle-kit migrate).
 #   2. Applies that database's service-role grants (/roles/02-grants.sql).
 #
-# Roles and grants live here rather than in init-db/01-create-databases.sh for
-# two reasons (issue #130): that script only runs on an empty data directory, so
-# an existing Postgres volume would never gain the roles; and a GRANT names
-# tables, so it can only run after step 1 has created them.
+# Database creation, roles and grants all live here rather than in a postgres
+# initdb hook, for one shared reason (issues #130, #225):
+# /docker-entrypoint-initdb.d/ runs only on an empty data directory, so an
+# existing Postgres volume would never gain a role — or a database — added after
+# it was first initialized. Grants have a second reason besides: a GRANT names
+# tables, so it can only run after step 1 has created them. Running creation from
+# here makes first install and upgrade the identical code path, and it is what
+# let the postgres service drop its last bind mount (#225, a prerequisite for
+# the #223 deploy bundle).
 #
-# Then it applies seed files from /seeds/ (mounted from init-db/seeds):
+# Then it applies seed files from /seeds/ (baked in from init-db/seeds, #224):
 #   - Finances:      shared-lookups.sql, unconditionally.
 #   - Finances_Test: shared-lookups.sql + finances-test-mock-data.sql
 #                    + rebuild-balance-history.sql. All three files are
@@ -34,11 +40,11 @@
 # file — see the header of shared-lookups.sql before editing it (issue #187).
 #
 # It also converges the Metabase metadata role (/roles/03-metabase-role.sql,
-# issues #239 and #189). That role is created by init-db/01-create-databases.sh,
-# which runs only on an empty PGDATA — so on an existing volume nothing
-# re-asserted what it was allowed to be, and it had drifted to SUPERUSER
-# unnoticed. The same file now syncs its password, which is what makes MB_DB_PASS
-# rotatable from .env.
+# issues #239 and #189). That role used to be created by the initdb hook, which
+# runs only on an empty PGDATA — so on an existing volume nothing re-asserted
+# what it was allowed to be, and it had drifted to SUPERUSER unnoticed. Step 0
+# creates it now; 03-metabase-role.sql stays the authority on what it may do, and
+# also syncs its password, which is what makes MB_DB_PASS rotatable from .env.
 #
 # Before any of that it runs preflight-superuser.sh, which is the other half of
 # #189: POSTGRES_PASSWORD is the one credential this job cannot rotate, because
@@ -52,7 +58,8 @@
 #   FINANCE_APP_DB_PASSWORD etc.  (the service-role passwords, #130)
 #   FINANCE_BI_DB_PASSWORD        (the read-only BI role, #249)
 #   MB_DB_USER, MB_DB_DBNAME      (the metadata role + its database)
-#   MB_DB_PASS                    (required only when that database exists, #189)
+#   MB_DB_PASS                    (empty skips Metabase provisioning entirely;
+#                                  required once that database exists, #189/#225)
 # ------------------------------------------------------------
 set -euo pipefail
 
@@ -124,6 +131,23 @@ apply_grants() {
 # and from a checkout.
 bash "$(dirname "${BASH_SOURCE[0]}")/preflight-superuser.sh"
 
+# Step 0: the databases everything below connects to (#225). Runs against the
+# maintenance database, which is the one this job can always reach. MB_DB_PASS
+# keeps its `:-` here rather than taking a `:?` guard like the service-role
+# passwords above: an empty value is a valid answer, and it means "do not
+# provision Metabase at all". The file skips the role and the metadata database
+# on it; the convergence block further down keeps its own `:?` for the case that
+# actually is a misconfiguration — a metadata database that exists while .env has
+# lost the credential.
+echo ">>> Creating databases..."
+psql -v ON_ERROR_STOP=1 -d postgres \
+    -v app_db="${FINANCE_APP_DB}" \
+    -v test_db="${TEST_DB}" \
+    -v mb_user="${MB_DB_USER}" \
+    -v mb_dbname="${MB_DB_DBNAME}" \
+    -v mb_password="${MB_DB_PASS:-}" \
+    -f /roles/00-create-databases.sql
+
 # Roles are cluster-global, so create them once, before the per-database loop.
 echo ">>> Creating least-privilege service roles..."
 psql -v ON_ERROR_STOP=1 -d postgres \
@@ -135,7 +159,7 @@ psql -v ON_ERROR_STOP=1 -d postgres \
 # Metabase's metadata role (#239). Runs against the metadata database rather
 # than `postgres`, because it issues a schema-level GRANT. Skipped rather than
 # failed when that database is absent: a cluster that has never provisioned
-# Metabase is a valid configuration, and init-db creates the database and the
+# Metabase is a valid configuration, and step 0 creates the database and the
 # role together, so neither exists without the other.
 echo ">>> Converging the Metabase metadata role..."
 if [ -n "$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${MB_DB_DBNAME}'" -d postgres)" ]; then

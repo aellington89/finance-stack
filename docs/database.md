@@ -39,10 +39,11 @@ The `Finances_Test` database has its balance history built automatically as part
 
 ## First-Launch Database Initialization
 
-On the first `docker compose up` (empty Postgres data volume), [`init-db/01-create-databases.sh`](../init-db/01-create-databases.sh) runs once inside the postgres container and creates the `Finances` and `Finances_Test` databases plus the Metabase role + database. It does not apply any schema or seed data.
+Everything comes from the `migrate` Compose service, which runs after postgres is healthy. The `postgres` container itself does nothing but start a server: it has no initdb hook and no bind mount, only its data volume (Issue #225).
 
-Schema and seeding then come from the `migrate` Compose service, which runs after postgres is healthy. The migrate service:
+The migrate service:
 
+0. Creates the databases — `Finances` (or whatever `FINANCE_APP_DB` names), `Finances_Test`, and the Metabase metadata role + database — from [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql). Metabase is provisioned only when `MB_DB_PASS` is non-empty; leave it blank and that role and database are skipped. **This runs on every `docker compose up`, not only the first**, which is the point of it living here: it used to be a postgres initdb hook, which runs once on an empty data volume and never again, so a database added later would never appear on an existing volume.
 1. Creates the least-privilege service roles, then applies pending Drizzle migrations from [`app/drizzle/migrations/`](../app/drizzle/migrations/) to both `Finances` and `Finances_Test` and grants each role its privileges — see [Roles & Privileges](#roles--privileges).
 2. Seeds the **app-owned reference rows** (all of `account_type_categories` and `transaction_types`, plus the single `transaction_categories` row id 6 `Other`) into both databases so they start in sync — see [Seed-data taxonomy](#seed-data-taxonomy) for why that one category row ships and the rest do not. This runs on **every** migrate run, not only on an empty database: the seed is purely additive (`ON CONFLICT DO NOTHING`, `setval`, and `UPDATE`s guarded by `WHERE liquidity_class IS NULL`), so **existing Finances user data is never overwritten** and a reference row added to the seed after your database was first created is backfilled automatically. See [Repairing seed drift](#repairing-seed-drift).
 3. Seeds `Finances_Test` with mock data: all 19 `account_types`, 44 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
@@ -259,10 +260,11 @@ Two details worth knowing before you change any of this:
 
 ### How the roles are applied
 
-Roles and grants are applied by the **`migrate` service** on every `docker compose up`, not by `init-db/01-create-databases.sh`. Two reasons: that script only runs on an empty data directory, so an existing Postgres volume would never gain the roles; and a `GRANT` names tables, so it can only run after migrations have created them.
+Roles and grants are applied by the **`migrate` service** on every `docker compose up`, never by a postgres initdb hook. Two reasons: `/docker-entrypoint-initdb.d/` only runs on an empty data directory, so an existing Postgres volume would never gain the roles; and a `GRANT` names tables, so it can only run after migrations have created them. The first reason applies to the databases themselves too, which is why creation joined them there under #225.
 
 | File | Purpose |
 |---|---|
+| [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql) | Creates `FINANCE_APP_DB`, `Finances_Test`, and — when `MB_DB_PASS` is set — the Metabase metadata role and database (Issue #225) |
 | [`init-db/roles/01-create-roles.sql`](../init-db/roles/01-create-roles.sql) | Creates the three login roles (cluster-global, so it runs once per migrate run) |
 | [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) | Applies the matrix above to one database; run against `Finances` and `Finances_Test` |
 | [`init-db/roles/03-metabase-role.sql`](../init-db/roles/03-metabase-role.sql) | Converges the Metabase metadata role — attributes, ownership, and its password; run against `MB_DB_DBNAME` (Issues #239, #189) |
