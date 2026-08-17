@@ -220,11 +220,12 @@ finance-stack/
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── caddy/
 │   └── Caddyfile                         # Reverse proxy / automatic TLS for exposed deployments (--profile edge, #182)
-├── init-db/                              # Baked into the finance-migrate image at /init-db, /roles, /seeds (#224)
-│   ├── 01-create-databases.sh            # First-run DB + Metabase role creation only (auto-runs on empty data dir)
-│   ├── roles/                            # Least-privilege service roles (#130), applied by the `migrate` service
+├── init-db/                              # Baked into the finance-migrate image at /roles, /seeds (#224); nothing here is a postgres initdb hook any more (#225)
+│   ├── roles/                            # Cluster setup (#130, #225), applied by the `migrate` service on every up
+│   │   ├── 00-create-databases.sql       # Finances / Finances_Test + the Metabase role & DB (step 0, #225)
 │   │   ├── 01-create-roles.sql           # finance_app / finance_importer / finance_bi (cluster-global)
 │   │   ├── 02-grants.sql                 # Per-database grant matrix; revokes then grants, so it converges
+│   │   ├── 03-metabase-role.sql          # Converges the Metabase metadata role — attributes, ownership, password (#239, #189)
 │   │   └── assert-grants.sql             # Catalog assertions for the matrix — the CI grant gate
 │   └── seeds/                            # Applied by the `migrate` Compose service after migrations
 │       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs, every run — must stay additive, #187)

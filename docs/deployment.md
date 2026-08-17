@@ -13,13 +13,15 @@ of them reads code from the checkout any more:
 | Image | Built from | Carries |
 |---|---|---|
 | `finance-app` | `app/Dockerfile` (`runner`) | the Next.js standalone server |
-| `finance-migrate` | `app/Dockerfile` (`migrate`) | drizzle-kit, `/roles`, `/seeds`, `/scripts/verify-db-roles.sh` |
+| `finance-migrate` | `app/Dockerfile` (`migrate`) | drizzle-kit, `/roles` (database + role creation), `/seeds`, `/scripts/verify-db-roles.sh` |
 | `finance-importer` | `importer/Dockerfile` | `poll.py` and its pinned deps |
 | `finance-backup` | `scripts/Dockerfile` | `backup.sh`, `restore.sh`, the balance-rebuild SQL |
 
-Only data is bind-mounted: `./imports`, `./backups`, `./importer/parsers`, and
-`postgres`'s first-run `./init-db` hook (folded into `migrate` by
-[#225](https://github.com/aellington89/finance-stack/issues/225)).
+Only data is bind-mounted: `./imports`, `./backups` and `./importer/parsers`.
+`postgres` carries no mount but its data volume — its first-run `./init-db` hook
+was folded into `migrate` by
+[#225](https://github.com/aellington89/finance-stack/issues/225), so the stack
+runs a stock `postgres:18.6` with nothing of this repo's in it.
 
 Deploying still means running `docker compose up` from a checkout today. Pulling
 these images from a registry onto a host with no source tree — plus a versioned

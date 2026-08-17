@@ -257,8 +257,11 @@ The failure mode worth knowing is the quiet one: a stale `finance-migrate` image
 applies the seed and role SQL it was *built* with and reports success, so a seed
 edit appears to have been applied when it has not.
 
-Still bind-mounted, and therefore still live: `imports/`, `backups/`,
-`importer/parsers/`, and `postgres`'s `init-db/` first-run hook.
+Still bind-mounted, and therefore still live: `imports/`, `backups/` and
+`importer/parsers/`. `postgres` has no mount but its data volume — database
+creation moved into the `migrate` job under
+[#225](https://github.com/aellington89/finance-stack/issues/225), so it needs a
+`docker compose build migrate` like everything else in that table.
 
 ### Lint and tests
 

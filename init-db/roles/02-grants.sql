@@ -3,8 +3,9 @@
 --
 -- Runs once per target database (Finances, Finances_Test) on every migrate run,
 -- AFTER drizzle-kit has applied migrations — grants can only reference tables
--- that already exist, which is why this lives in the migrate service rather than
--- in init-db/01-create-databases.sh. Roles themselves come from 01-create-roles.sql.
+-- that already exist, which is why this cannot run alongside database creation.
+-- The databases come from 00-create-databases.sql and the roles themselves from
+-- 01-create-roles.sql, both earlier in the same job.
 --
 -- Contains no secrets, so CI applies this exact file to Finances_Test and then
 -- gates on assert-grants.sql. One authority, exercised twice.

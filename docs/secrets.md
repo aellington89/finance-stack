@@ -11,7 +11,7 @@ Seven values. Nothing else in the stack is secret.
 | Variable | Lives in | Consumed by | Generate with |
 |---|---|---|---|
 | `POSTGRES_PASSWORD` | root `.env` | `postgres` (at `initdb`), and `migrate` / `init-script` / `pg-backup` as `PGPASSWORD` | any generator; URL-safe |
-| `MB_DB_PASS` | root `.env` | `init-db/01-create-databases.sh` (creates the role), `migrate` (syncs the role's password), `metabase` | any generator; URL-safe |
+| `MB_DB_PASS` | root `.env` | `migrate` (creates the role and its database, then syncs the role's password — an empty value skips both), `metabase` | any generator; URL-safe |
 | `FINANCE_APP_DB_PASSWORD` | root `.env` | `migrate` (creates the role), `finance-app` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_IMPORTER_DB_PASSWORD` | root `.env` | `migrate`, `importer` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_BI_DB_PASSWORD` | root `.env` | `migrate` only — then entered by hand in the Metabase admin UI (#249) | any generator; URL-safe |
@@ -31,7 +31,7 @@ the `users` table, and nothing outside Postgres ever holds it.
 **What each of these is worth to an attacker is not obvious from the table**,
 and `MB_DB_PASS` is the one that was most misread. It authenticates
 `MB_DB_USER`, the role Metabase uses for its own metadata database. Read from
-`init-db/01-create-databases.sh` that is a scoped login; on the live cluster it
+the script that created it that is a scoped login; on the live cluster it
 was a **full superuser** with `CREATEDB`, `CREATEROLE`, `REPLICATION` and
 `BYPASSRLS` — so the one variable the repository described as the narrowest of
 the four database credentials was in fact the widest, equivalent to
@@ -174,8 +174,9 @@ Three things it did find:
 
 **One credential was far wider than the repository said.** `MB_DB_PASS` reads as
 a scoped metadata-DB login everywhere it appears — the inventory above, the
-`CREATE ROLE … WITH LOGIN PASSWORD` in `init-db/01-create-databases.sh`, and a
-line in `docs/database.md` that stated outright it "was never the superuser."
+`CREATE ROLE … WITH LOGIN PASSWORD` in `init-db/01-create-databases.sh` (since
+replaced by [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql),
+#225), and a line in `docs/database.md` that stated outright it "was never the superuser."
 The live role carried every attribute Postgres has. Nothing in the repository
 recorded the change, and nothing would have caught it: the grant gate swept a
 hand-maintained list of three role names, and `metabase_user` was not on it.
