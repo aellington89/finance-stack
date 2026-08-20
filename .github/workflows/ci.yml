@@ -524,6 +524,7 @@ jobs:
       # added four of them. importer and pg-backup are new Dockerfiles that would
       # otherwise first be compiled on a release tag.
       - name: Build service images
+        id: build
         env:
           # Absolute path, for the same reason release.yml sets it: a relative
           # additional_contexts path is resolved against ./app rather than the
@@ -535,18 +536,91 @@ jobs:
       # Actions are SHA-pinned repo-wide (Issue #131) — mutable tags are exactly
       # how this action was used to ship malware in March 2026.
       #
-      # Deliberately scoped to finance-app. finance-migrate, finance-importer and
-      # finance-backup are compiled above but not scanned: their postgres and
-      # python:3.14-slim bases carry OS CVEs on a different fix cadence, and
-      # turning that into a merge gate here — before #226 decides what a published
-      # image has to clear — would buy a permanently red job rather than safety.
-      - name: Trivy image scan
+      # All four images since #226, where it used to be finance-app alone. The
+      # reason the other three were skipped — their postgres and python:3.14-slim
+      # bases carry OS CVEs on someone else's fix cadence — inverted the moment a
+      # `vX.Y.Z` tag started publishing them to GHCR: an unscanned base is not a
+      # base nobody depends on, it is a base a deployment host pulls. The gate
+      # stays fixable-only (`ignore-unfixed: true`), and because those tags are
+      # rebuilt upstream, a fixable finding usually clears on the next run with no
+      # change in this repo at all. .trivyignore holds a dated, justified entry
+      # for the window where it does not — see CONTRIBUTING.md "Image scan gate"
+      # for the response order.
+      #
+      # Every scan runs even when an earlier one failed, so one red image does not
+      # hide the other three's findings; a base bump would otherwise take four
+      # sequential CI rounds to clear. The job still fails. They are gated on the
+      # build instead, since a scan of an image that was never built reports a
+      # missing image rather than a vulnerability.
+      #
+      # One job rather than a matrix on purpose: a matrix leg is a fresh runner,
+      # so scanning four images would mean building all four, four times.
+      - name: Trivy scan finance-app
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: finance-app:latest
           severity: HIGH,CRITICAL
           # node:24-alpine carries OS CVEs with no upstream fix; blocking on
           # those makes the gate un-actionable rather than safer.
+          ignore-unfixed: true
+          exit-code: 1
+          trivyignores: .trivyignore
+
+      - name: Trivy scan finance-migrate
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: finance-migrate:latest
+          severity: HIGH,CRITICAL
+          # Two prebuilt third-party binaries are excluded, and only these two.
+          # Neither is compiled by this repo and neither can be patched here:
+          # esbuild ships inside drizzle-kit's dependency tree, gosu inside the
+          # postgres base image. Both are stripped Go binaries, so Trivy reports
+          # every Go stdlib CVE against them — 27 and 22 respectively at the time
+          # this was written — and because nothing ever rebuilds them, suppressing
+          # those by ID would be a treadmill that re-reds this job every few weeks
+          # without a fix ever existing. Excluding the file is the honest version
+          # of that: it says "this binary is out of scope" once, rather than
+          # pretending each new stdlib CVE was individually reviewed. Everything
+          # else in the image is still scanned and still blocks.
+          skip-files: app/node_modules/**/bin/esbuild
+          # Same node:24-alpine base as finance-app, but this stage deliberately
+          # keeps npm (it runs `npx drizzle-kit`), so it carries npm's vendored
+          # dependencies that the runner stage deletes — expect findings here that
+          # finance-app does not have.
+          ignore-unfixed: true
+          exit-code: 1
+          trivyignores: .trivyignore
+
+      - name: Trivy scan finance-importer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: finance-importer:latest
+          severity: HIGH,CRITICAL
+          # python:3.14-slim (Debian). Findings here are usually OS packages
+          # cleared by an upstream rebuild of the tag, not by anything in
+          # importer/requirements.txt — check the reported path before bumping a
+          # pinned dependency.
+          ignore-unfixed: true
+          exit-code: 1
+          trivyignores: .trivyignore
+
+      - name: Trivy scan finance-backup
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: finance-backup:latest
+          severity: HIGH,CRITICAL
+          # See the note on the finance-migrate scan above: gosu is a stripped Go
+          # binary baked into the postgres base image, so every Go stdlib CVE is
+          # reported against it and none of them is fixable from this repo.
+          skip-files: usr/local/bin/gosu
+          # postgres:18.6 (Debian), and the one image whose base is not free to
+          # move: pg_dump must stay version-matched to the server, so the fix for
+          # a finding here is an upstream rebuild or a coordinated bump of the
+          # postgres tag everywhere — see scripts/Dockerfile.
           ignore-unfixed: true
           exit-code: 1
           trivyignores: .trivyignore

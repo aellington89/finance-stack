@@ -28,6 +28,12 @@ COPY update-account-balance-history.sql /scripts/
 
 RUN chmod +x /scripts/backup.sh /scripts/restore.sh
 
+# Published to GHCR on every vX.Y.Z tag (#226); the source label links the
+# package back to this repository.
+LABEL org.opencontainers.image.source="https://github.com/aellington89/finance-stack" \
+      org.opencontainers.image.title="finance-backup" \
+      org.opencontainers.image.description="Scheduled pg_dump backup, restore and balance-rebuild scripts for Finance Stack"
+
 # No USER change. pg-backup writes dumps into the ./backups bind mount as the
 # postgres image's default user, which is what works against a host-owned
 # directory today.

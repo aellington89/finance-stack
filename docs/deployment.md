@@ -10,12 +10,12 @@ Every service that runs this repo's code runs it from an image
 ([Issue #224](https://github.com/aellington89/finance-stack/issues/224)) — none
 of them reads code from the checkout any more:
 
-| Image | Built from | Carries |
-|---|---|---|
-| `finance-app` | `app/Dockerfile` (`runner`) | the Next.js standalone server |
-| `finance-migrate` | `app/Dockerfile` (`migrate`) | drizzle-kit, `/roles` (database + role creation), `/seeds`, `/scripts/verify-db-roles.sh` |
-| `finance-importer` | `importer/Dockerfile` | `poll.py` and its pinned deps |
-| `finance-backup` | `scripts/Dockerfile` | `backup.sh`, `restore.sh`, the balance-rebuild SQL |
+| Image | Built from | Carries | Published as |
+|---|---|---|---|
+| `finance-app` | `app/Dockerfile` (`runner`) | the Next.js standalone server | `ghcr.io/aellington89/finance-app` |
+| `finance-migrate` | `app/Dockerfile` (`migrate`) | drizzle-kit, `/roles` (database + role creation), `/seeds`, `/scripts/verify-db-roles.sh` | `ghcr.io/aellington89/finance-migrate` |
+| `finance-importer` | `importer/Dockerfile` | `poll.py` and its pinned deps | `ghcr.io/aellington89/finance-importer` |
+| `finance-backup` | `scripts/Dockerfile` | `backup.sh`, `restore.sh`, the balance-rebuild SQL | `ghcr.io/aellington89/finance-backup` |
 
 Only data is bind-mounted: `./imports`, `./backups` and `./importer/parsers`.
 `postgres` carries no mount but its data volume — its first-run `./init-db` hook
@@ -23,11 +23,19 @@ was folded into `migrate` by
 [#225](https://github.com/aellington89/finance-stack/issues/225), so the stack
 runs a stock `postgres:18.6` with nothing of this repo's in it.
 
-Deploying still means running `docker compose up` from a checkout today. Pulling
-these images from a registry onto a host with no source tree — plus a versioned
-deployment bundle, an upgrade command, and health-gated rollback — is
-[#223](https://github.com/aellington89/finance-stack/issues/223), and #224 is its
-first step.
+**All four are published.** Every `vX.Y.Z` tag pushes them to GHCR at `:X.Y.Z`
+and `:<full-sha>`, and only after the release workflow has booted the stack from
+those exact images and verified it ([#226](https://github.com/aellington89/finance-stack/issues/226)) — so the artifact a host
+pulls is the one CI proved. Details, including the tags and the one-time package
+visibility step, are in
+[Releases & Tagging](releases.md#published-images).
+
+Deploying still means running `docker compose up` from a **checkout** today: the
+compose file in this repo builds from source rather than pulling. The deployment
+bundle that pins these images on a host with no source tree ([#227](https://github.com/aellington89/finance-stack/issues/227)),
+the upgrade command with its pre-upgrade backup gate and health-gated rollback
+([#228](https://github.com/aellington89/finance-stack/issues/228)), and the runbook ([#229](https://github.com/aellington89/finance-stack/issues/229)) are the remaining steps of
+[#223](https://github.com/aellington89/finance-stack/issues/223).
 
 ## Exposure posture
 
