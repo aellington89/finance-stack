@@ -6,9 +6,14 @@ Repository layout and directory tree.
 
 ```
 finance-stack/
-├── docker-compose.yml                    # Infrastructure definition
+├── docker-compose.yml                    # Infrastructure definition (development — builds from source)
 ├── .env.example                          # Template for credentials (copy to .env)
 ├── .dockerignore                         # Excludes files from Docker build context
+├── deploy/                               # Deployment bundle — packed as finance-stack-X.Y.Z.tar.gz per release (#227)
+│   ├── compose.yml                       # Production stack: images pinned to ${APP_VERSION}, no build:, finance-app on 127.0.0.1
+│   ├── .env.example                      # Deploy-time env — the root template plus APP_VERSION and IMAGE_REGISTRY
+│   ├── finance-stack.service             # systemd unit (oneshot around `docker compose up -d`)
+│   └── README.md                         # Install + upgrade runbook; ships with the release it describes
 ├── app/                                  # Next.js 16 application (App Router)
 │   ├── Dockerfile                        # Multi-stage Docker build (deps → build → runner)
 │   ├── .dockerignore                     # Excludes node_modules, .next, etc. from build context

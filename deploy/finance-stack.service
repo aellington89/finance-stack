@@ -1,0 +1,45 @@
+# systemd unit for a Finance Stack deployment (Issue #227).
+#
+# Install:
+#   sudo cp /opt/finance-stack/finance-stack.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now finance-stack
+#
+# WHAT THIS DOES AND DOES NOT DO. Reboot persistence does not come from here —
+# it comes from `restart: unless-stopped` on the long-running services, which the
+# Docker daemon honours on its own. This unit exists so that starting and
+# stopping the stack is a deliberate, ordinary system operation
+# (`systemctl start|stop|status finance-stack`) rather than a remembered
+# incantation in the right directory, and so that a `systemctl stop` survives a
+# reboot as a stop — which is exactly what `unless-stopped` alone would not give
+# you after a `docker compose down`.
+#
+# There is deliberately no upgrade timer. Upgrades take a backup and health-gate
+# the result (Issue #228); they are not something to run unattended.
+
+[Unit]
+Description=Finance Stack
+Documentation=https://github.com/aellington89/finance-stack
+# Requires, not Wants: `docker compose` is the whole implementation, so starting
+# without the daemon is a failure rather than a degraded start.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Compose exits as soon as the containers are up; without this systemd would
+# consider the unit dead the moment ExecStart returns and report it inactive
+# while the stack is running.
+RemainAfterExit=yes
+WorkingDirectory=/opt/finance-stack
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+# `up -d` blocks until postgres is healthy and the one-shot migrate job has
+# exited 0, and a first install runs every migration and seed inside that window.
+# systemd's 90s default would kill it partway through the first boot of a new
+# deployment — the one boot where being killed partway matters most.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

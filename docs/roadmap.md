@@ -159,6 +159,7 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#227](https://github.com/aellington89/finance-stack/issues/227) Deployment bundle: production compose, systemd unit, release asset
 - [#228](https://github.com/aellington89/finance-stack/issues/228) `deploy.sh`: pre-upgrade backup gate and health-gated rollback
 - [#229](https://github.com/aellington89/finance-stack/issues/229) Deployment docs and the migration-reversibility marker
+- [#288](https://github.com/aellington89/finance-stack/issues/288) Let the deployment bundle create the first user *(new — from #227)*
 
 ### v1.1.0 — Phase 3 (DX compounding)
 - [#124](https://github.com/aellington89/finance-stack/issues/124) Importer idempotency + dead-letter handling

@@ -108,6 +108,34 @@ first tag that publishes them, open each of the four packages under
 This is expected on the first run and is not a workflow failure — nothing in the
 run log reports it, because the push itself succeeds.
 
+## Deployment bundle
+
+Every `vX.Y.Z` tag also attaches `finance-stack-X.Y.Z.tar.gz` to the Release,
+along with a `.sha256` checksum
+([Issue #227](https://github.com/aellington89/finance-stack/issues/227)). It
+unpacks to a single `finance-stack-X.Y.Z/` directory containing `compose.yml`,
+`.env.example` (with `APP_VERSION` already stamped to that release),
+`finance-stack.service`, `caddy/Caddyfile`, a `README.md` runbook, and empty
+`imports/`, `importer/parsers/` and `backups/` directories for the bind mounts.
+
+That bundle is the whole deployment — a host needs Docker and nothing else. See
+[Deployment & Exposure](deployment.md#the-deployment-bundle).
+
+Two details of how the workflow builds it are worth knowing:
+
+- **It is packed before any Docker work**, for the same reason the changelog gate
+  runs first: a packaging bug should cost nothing, and must never fail *after*
+  images have reached GHCR, which cannot be undone.
+- **`caddy/Caddyfile` is copied in at pack time** from the repo root rather than
+  committed under `deploy/`, so there is one source of truth. The consequence is
+  that `--profile edge` cannot be started from `deploy/compose.yml` inside a
+  checkout; use the repo's `docker-compose.yml` for that.
+
+Verification runs against `deploy/compose.yml`, not the dev compose — the file
+that ships is the file that gets smoke-tested. The images are tagged with their
+final registry references *before* that boot, so they are verified under the
+names they publish under, and the push still happens only afterwards.
+
 ## Release procedure
 
 The repeatable steps for cutting a new release `vX.Y.Z`. The CI changelog gate

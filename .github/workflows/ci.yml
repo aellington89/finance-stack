@@ -513,6 +513,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Issue #227. deploy/compose.yml is the file that ships to a deployment
+      # host; this asserts it still describes the same stack as the dev compose,
+      # and that the two .env.example files still document the same variables.
+      #
+      # First step of the job, before the build, because it needs no image and a
+      # divergence is cheaper to report in seconds than after four builds. The
+      # release workflow smoke-tests deploy/compose.yml on every tag, which
+      # catches functional drift; this catches a resource limit, healthcheck or
+      # depends_on condition edited in one file and not the other, on the PR that
+      # does it. See the script header for the three permitted differences.
+      - name: Deploy-bundle parity
+        run: ./scripts/check-deploy-parity.sh
+
       # `docker compose build`, not a bare `docker build`: the runner and migrate
       # stages both do `COPY --from=repo …`, which needs the `repo` entry in
       # compose's additional_contexts (those files live outside ./app). This

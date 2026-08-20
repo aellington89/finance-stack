@@ -143,6 +143,35 @@ requires the marker on the release being tagged and rejects an unrecognized valu
 anywhere, `[Unreleased]` included; `[Unreleased]` is not required to carry one.
 Full guidance on picking a value is in [docs/releases.md](docs/releases.md).
 
+### Deploy-bundle parity gate
+
+The stack is described by two compose files: [docker-compose.yml](docker-compose.yml),
+which builds from source for local development, and
+[deploy/compose.yml](deploy/compose.yml), which is packed into the release
+tarball and run on servers. This gate fails if they have diverged
+([#227](https://github.com/aellington89/finance-stack/issues/227)).
+
+**Exactly three differences are permitted**, and the gate asserts each rather
+than ignoring it:
+
+1. `build:` blocks — present only in the dev file
+2. `image:` — the deploy file carries the `${IMAGE_REGISTRY}/…:${APP_VERSION}` prefix
+3. `finance-app` ports — all interfaces in dev, `127.0.0.1` in deploy
+
+Anything else — a resource limit, healthcheck, `depends_on` condition,
+environment entry, profile or label — must match. It also compares the two
+`.env.example` variable sets, which may differ only by `APP_VERSION` and
+`IMAGE_REGISTRY`.
+
+**Fix:** make the same edit in both files, then:
+
+```sh
+./scripts/check-deploy-parity.sh
+```
+
+The diff it prints is of the rendered `docker compose config` output, so it
+points at the resolved value rather than the line you typed.
+
 ### Docs index gate
 
 Every guide in `docs/` is indexed in two hand-maintained lists — `## Guides` in
