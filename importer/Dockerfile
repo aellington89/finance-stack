@@ -33,4 +33,10 @@ COPY poll.py ./
 RUN useradd --system --uid 1001 --create-home importer
 USER importer
 
+# Published to GHCR on every vX.Y.Z tag (#226); the source label links the
+# package back to this repository.
+LABEL org.opencontainers.image.source="https://github.com/aellington89/finance-stack" \
+      org.opencontainers.image.title="finance-importer" \
+      org.opencontainers.image.description="Polling file importer for Finance Stack"
+
 CMD ["python", "poll.py"]

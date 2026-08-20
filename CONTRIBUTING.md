@@ -204,21 +204,51 @@ them gets waved through as "the usual red".
 
 ### Image scan gate
 
-Runs in the parallel `image` job: builds the production image the same way
-`release.yml` does (`docker compose build finance-app`), then scans it with
-Trivy. Fails on HIGH/CRITICAL findings **that have a fix available**.
+Runs in the parallel `image` job: builds all four service images the same way
+`release.yml` does (`docker compose build finance-app migrate importer
+pg-backup`), then scans each of them with Trivy. Fails on HIGH/CRITICAL findings
+**that have a fix available**, in any of the four.
+
+All four are scanned because all four are *published* — a `vX.Y.Z` tag pushes
+each of them to GHCR ([Issue #226](https://github.com/aellington89/finance-stack/issues/226)),
+so a base image nobody scanned is a base image a deployment host pulls. The four
+scan steps run independently of each other's result, so one red image shows you
+the other three's findings in the same run rather than across four.
 
 **Fix**, in order of preference:
 
-1. **Remove the vulnerable component** if the image doesn't need it. The runner
+1. **Re-run the job.** This is genuinely first for `finance-importer` and
+   `finance-backup`: their `python:3.14-slim` and `postgres:18.6` bases are
+   rebuilt upstream under the same tag, so an OS-package finding often clears
+   with no change in this repo at all.
+2. **Remove the vulnerable component** if the image doesn't need it. The runner
    stage deletes npm, npx, yarn and corepack for exactly this reason — the
    standalone server runs `node server.js` and never installs a package, and
    npm's vendored dependencies were contributing 1 CRITICAL and 5 HIGH findings
-   that no application-level bump could clear.
-2. **Rebuild on a patched base image** (bump `node:24-alpine` in
-   `app/Dockerfile`).
-3. **Suppress, with an expiry.** Add a dated, justified entry to
-   [`.trivyignore`](.trivyignore) — the file documents the required format.
+   that no application-level bump could clear. (The `migrate` stage keeps npm
+   deliberately — it runs `npx drizzle-kit` — so expect findings there that
+   `finance-app` does not have.)
+3. **Rebuild on a patched base image** — `node:24-alpine` in `app/Dockerfile`,
+   `python:3.14-slim` in `importer/Dockerfile`. **`postgres` in
+   `scripts/Dockerfile` is not free to move**: `pg_dump` must stay version-matched
+   to the server, so bumping it means bumping `docker-compose.yml` and the
+   `postgres:` service containers in both workflows in the same change.
+4. **Suppress, with an expiry.** Add a dated, justified entry to
+   [`.trivyignore`](.trivyignore) — the file documents the required format. Note
+   that one file backs all four scans, so an entry silences its CVE everywhere.
+   It is no longer empty: turning the gate on for the other three images required
+   seeding ten base-image and bundled-tooling findings, each with the same review
+   date. Read those before adding an eleventh — yours may already be covered.
+
+**Two files are excluded from scanning outright**, via `skip-files` on the
+`finance-migrate` and `finance-backup` steps: drizzle-kit's vendored `esbuild`
+binary and the postgres image's `gosu`. Both are stripped third-party Go binaries
+that nothing in this repo compiles, so Trivy attributes every Go stdlib advisory
+to them and no fix ever arrives; suppressing them by CVE id would re-red the job
+every few weeks without ever being actionable. Everything else in both images is
+still scanned and still blocks. Do not widen those exclusions to a directory —
+the point is that exactly two unfixable binaries are out of scope, not that
+vendored code is.
 
 Note that Trivy scans the whole image, not just `app/package.json`, so findings
 can come from the base image rather than from anything this repo declares. Check
@@ -227,11 +257,15 @@ the reported path before assuming a dependency bump will help.
 Reproduce locally (pinned, for the same supply-chain reason the actions are):
 
 ```sh
-docker compose build finance-app
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$(pwd)/.trivyignore:/.trivyignore:ro" \
-  aquasec/trivy:0.72.0 image --severity HIGH,CRITICAL --ignore-unfixed \
-  --exit-code 1 --ignorefile /.trivyignore finance-app:latest
+docker compose build finance-app migrate importer pg-backup
+
+for img in finance-app finance-migrate finance-importer finance-backup; do
+  echo "=== $img ==="
+  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$(pwd)/.trivyignore:/.trivyignore:ro" \
+    aquasec/trivy:0.72.0 image --severity HIGH,CRITICAL --ignore-unfixed \
+    --exit-code 1 --ignorefile /.trivyignore "$img:latest"
+done
 ```
 
 If `docker compose build` can't find `CHANGELOG.md` (or `init-db/`, or
@@ -346,6 +380,12 @@ arrives as its own PR rather than grouped with the compose bump. Merge them
 together: `pg_dump` refuses to dump a server newer than itself, so a
 `finance-backup` image left a major behind stops producing backups.
 
+Since [#226](https://github.com/aellington89/finance-stack/issues/226) a `docker`
+base bump changes a **published** artifact rather than only a local one, and all
+four images are gated by their own Trivy scan — so these PRs are both the usual
+way a base-image CVE gets cleared and the thing that has to be green before the
+next tag ships that base to a deployment host.
+
 ## Changelog entries (day-to-day)
 
 Every PR that ships user-visible changes should add a bullet under
@@ -381,10 +421,26 @@ and adopting migrations on an existing database — is in
 Releasing closes the `CHANGELOG.md` section, bumps the version, and pushes an
 annotated `vX.Y.Z` git tag. **Pushing that tag is the release** — it fires
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which runs the
-version/tag-consistency gate, builds the stamped image, boots the full stack and
-verifies `/api/health`, then slices the `CHANGELOG.md` section and publishes the
-GitHub Release. **There is still no registry push** — the image is built and
-verified in CI, and never pushed anywhere.
+version/tag-consistency gate, builds all four stamped images, boots the full
+stack and verifies it, **then** pushes the images to GHCR and publishes the
+GitHub Release.
+
+**The ordering is the feature** ([#226](https://github.com/aellington89/finance-stack/issues/226)):
+build → boot → verify → push. The login and push steps carry no `if:`, so a
+failed verification skips them — an image that fails its own smoke test never
+reaches the registry. Each tag publishes four packages, at `:X.Y.Z` and at the
+full 40-char commit SHA:
+
+```
+ghcr.io/aellington89/finance-app        ghcr.io/aellington89/finance-importer
+ghcr.io/aellington89/finance-migrate    ghcr.io/aellington89/finance-backup
+```
+
+The `:<sha>` tag is the same value `/api/health` reports as `build.gitSha`, so a
+running container traces back to the health response that cleared it. The
+packages are public — pulls on a deployment host need no authentication. Full
+detail, including the one-time visibility step on first publish, is in
+[docs/releases.md](docs/releases.md#published-images).
 
 **Brief sequence** (full steps and tagging rules are in [docs/releases.md](docs/releases.md)):
 

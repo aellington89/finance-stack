@@ -288,7 +288,18 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy   # Only needs a reachable DB, not the app
+        condition: service_healthy
+      # ...and on migrate, which since #225 is what creates the databases (#226).
+      # Waiting on postgres alone was a fresh-install bug with a 24-hour blast
+      # radius: pg-backup started ~5ms after migrate, ran its first dump about
+      # seven seconds before `Finances` and `metabase` existed, failed with
+      # "database does not exist", and then slept BACKUP_INTERVAL_SECONDS — a
+      # full day by default — before trying again. A brand-new install therefore
+      # had no backup and a permanently `unhealthy` pg-backup for its first day,
+      # visible only on an empty volume, which is why it survived #224/#225.
+      # This is the same gate finance-app and importer already wait on.
+      migrate:
+        condition: service_completed_successfully
     environment:
       PGHOST: postgres
       PGPORT: 5432

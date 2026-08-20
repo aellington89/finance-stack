@@ -53,6 +53,13 @@ COPY --from=repo init-db/roles /roles
 COPY --from=repo init-db/seeds /seeds
 COPY --from=repo scripts/verify-db-roles.sh /scripts/verify-db-roles.sh
 
+# Published to GHCR on every vX.Y.Z tag (#226). The source label is what links
+# the package back to this repository — without it the package page shows no
+# repo, and "Inherit access from repository" has nothing to key off.
+LABEL org.opencontainers.image.source="https://github.com/aellington89/finance-stack" \
+      org.opencontainers.image.title="finance-migrate" \
+      org.opencontainers.image.description="Drizzle migration, database/role creation and seed runner for Finance Stack"
+
 ENTRYPOINT ["bash", "/app/scripts/migrate-and-seed.sh"]
 
 # --- Stage 3: Production runner ---
@@ -91,6 +98,15 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Supplied via the `repo` additional_contexts entry in docker-compose.yml — the
 # same context the migrate stage above takes its roles and seeds from.
 COPY --from=repo --chown=nextjs:nodejs CHANGELOG.md ./CHANGELOG.md
+
+# Published to GHCR on every vX.Y.Z tag (#226). GIT_SHA is re-declared because
+# ARGs are per-stage — the one at the top of the `build` stage is not in scope
+# here — and this sits at the end of the stage so it invalidates no cached layer.
+ARG GIT_SHA=dev
+LABEL org.opencontainers.image.source="https://github.com/aellington89/finance-stack" \
+      org.opencontainers.image.title="finance-app" \
+      org.opencontainers.image.description="Next.js finance management application" \
+      org.opencontainers.image.revision="$GIT_SHA"
 
 USER nextjs
 

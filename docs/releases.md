@@ -47,9 +47,9 @@ the published Release without any extra step.
 
 **Pushing an annotated tag triggers the automated release workflow**
 (`.github/workflows/release.yml`, [Issue #175](https://github.com/aellington89/finance-stack/issues/175)),
-which runs the version/tag-consistency gate, builds the stamped Docker image,
-verifies `/api/health`, and publishes the Release — procedure steps 4–5 are
-handled by CI.
+which runs the version/tag-consistency gate, builds the four stamped Docker
+images, boots the stack and verifies it, pushes the images to GHCR, and publishes
+the Release — procedure steps 4–5 are handled by CI.
 
 To manually create or refresh a release body (local fallback):
 
@@ -58,6 +58,55 @@ gh release create v0.1.4 --title v0.1.4 --notes-file <changelog-section.md>
 # or, to update an existing release:
 gh release edit v0.1.4 --notes-file <changelog-section.md>
 ```
+
+## Published images
+
+Every `vX.Y.Z` tag publishes four images to the GitHub Container Registry
+([Issue #226](https://github.com/aellington89/finance-stack/issues/226)):
+
+| Package | Contains |
+|---|---|
+| `ghcr.io/aellington89/finance-app` | the Next.js standalone server |
+| `ghcr.io/aellington89/finance-migrate` | drizzle-kit, `/roles`, `/seeds`, `verify-db-roles.sh` |
+| `ghcr.io/aellington89/finance-importer` | `poll.py` and its pinned dependencies |
+| `ghcr.io/aellington89/finance-backup` | `backup.sh`, `restore.sh`, the balance-rebuild SQL |
+
+Each is pushed at **two tags**: `:X.Y.Z`, and `:<full-sha>` — the 40-character
+commit SHA, which is the same value `/api/health` reports as `build.gitSha`. A
+running container therefore traces back to the exact health response that cleared
+it, and a deploy can pin either a version or a commit.
+
+```sh
+docker pull ghcr.io/aellington89/finance-app:0.4.0
+docker pull ghcr.io/aellington89/finance-app:8f3c1d2...   # same image, SHA-tagged
+```
+
+**The publish happens after verification, never before.** The workflow builds all
+four images, boots the full stack from them, asserts `/api/health` reports the
+expected version and SHA, asserts the container healthchecks agree, and only then
+logs in to GHCR and pushes. The push steps carry no `if:` condition, so any
+earlier failure skips them: an image that fails its own smoke test cannot reach
+the registry, and no GitHub Release is created either.
+
+Images are built for **`linux/amd64` only**. Verifying an image means running it,
+so an arm64 publish (a Pi or a NAS) needs its own verified build — either a buildx
+multi-platform build whose arm64 half boots on an arm64 runner, or a second
+self-hosted runner. Adding `--platform linux/amd64,linux/arm64` alone would
+publish an arm64 image nothing ever started.
+
+### One-time setup on first publish
+
+GHCR creates new packages **private**, even from a public repository. After the
+first tag that publishes them, open each of the four packages under
+[the account's Packages tab](https://github.com/aellington89?tab=packages) and:
+
+1. **Package settings → Change visibility → Public.** Until this is done,
+   `docker pull` on a deployment host asks for credentials.
+2. **Enable "Inherit access from repository"**, so repo collaborators keep write
+   access without a separate grant.
+
+This is expected on the first run and is not a workflow failure — nothing in the
+run log reports it, because the push itself succeeds.
 
 ## Release procedure
 
@@ -139,11 +188,13 @@ ver=0.1.4
    git push origin "v$ver"
    ```
 
-4. **Slice the release body** and **publish the Release** — handled automatically
-   by `.github/workflows/release.yml` when the tag is pushed (step 3). The
-   workflow slices the `CHANGELOG.md` section, verifies the stamped Docker image,
-   and calls `gh release create`. Monitor the run at
-   `https://github.com/aellington89/finance-stack/actions`.
+4. **Publish the images and the Release** — handled automatically by
+   `.github/workflows/release.yml` when the tag is pushed (step 3). The workflow
+   builds the four images, boots and verifies the stack, pushes the images to
+   GHCR (see [Published images](#published-images)), slices the `CHANGELOG.md`
+   section, and calls `gh release create`. Monitor the run at
+   `https://github.com/aellington89/finance-stack/actions`; the pushed image
+   digests are recorded in the run summary.
 
    If you need to do this manually (local fallback):
 
