@@ -30,11 +30,94 @@ pulls is the one CI proved. Details, including the tags and the one-time package
 visibility step, are in
 [Releases & Tagging](releases.md#published-images).
 
-Deploying still means running `docker compose up` from a **checkout** today: the
-compose file in this repo builds from source rather than pulling. The deployment
-bundle that pins these images on a host with no source tree ([#227](https://github.com/aellington89/finance-stack/issues/227)),
-the upgrade command with its pre-upgrade backup gate and health-gated rollback
-([#228](https://github.com/aellington89/finance-stack/issues/228)), and the runbook ([#229](https://github.com/aellington89/finance-stack/issues/229)) are the remaining steps of
+## The deployment bundle
+
+A server does not get a checkout. It gets `finance-stack-X.Y.Z.tar.gz`, attached
+to every GitHub Release
+([#227](https://github.com/aellington89/finance-stack/issues/227)), which expands
+to `/opt/finance-stack/` and **is** the deployment:
+
+```
+compose.yml              the stack, every image pinned to ${APP_VERSION}
+.env.example             copy to .env, chmod 600, fill in
+finance-stack.service    systemd unit
+caddy/Caddyfile          reverse-proxy config (--profile edge)
+README.md                install + upgrade runbook
+imports/  importer/parsers/  backups/      data, bind-mounted
+```
+
+Requirements on the host are Docker Engine and the Compose plugin. Nothing else —
+no source tree, no Node, no build toolchain. Install and upgrade steps live in the
+bundle's own `README.md`, so they travel with the release they describe.
+
+`deploy/compose.yml` is a mirror of the repo's `docker-compose.yml` with exactly
+two differences:
+
+1. **Images are pulled, not built** — `${IMAGE_REGISTRY}/finance-<svc>:${APP_VERSION}`
+   on the four published images, and no `build:` anywhere. One tag moves the whole
+   stack, so a `finance-app` from one release can never run against a
+   `finance-migrate` from another.
+2. **`finance-app` binds `127.0.0.1:3001`**, not all interfaces — see below.
+
+Everything else is identical, and that is enforced rather than hoped for. Two
+compose files describing one stack drift, so:
+
+- **`release.yml` boots `deploy/compose.yml`** for its `/api/health` verification,
+  against locally-built images tagged with the exact references they are about to
+  be published under. The file that ships is the file that gets smoke-tested, and
+  an image that fails still reaches no registry.
+- **`scripts/check-deploy-parity.sh` runs on every PR** (the `image` job in
+  `ci.yml`). It renders both files with `docker compose config`, asserts and then
+  strips the two permitted differences, and fails on anything else — a resource
+  limit, healthcheck, `depends_on` condition or environment entry edited in one
+  file and not the other. It compares the two `.env.example` variable sets too.
+
+Editing either compose file therefore means editing both. Run the gate locally
+with `./scripts/check-deploy-parity.sh`.
+
+`docker compose up` from a checkout is unaffected and still builds from source.
+
+### Why the deployed app binds loopback
+
+The repo's `docker-compose.yml` publishes `3001` on all interfaces, because that
+is how you reach the app from another machine on a trusted network. The bundle
+does not, on the reasoning that a deployment host is *reachable* — so the app is
+not exposed directly, and the only listener that can be is a proxy that
+terminates TLS. It is the same [#130](https://github.com/aellington89/finance-stack/issues/130)
+pattern already applied to `postgres` and `metabase`, extended to the app tier.
+
+Two ways in, then: an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 <host>`) for
+occasional access, or the `edge` profile below for anything long-lived.
+
+### systemd
+
+`finance-stack.service` is `Type=oneshot` + `RemainAfterExit=yes` around
+`docker compose up -d` / `down`, with `TimeoutStartSec=600` because a first
+install runs every migration and seed inside `up -d`.
+
+Surviving a reboot does **not** depend on it — that comes from
+`restart: unless-stopped`, which the Docker daemon honours on its own. The unit
+exists so that starting and stopping the stack is an ordinary system operation,
+and so a deliberate `systemctl stop` stays stopped across a reboot. There is no
+upgrade timer; upgrades take a backup and health-gate the result
+([#228](https://github.com/aellington89/finance-stack/issues/228)), which is not
+something to run unattended.
+
+### One step the bundle cannot do
+
+**Creating the first user.** The CLI needs the application source and Node: the
+`finance-app` image ships the standalone server with npm removed, and
+`finance-migrate` carries the migration scripts but not `app/lib/`. Run it from a
+machine that has a checkout, over an SSH tunnel to the host's loopback-bound
+Postgres — the procedure is in the bundle README and in
+[Authentication](auth.md). Tracked as
+[#288](https://github.com/aellington89/finance-stack/issues/288), which proposes
+carrying `app/lib/` in the `finance-migrate` image so the CLI runs there.
+
+The upgrade command with its pre-upgrade backup gate and health-gated rollback
+([#228](https://github.com/aellington89/finance-stack/issues/228)) and the full
+runbook ([#229](https://github.com/aellington89/finance-stack/issues/229)) are the
+remaining steps of
 [#223](https://github.com/aellington89/finance-stack/issues/223).
 
 ## Exposure posture
@@ -103,13 +186,15 @@ its header comment.
 Certificates live in the `caddy_data` volume. Losing it just means re-issuing on
 next start.
 
-Starting the `edge` profile does **not** change how you reach the app today:
-`finance-app` keeps its own `3001` binding. On a genuinely internet-facing host,
-rebind it to `127.0.0.1:3001:3001` in `docker-compose.yml` so the proxy is the
-only public listener — the same pattern already applied to Postgres and Metabase
-in #130. Auth.js runs with `trustHost: true`, so it takes the hostname from the
-request; that is what lets it work behind any proxy name, and it is also why
-untrusted traffic must not reach `3001` directly once the proxy is the front door.
+Starting the `edge` profile does **not** change how you reach the app from a
+checkout: the repo's `docker-compose.yml` keeps its own all-interfaces `3001`
+binding, and on a genuinely internet-facing host you would rebind it to
+`127.0.0.1:3001:3001` so the proxy is the only public listener. **A deployment
+from the bundle already is bound that way** — `deploy/compose.yml` ships it, so
+there is nothing to remember. Auth.js runs with `trustHost: true`, so it takes
+the hostname from the request; that is what lets it work behind any proxy name,
+and it is also why untrusted traffic must not reach `3001` directly once the
+proxy is the front door.
 
 ### Using a different proxy
 

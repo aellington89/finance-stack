@@ -23,6 +23,9 @@ on:
       # which is why it was left out; #224 made it a real script that picks
       # which images to build, so it is worth linting like the rest.
       - 'scripts/build.sh'
+      # Same reasoning again (#227): this job lints it, so an edit to it has to
+      # be able to trigger the job that lints it.
+      - 'scripts/check-deploy-parity.sh'
       - 'app/scripts/*.sh'
       # The image these scripts now ship in (#224). This job exercises them from
       # the checkout rather than the image, so it does not prove the image is
@@ -72,7 +75,7 @@ jobs:
       - name: Shellcheck scripts/
         run: |
           shellcheck scripts/backup.sh scripts/restore.sh scripts/verify-db-roles.sh \
-                     scripts/build.sh \
+                     scripts/build.sh scripts/check-deploy-parity.sh \
                      app/scripts/migrate-and-seed.sh app/scripts/preflight-superuser.sh
 
       - name: Install PostgreSQL 18 client

@@ -65,6 +65,70 @@ jobs:
           # ./app instead of the repo root.
           echo "REPO_CONTEXT=${{ github.workspace }}" >> "$GITHUB_ENV"
 
+          # The GHCR namespace. Lower-cased because GHCR rejects uppercase path
+          # segments; derived rather than hardcoded so a fork or an owner rename
+          # still works. Hoisted out of the push step in #227, because the verify
+          # step now needs it too — deploy/compose.yml is booted with these exact
+          # references, so the images are verified under the names they publish
+          # under rather than under local :latest tags.
+          NS="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          echo "NS=$NS"                >> "$GITHUB_ENV"
+
+          # Consumed by deploy/compose.yml. Exported here rather than set on the
+          # step so every later compose invocation picks them up identically.
+          echo "IMAGE_REGISTRY=$NS"    >> "$GITHUB_ENV"
+          echo "APP_VERSION=$VER"      >> "$GITHUB_ENV"
+
+      # Pack the deployment bundle (#227) — the tarball attached to the Release.
+      #
+      # Deliberately BEFORE any Docker work, for the same reason the changelog
+      # gate is: a packaging bug should cost nothing, and must never fail after
+      # images have already been pushed to GHCR, which is not undoable.
+      #
+      # Everything in deploy/ ships as-is, so deploy.sh (#228) joins the bundle
+      # by existing — this step needs no edit when it lands. Two things are
+      # added that are not in the checkout:
+      #
+      #   caddy/Caddyfile   copied from the repo root rather than committed under
+      #                     deploy/, so there is one source of truth and no second
+      #                     copy to drift. This is why `--profile edge` cannot be
+      #                     started from deploy/compose.yml inside a checkout.
+      #   the data dirs     imports/, importer/parsers/ and backups/ are bind
+      #                     mounts. Shipping them empty means the documented first
+      #                     start works; without them Docker creates them itself,
+      #                     owned by root. They cannot simply be committed —
+      #                     .gitignore excludes `imports/` and `importer/parsers/`
+      #                     at any depth.
+      - name: Pack deployment bundle
+        working-directory: .
+        run: |
+          BUNDLE="finance-stack-$VER"
+          STAGE="$(mktemp -d)"
+
+          cp -R deploy "$STAGE/$BUNDLE"
+
+          mkdir -p "$STAGE/$BUNDLE/caddy"
+          cp caddy/Caddyfile "$STAGE/$BUNDLE/caddy/Caddyfile"
+          mkdir -p "$STAGE/$BUNDLE/imports" \
+                   "$STAGE/$BUNDLE/importer/parsers" \
+                   "$STAGE/$BUNDLE/backups"
+
+          # Stamp the real version in, so the bundle is self-describing and a
+          # first install needs no edit to APP_VERSION at all.
+          sed -i "s/^APP_VERSION=.*/APP_VERSION=$VER/" "$STAGE/$BUNDLE/.env.example"
+          grep -q "^APP_VERSION=$VER$" "$STAGE/$BUNDLE/.env.example" \
+            || { echo "::error::APP_VERSION was not stamped into the bundle .env.example"; exit 1; }
+
+          # -C so the archive has exactly one top-level directory and unpacking
+          # never scatters files into the operator's cwd.
+          tar -czf "$BUNDLE.tar.gz" -C "$STAGE" "$BUNDLE"
+          sha256sum "$BUNDLE.tar.gz" > "$BUNDLE.tar.gz.sha256"
+          rm -rf "$STAGE"
+
+          echo "--- bundle contents ---"
+          tar -tzf "$BUNDLE.tar.gz"
+          cat "$BUNDLE.tar.gz.sha256"
+
       # Build via docker compose so the `repo` additional_contexts entry and the
       # GIT_SHA/BUILD_TIME build-args are wired exactly as they are in local builds
       # (matches scripts/build.sh and docker-compose.yml finance-app.build.args).
@@ -82,14 +146,48 @@ jobs:
         working-directory: .
         run: docker compose build finance-app migrate importer pg-backup
 
+      # Apply the registry tags now, before anything is verified (#227). This is
+      # what lets the verify step below boot deploy/compose.yml — which pins
+      # ${IMAGE_REGISTRY}/finance-<svc>:${APP_VERSION} — against the images that
+      # were just built rather than against anything in the registry.
+      #
+      # Tagging is local and free, and no push happens here, so this does not
+      # weaken "an image that fails its own smoke test never reaches the
+      # registry": the login and the pushes still sit after the verification.
+      # What it buys is that the images are verified under the exact references
+      # they will be published under, and that a deployment host's compose file
+      # is exercised as written.
+      #
+      # Compose's default pull policy is `missing`, so these local tags win and
+      # nothing is fetched from GHCR for the four service images.
+      - name: Tag images for the registry
+        working-directory: .
+        run: |
+          for IMG in finance-app finance-migrate finance-importer finance-backup; do
+            docker tag "$IMG:latest" "$NS/$IMG:$VER"
+            echo "tagged $NS/$IMG:$VER"
+          done
+
       # Boot the full stack (postgres → migrate → finance-app) and assert /api/health
       # reports the expected version + SHA, then that Docker itself reports the container
       # healthy. We poll /api/health directly (rather than the container's own wget
       # healthcheck) so the assertion doesn't depend on the runner's wget flavour and so
       # the response body + service logs are captured on failure; the container verdict is
       # then checked separately, since that is the signal #191 was about.
+      #
+      # THIS RUNS AGAINST deploy/compose.yml, NOT THE DEV COMPOSE (#227). The file
+      # that ships to a deployment host is the file that gets smoke-tested —
+      # otherwise the two drift and the one nobody boots is the one operators
+      # actually run. `working-directory: deploy` makes it the compose project
+      # directory, so ./imports, ./importer/parsers and ./backups resolve inside
+      # the bundle exactly as they do on a server.
+      #
+      # ci.yml still builds the dev compose on every PR, and the parity gate
+      # (scripts/check-deploy-parity.sh) fails any PR where the two files
+      # diverge beyond the three permitted differences — which is what keeps
+      # this switch from leaving the dev compose unguarded.
       - name: Boot stack and verify /api/health
-        working-directory: .
+        working-directory: deploy
         # POSTGRES_DB is consumed by the postgres image itself at initdb. The Metabase
         # role vars go to the migrate job, which since #225 creates every database this
         # stack uses — MB_DB_PASS is what tells it to provision the metadata role at all,
@@ -103,6 +201,10 @@ jobs:
         # no longer inspects seed rows, so the smoke test can verify what a first-time
         # installer actually gets. Code↔seed agreement is gated separately, on every push,
         # by `npm run check:seed-references` (#155).
+        #
+        # IMAGE_REGISTRY and APP_VERSION are not listed here: they come from the
+        # stamp step via $GITHUB_ENV, and they are what pin deploy/compose.yml to
+        # the images tagged in the previous step.
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: changeme
@@ -121,16 +223,16 @@ jobs:
         run: |
           docker compose up -d
 
-          echo "Polling http://localhost:3001/api/health for a 200…"
+          echo "Polling http://127.0.0.1:3001/api/health for a 200…"
           TIMEOUT=180
           ELAPSED=0
           # curl -fsS: non-zero exit on any non-2xx (e.g. the 503 the route returns when
           # the DB is unreachable), so the loop keeps waiting until a real 200.
-          until HEALTH="$(curl -fsS http://localhost:3001/api/health 2>/dev/null)"; do
+          until HEALTH="$(curl -fsS http://127.0.0.1:3001/api/health 2>/dev/null)"; do
             if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
               echo "::error::/api/health did not return 200 within ${TIMEOUT}s"
               echo "--- last /api/health body (with status) ---"
-              curl -s -w '\nHTTP %{http_code}\n' http://localhost:3001/api/health || true
+              curl -s -w '\nHTTP %{http_code}\n' http://127.0.0.1:3001/api/health || true
               echo "--- migrate logs ---";     docker compose logs --no-color migrate     || true
               echo "--- finance-app logs ---";  docker compose logs --no-color finance-app || true
               exit 1
@@ -154,6 +256,32 @@ jobs:
           fi
 
           echo "✓ /api/health: version=$GOT_VER  gitSha=${GOT_SHA:0:12}…"
+
+          # The deploy file's second deliberate divergence (#227): finance-app is
+          # published on loopback, not on all interfaces, so a TLS proxy can be
+          # the only public listener. The parity gate asserts this statically in
+          # the YAML; this asserts it about a container that is actually running,
+          # which is the acceptance criterion as written.
+          echo "Checking the finance-app host binding…"
+          APP_BINDING="$(docker port finance-app 3001 | tr -d '[:space:]')"
+          if [ "$APP_BINDING" != "127.0.0.1:3001" ]; then
+            echo "::error::finance-app is published on '$APP_BINDING', expected '127.0.0.1:3001'"
+            exit 1
+          fi
+
+          # …and the other half of it: refused off-host. The runner's own
+          # routable address stands in for "the LAN". --connect-timeout bounds a
+          # DROP as well as the REJECT this should be.
+          LAN_IP="$(hostname -I | awk '{print $1}')"
+          if [ -n "$LAN_IP" ]; then
+            if curl -fsS --connect-timeout 5 "http://${LAN_IP}:3001/api/health" >/dev/null 2>&1; then
+              echo "::error::/api/health answered on ${LAN_IP}:3001 — finance-app is reachable off-loopback"
+              exit 1
+            fi
+            echo "✓ finance-app is bound to 127.0.0.1:3001 and refused on ${LAN_IP}"
+          else
+            echo "✓ finance-app is bound to 127.0.0.1:3001 (no routable address to test the negative)"
+          fi
 
           # Docker's own verdict on the container, which is the thing #191 fixed: on a
           # fresh, empty Finances the bundled endpoint returned 503 for seed drift and
@@ -187,7 +315,7 @@ jobs:
           # "/" and "/login", which sit outside the proxy's matcher.
           echo "Checking security headers…"
           for PATH_UNDER_TEST in / /login; do
-            HEADERS="$(curl -sSI "http://localhost:3001${PATH_UNDER_TEST}")"
+            HEADERS="$(curl -sSI "http://127.0.0.1:3001${PATH_UNDER_TEST}")"
 
             for HEADER in \
               "Content-Security-Policy" \
@@ -280,7 +408,7 @@ jobs:
           echo "✓ finance-importer is running"
 
       - name: Tear down stack
-        working-directory: .
+        working-directory: deploy
         if: always()
         run: docker compose down -v
 
@@ -321,12 +449,10 @@ jobs:
       # for credentials. That is expected on run #1 and is not a workflow bug —
       # see docs/releases.md.
       - name: Push verified images to GHCR
-        env:
-          REPO_OWNER: ${{ github.repository_owner }}
         run: |
-          # Lower-cased because GHCR rejects uppercase path segments; derived
-          # rather than hardcoded so a fork or an owner rename still works.
-          NS="ghcr.io/$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')"
+          # $NS comes from the stamp step, and $NS/$IMG:$VER was tagged before
+          # verification (#227) — these are the exact references the stack was
+          # just booted from, so only the :<sha> alias is added here.
 
           {
             echo "## Published images"
@@ -341,8 +467,8 @@ jobs:
             # /api/health reports as build.gitSha, which is what makes the :<sha>
             # tag mean "the image that answered that health check". Do not
             # shorten it here; scripts/build.sh uses --short for local builds only.
+            docker tag "$NS/$IMG:$VER" "$NS/$IMG:$GIT_SHA"
             for TAG in "$VER" "$GIT_SHA"; do
-              docker tag "$IMG:latest" "$NS/$IMG:$TAG"
               docker push "$NS/$IMG:$TAG"
             done
 
@@ -379,7 +505,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # The bundle and its checksum are attached as positional asset
+          # arguments (#227) — packed at the top of this job, so reaching here
+          # means they exist and every gate above passed.
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md \
-            --verify-tag
+            --verify-tag \
+            "finance-stack-$VER.tar.gz" \
+            "finance-stack-$VER.tar.gz.sha256"

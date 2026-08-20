@@ -1,0 +1,453 @@
+# Production deployment definition for the finance stack (Issue #227).
+#
+# This is the compose file that SHIPS. It is packed into
+# finance-stack-X.Y.Z.tar.gz, attached to every GitHub Release, and expands to
+# /opt/finance-stack/ on the server — which is the entire deployment. No source
+# tree, no Node, no build toolchain.
+#
+# It is a mirror of the repo-root docker-compose.yml with exactly two
+# differences, and the parity gate (scripts/check-deploy-parity.sh, run on every
+# PR) fails if a third one appears:
+#
+#   1. Images are pulled, not built: ${IMAGE_REGISTRY}/finance-<svc>:${APP_VERSION}
+#      on the four images this repo publishes, and no build: blocks anywhere.
+#      postgres, metabase and caddy keep their literal third-party tags.
+#   2. finance-app binds 127.0.0.1:3001 rather than all interfaces — the #130
+#      pattern postgres and metabase already follow, so a TLS-terminating proxy
+#      can front it without reworking the deploy. See docs/deployment.md.
+#
+# Everything else — service names, healthchecks, resource limits, logging,
+# depends_on conditions, profiles, labels, volumes — is identical. Only data is
+# mounted: ./imports, ./backups, ./importer/parsers. Those three must exist
+# before the first start; see README.md in this directory.
+#
+# EDITING THIS FILE: make the same edit in the repo-root docker-compose.yml, or
+# CI rejects the PR. That is deliberate — two files describing one stack drift
+# otherwise.
+
+name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
+
+# Shared logging config — keeps logs from filling the disk (30 MB max per service).
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # Primary PostgreSQL database that stores all financial data.
+  postgres:
+    image: postgres:18.6
+    container_name: postgres
+    restart: unless-stopped              # Auto-restart on crash or Docker daemon restart
+    # No MB_DB_* here since #225: every database this stack uses, the Metabase
+    # metadata role included, is created by the migrate job, which already
+    # carries those variables. This service now only needs the credentials the
+    # image itself consumes at initdb.
+    environment:                         # All credentials sourced from .env — see .env.example for the template
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}           # The maintenance database initdb creates; Finances and Finances_Test come from migrate
+    ports:
+      # 5433 avoids conflicts with a local Postgres on the default port. Bound to
+      # loopback (#130): reachable from this host only, refused on the LAN. Local
+      # clients (psql, DBeaver, `npm run dev`) keep using localhost:5433; the
+      # services reach the DB over appnet, which is unaffected by this.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql  # PG18 moved PGDATA to /var/lib/postgresql/18/docker; mount the parent
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:                 # Other services wait on this check before starting
+      # -h 127.0.0.1 checks TCP, not the unix socket, and that is load-bearing
+      # (#225): while initdb runs, the entrypoint starts a temporary server with
+      # listen_addresses='' — reachable on the socket, not on the network. A
+      # socket-based check can therefore report healthy before the real server
+      # accepts connections, releasing migrate to fail on a refused one. Since
+      # #225 that first connection carries the whole first-install path, because
+      # migrate is what creates the databases.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+    labels:
+      com.finance-stack.component: "database"
+      com.finance-stack.description: "Primary PostgreSQL database"
+
+  # One-shot job: applies pending Drizzle migrations to Finances and Finances_Test,
+  # then seeds lookup tables (and Finances_Test mock data), then exits. Idempotent.
+  # finance-app and importer wait on it via service_completed_successfully.
+  migrate:
+    image: ${IMAGE_REGISTRY}/finance-migrate:${APP_VERSION}
+    container_name: finance-migrate
+    restart: "no"                        # One-shot job — must not restart after exiting
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}          # Superuser: this job applies DDL and creates roles
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      FINANCE_APP_DB: ${FINANCE_APP_DB:-Finances}
+      # Passwords for the least-privilege service roles this job creates (#130).
+      # Deliberately no defaults — migrate-and-seed.sh aborts if any is empty
+      # rather than creating a login role with a blank password.
+      FINANCE_APP_DB_PASSWORD: ${FINANCE_APP_DB_PASSWORD}
+      FINANCE_IMPORTER_DB_PASSWORD: ${FINANCE_IMPORTER_DB_PASSWORD}
+      FINANCE_BI_DB_PASSWORD: ${FINANCE_BI_DB_PASSWORD}
+      # Metabase's metadata role (#239): this job re-asserts its attributes on
+      # every run, which is what reaches an existing volume.
+      MB_DB_USER: ${MB_DB_USER}
+      MB_DB_DBNAME: ${MB_DB_DBNAME}
+      # Since #189 this job also syncs the metadata role's password from here,
+      # which is what makes MB_DB_PASS rotatable from .env, and since #225 it
+      # creates the role and its database too — an empty value is what tells step
+      # 0 to skip Metabase entirely. Required once the metadata database exists;
+      # migrate-and-seed.sh guards that inside the convergence branch rather than
+      # globally, so a stack that never provisioned Metabase is unaffected. It
+      # doubles as the credential the on-demand
+      # scripts/verify-db-roles.sh needs to *connect* as the role rather than
+      # only read the catalog back — the half of that check which proves
+      # Metabase can still migrate its own database.
+      MB_DB_PASS: ${MB_DB_PASS}
+    # No volumes: /seeds, /roles and /scripts/verify-db-roles.sh are baked into
+    # the image at those exact paths (#224). To change them, publish a new
+    # version — there is no source tree here to edit.
+    networks:
+      - appnet
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    labels:
+      com.finance-stack.component: "migrate"
+      com.finance-stack.description: "One-shot Drizzle migration + seed runner"
+
+  # One-shot job: runs update-account-balance-history.sql after postgres is healthy,
+  # then exits. Rebuilds the account_balance_history table with fresh cumulative balances.
+  # Behind the "init" profile — only runs when explicitly requested:
+  #   docker compose --profile init run --rm init-script
+  init-script:
+    image: ${IMAGE_REGISTRY}/finance-backup:${APP_VERSION}  # Same image as pg-backup — carries the SQL this runs (#224)
+    profiles: ["init"]                   # Not started by default; run with --profile init
+    restart: "no"                        # One-shot job — must not restart after exiting
+    depends_on:
+      postgres:
+        condition: service_healthy  # Waits for postgres to pass its healthcheck before running
+    networks:
+      - appnet
+    environment:                         # Credentials via env vars; PGHOST/PGUSER/PGDATABASE are native psql vars
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGDATABASE: ${INIT_SCRIPT_DB:-Finances}
+    # No volumes: update-account-balance-history.sql is baked into
+    # finance-backup at /scripts (#224).
+    entrypoint: >
+      bash -c "
+      set -euo pipefail;
+      echo 'Waiting for $${PGDATABASE} database...';
+      until psql -c 'SELECT 1' > /dev/null 2>&1; do
+        echo 'Database not ready, retrying in 2s...';
+        sleep 2;
+      done;
+      echo 'Running update-account-balance-history.sql...';
+      psql -f /scripts/update-account-balance-history.sql;
+      echo 'Done.';
+      "
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    labels:
+      com.finance-stack.component: "init"
+      com.finance-stack.description: "One-shot balance history rebuild"
+
+  # Next.js 16 application — custom finance management UI.
+  finance-app:
+    image: ${IMAGE_REGISTRY}/finance-app:${APP_VERSION}
+    container_name: finance-app
+    restart: unless-stopped
+    ports:
+      # Loopback only, and this is the one deliberate divergence from the repo's
+      # docker-compose.yml (#227). The dev file publishes on all interfaces
+      # because that is how you reach the app from another machine on a trusted
+      # network; a deployment host is assumed to be reachable, so the app is not
+      # exposed directly. Reach it over an SSH tunnel, or put a TLS-terminating
+      # proxy in front — the caddy service below does exactly that, and it can
+      # only do so safely because this binding keeps :3001 off the LAN.
+      # Same #130 pattern as postgres and metabase. See docs/deployment.md.
+      - "127.0.0.1:3001:3001"
+    environment:
+      # Connects as finance_app, not the superuser (#130): full DML on the core
+      # tables, SELECT-only on users, and no DDL. See docs/database.md.
+      DATABASE_URL: postgresql://finance_app:${FINANCE_APP_DB_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+      AUTH_SECRET: ${AUTH_SECRET}       # Signs/encrypts Auth.js session JWTs — see .env.example
+      # Structured-log verbosity (#129): debug|info|warn|error. Records are one
+      # line of JSON each, captured by the json-file driver below and readable
+      # with `docker compose logs finance-app | jq`. See docs/observability.md.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - appnet
+    logging: *default-logging
+    # Targets the liveness probe deliberately (#191). /api/health is one query and
+    # the build stamp; seed-row drift lives at /api/health/seed-data and is NOT
+    # checked here, because drift is a data problem a restart cannot fix — and a
+    # fresh Finances, whose transaction_categories are user-created, would otherwise
+    # report unhealthy from first boot while serving perfectly (#178).
+    # 127.0.0.1, not localhost: /etc/hosts maps localhost to both 127.0.0.1 and ::1,
+    # BusyBox wget tries the IPv6 address first, and the Next standalone server binds
+    # HOSTNAME=0.0.0.0 — IPv4 only. The probe therefore failed with "Connection
+    # refused" on every run and finance-app was permanently unhealthy, whatever the
+    # route actually answered.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://127.0.0.1:3001/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    labels:
+      com.finance-stack.component: "app"
+      com.finance-stack.description: "Next.js finance application"
+
+  # Importer — polls subdirectories under imports/ every 60 seconds, routes
+  # each file to a matching parser in importer/parsers/, and inserts transaction rows.
+  importer:
+    image: ${IMAGE_REGISTRY}/finance-importer:${APP_VERSION}  # poll.py + pinned deps baked in (#224, #132)
+    container_name: importer
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # Connects as finance_importer (#130): append-only on transactions plus
+      # SELECT on the lookup tables it resolves FKs against. It cannot UPDATE or
+      # DELETE anything, so a bad parser can only ever add rows.
+      DATABASE_URL: postgresql://finance_importer:${FINANCE_IMPORTER_DB_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
+      POLL_INTERVAL: 60
+    volumes:
+      - ./imports:/input                      # Host drop folder — each subdirectory is an import type
+      # Parsers only. They are user-specific, so they stay a mount while poll.py
+      # is baked into the image (#224). Compose creates this directory if it does
+      # not exist; poll.py logs a warning per unmatched import type rather than
+      # failing, so a deployment with no parsers yet still starts.
+      - ./importer/parsers:/app/parsers:ro
+    networks:
+      - appnet
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    labels:
+      com.finance-stack.component: "importer"
+      com.finance-stack.description: "File importer service"
+
+  # Scheduled logical backups. Runs pg_dump (custom format) of each database in
+  # BACKUP_DBS to ./backups/ on a loop, pruning dumps older than the retention
+  # window. Built FROM postgres (see scripts/Dockerfile) so pg_dump stays
+  # version-matched to the `postgres` service above — bump the two together.
+  # Restore a dump with /scripts/restore.sh. See docs/backups.md.
+  pg-backup:
+    image: ${IMAGE_REGISTRY}/finance-backup:${APP_VERSION}  # backup.sh + restore.sh baked in at /scripts (#224)
+    container_name: pg-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # ...and on migrate, which since #225 is what creates the databases (#226).
+      # Waiting on postgres alone was a fresh-install bug with a 24-hour blast
+      # radius: pg-backup started ~5ms after migrate, ran its first dump about
+      # seven seconds before `Finances` and `metabase` existed, failed with
+      # "database does not exist", and then slept BACKUP_INTERVAL_SECONDS — a
+      # full day by default — before trying again. A brand-new install therefore
+      # had no backup and a permanently `unhealthy` pg-backup for its first day,
+      # visible only on an empty volume, which is why it survived #224/#225.
+      # This is the same gate finance-app and importer already wait on.
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # Defaults track the configured DB names; override with BACKUP_DBS in .env
+      BACKUP_DBS: ${BACKUP_DBS:-${FINANCE_APP_DB:-Finances},${MB_DB_DBNAME:-metabase}}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./backups:/backups           # Host-visible dump output — contains financial data
+    entrypoint: >
+      bash -c "
+      set -uo pipefail;
+      echo \"pg-backup ready — dumping [$${BACKUP_DBS}] every $${BACKUP_INTERVAL_SECONDS}s, retention $${BACKUP_RETENTION_DAYS}d\";
+      while true; do
+        /scripts/backup.sh || echo '[backup] run failed — will retry next cycle';
+        sleep \"$${BACKUP_INTERVAL_SECONDS}\";
+      done
+      "
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:                     # Unhealthy if no dump is newer than 1.5x the interval (stalled loop)
+      test: ["CMD-SHELL", "find \"$${BACKUP_DIR}\" -name '*.dump' -mmin -$$(( BACKUP_INTERVAL_SECONDS * 3 / 2 / 60 + 1 )) | grep -q . || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s              # First dump runs at container start; allow time to land
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    labels:
+      com.finance-stack.component: "backup"
+      com.finance-stack.description: "Scheduled pg_dump backups with retention pruning"
+
+  # Metabase BI tool for dashboards and ad-hoc analytics against the Finances database.
+  # Stores its own internal metadata (questions, dashboards, users) in a separate metabase DB.
+  #
+  # The MB_DB_* vars below configure only that internal metadata DB (owned by the
+  # non-superuser MB_DB_USER role). Metabase's *analytics* connection to Finances is
+  # stored inside its own metadata DB, not in env, so it cannot be set here: point it
+  # at the finance_bi role (read-only, no users/audit_log, #249) once in the admin UI — see the
+  # "Roles & privileges" section of docs/database.md.
+  #
+  # Pinned to the 0.58 LTS line (#213). Metabase supports LTS releases for 14 months
+  # and standard releases for ~2, so 0.58 (EOL 2027-02-17) outlives every newer major
+  # by more than a year. Take 0.58.x patches; do not jump the minor. Dependabot is
+  # configured to match in .github/dependabot.yml. Each major bump runs a one-way
+  # migration on the metabase DB — roll back by restoring it from ./backups.
+  metabase:
+    image: metabase/metabase:v0.58.28
+    container_name: metabase
+    profiles: ["bi"]                   # Not started by default; run with --profile bi
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"    # Loopback only (#130) — Metabase has no auth in front of it on the LAN
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${MB_DB_DBNAME}         # Metabase's internal state DB — separate from the Finances DB
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${MB_DB_USER}
+      MB_DB_PASS: ${MB_DB_PASS}
+      MB_DB_HOST: postgres
+      TZ: ${TZ:-America/Chicago}            # Ensures chart timestamps and date grouping use local time
+    volumes:
+      - metabase_data:/metabase-data
+    depends_on:
+      postgres:
+        condition: service_healthy  # Waits for postgres healthcheck, not just container start
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:                   # Metabase exposes a health API endpoint
+      test: ["CMD-SHELL", "curl --fail -I http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s          # Metabase can take 1-2 min on first startup (DB migrations)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+    labels:
+      com.finance-stack.component: "bi"
+      com.finance-stack.description: "Metabase BI dashboards"
+
+  # TLS termination (#182). Not started by default — the stack stays exactly as
+  # it was until you run `docker compose --profile edge up -d`, at which point
+  # Caddy fronts finance-app on 80/443 and obtains a certificate automatically.
+  #
+  # This is the supported way to reach a deployed install from anywhere but the
+  # host itself, because finance-app binds loopback here (#227). Without it, use
+  # an SSH tunnel: ssh -L 3001:127.0.0.1:3001 <host>.
+  #
+  # ./caddy/Caddyfile is copied into this bundle by the release packaging step,
+  # from the repo root's caddy/Caddyfile — one source of truth, no committed
+  # duplicate. It is therefore present in the released tarball but NOT in a git
+  # checkout, so `--profile edge` cannot be started from this file in the repo.
+  # Use the repo-root docker-compose.yml for that; it is unaffected.
+  #
+  # See docs/deployment.md for the exposure posture and the setup walkthrough.
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: caddy
+    profiles: ["edge"]                 # Not started by default; run with --profile edge
+    restart: unless-stopped
+    ports:
+      - "80:80"                        # Required for the ACME HTTP challenge and the HTTP→HTTPS redirect
+      - "443:443"
+      - "443:443/udp"                  # HTTP/3
+    environment:
+      # Required by this profile, but declared with a plain default rather than
+      # `:?` — Compose interpolates every service before selecting profiles, so
+      # a required-variable marker here would break `docker compose up` for
+      # everyone not using the edge profile. Unset, Caddy refuses to start with
+      # an empty site address, and the failure stays inside this container.
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data               # Certificates and ACME account keys — losing this re-issues on next start
+      - caddy_config:/config
+    depends_on:
+      - finance-app
+    networks:
+      - appnet
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://localhost:2019/config/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+    labels:
+      com.finance-stack.component: "edge"
+      com.finance-stack.description: "Caddy reverse proxy / TLS termination"
+
+volumes:
+  postgres_data:    # Persists PostgreSQL data across container restarts
+  metabase_data:    # Persists Metabase dashboards, questions, and settings
+  caddy_data:       # Persists Caddy's certificates and ACME account keys (--profile edge)
+  caddy_config:     # Persists Caddy's autosaved config (--profile edge)
+
+networks:
+  appnet:
+    driver: bridge  # Shared bridge network so services can reach each other by container name
