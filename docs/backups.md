@@ -107,6 +107,21 @@ are created and migrated, then run the restore above.
 > same cluster — the normal case, including the `--force` recovery above — are
 > unaffected.
 
+## The other producer: pre-upgrade dumps
+
+`./deploy.sh` (Issue #228) runs `backup.sh` once as a **gate** before applying an
+upgrade, so `./backups/` holds those dumps alongside the scheduled ones. They are
+written by the same script into the same directory in the same format, with one
+consequence worth planning for: **retention prunes them like any other dump.** If
+you may want to roll back across a `breaking` release more than
+`BACKUP_RETENTION_DAYS` after it, copy that dump somewhere else — the script
+prints its path on success and on rollback.
+
+The gate is skipped in exactly two cases, both of which it logs: a first install
+(there is no database yet) and a re-run at the already-deployed version (no
+schema change is possible). It is never skipped silently, and a dump that fails
+aborts the deploy.
+
 ## Verification (CI)
 
 `.github/workflows/backup-smoke.yml` runs weekly (and on PRs touching the backup
@@ -117,6 +132,10 @@ corruption and script regressions.
 Because GitHub runners can't reach the deployment host's `./backups/`, the job
 verifies the backup/restore **scripts and round-trip**, not a specific host's
 dumps.
+
+`.github/workflows/deploy-smoke.yml` covers the pre-upgrade gate specifically: it
+asserts the dump lands before `migrate` runs, that a failed dump aborts the
+deploy, and that the dump the gate produced actually restores.
 
 ## Off-site (phase 2)
 

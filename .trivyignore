@@ -41,6 +41,19 @@
 # code or a dependency this repo declares — and every one is scheduled for review
 # on the same date, because the thing that clears most of them is the same event:
 # an upstream rebuild of the base image.
+#
+# A second generation joined them in #291, and the widening this file's opening
+# note warns about is now concrete rather than hypothetical: the util-linux
+# entries silence those CVEs on the two Alpine images too, which do not report
+# them today and would not report them if they later did. That is the price of
+# one file backing four scans, and it is what the split described above buys back.
+#
+# NOTHING REMOVES AN ENTRY WHEN THE BASE IS REBUILT. The CVE simply stops being
+# reported and the line stays here, inert, until someone deletes it — `exp:` stops
+# the suppression working, it does not delete anything.
+# scripts/check-trivy-suppressions.sh runs at the end of the image job and names
+# the entries that no longer match a finding in any image; those are the ones to
+# remove, along with their comment.
 
 # --- Debian base (finance-importer, finance-backup) -------------------------
 CVE-2026-53615 exp:2026-11-17
@@ -49,6 +62,19 @@ CVE-2026-53615 exp:2026-11-17
 # postgres:18.6. Fixed in 2.41.5-0+deb13u1, which reaches us when those two base
 # images are rebuilt upstream — nothing in this repo installs util-linux. Try
 # re-running the job before extending this: the fix arrives on its own.
+CVE-2026-53612 exp:2026-11-17
+CVE-2026-53613 exp:2026-11-17
+CVE-2026-53614 exp:2026-11-17
+# The rest of the same util-linux batch (#291), against the same nine packages and
+# carrying the SAME fixed version as CVE-2026-53615 above — 2.41.5-0+deb13u1. One
+# Debian update clears all four, so they share its review date rather than getting
+# an arbitrary one of their own; splitting the dates would assert a distinction
+# that does not exist. Two TOCTOU races in mount(8) and a nosuid/noexec bypass via
+# LIBMOUNT_FORCE_MOUNT2 — all three need a local user invoking mount, and these
+# two images run one non-interactive process each and never mount anything.
+# Verified before suppressing rather than after: at the time of writing, neither
+# base had been rebuilt since the advisories landed (postgres:18.6 2026-08-15,
+# python:3.14-slim 2026-08-12), so re-running the job could not have cleared it.
 
 # --- python:3.14-slim bundled packages (finance-importer) -------------------
 CVE-2025-47273 exp:2026-11-17
@@ -59,6 +85,15 @@ CVE-2025-47273 exp:2026-11-17
 GHSA-6v7p-g79w-8964 exp:2026-11-17
 # msgpack 1.1.2, pulled in under the base image's pip tooling, not by
 # requirements.txt. Same disposition as setuptools above.
+#
+# BOTH OF THESE WERE BRIEFLY DELETED IN #291 AND PUT STRAIGHT BACK, which is worth
+# recording because the mistake is easy to repeat. A local run of
+# scripts/check-trivy-suppressions.sh reported them stale, and a local
+# `ls site-packages` appeared to confirm it. Both were wrong: the machine's cached
+# python:3.14-slim was three weeks older than the one CI pulls, and these packages
+# live under pip/_vendor/, not at the top level. CI failed on the very next push.
+# Trust a staleness verdict from CI, where the image was just built from a freshly
+# pulled base — not from a workstation.
 
 # --- npm's own vendored dependencies (finance-migrate) ----------------------
 # The migrate stage deliberately keeps npm — it runs `npx drizzle-kit` — where
@@ -80,6 +115,10 @@ CVE-2026-12151 exp:2026-11-17
 # undici 6.26.0, fixed in 6.27.0. npm-vendored, as above.
 CVE-2026-69192 exp:2026-11-17
 # ip-address 10.2.0, fixed in 10.3.1. npm-vendored, as above.
+CVE-2026-73566 exp:2026-11-17
+# tar 7.5.16, fixed in 7.5.21. npm-vendored, as above (#291) — the same 7.5.16 the
+# two tar entries at the top of this section already cover, so it clears with them
+# when node:24-alpine ships a newer bundled npm.
 
 # Not listed here, and excluded at the scanner instead: the Go stdlib CVEs
 # reported against drizzle-kit's vendored `esbuild` and the postgres image's

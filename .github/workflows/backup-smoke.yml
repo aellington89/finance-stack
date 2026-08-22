@@ -26,6 +26,12 @@ on:
       # Same reasoning again (#227): this job lints it, so an edit to it has to
       # be able to trigger the job that lints it.
       - 'scripts/check-deploy-parity.sh'
+      # Same reasoning once more (#228). Its behaviour is covered by
+      # deploy-smoke.yml; this job is still where it gets linted, so an edit to
+      # it has to be able to trigger the lint.
+      - 'deploy/deploy.sh'
+      # And again (#291). This one runs in ci.yml's image job, not here.
+      - 'scripts/check-trivy-suppressions.sh'
       - 'app/scripts/*.sh'
       # The image these scripts now ship in (#224). This job exercises them from
       # the checkout rather than the image, so it does not prove the image is
@@ -71,11 +77,15 @@ jobs:
       # included because migrate-and-seed.sh gates the whole stack's startup and
       # preflight-superuser.sh is the failure path an operator sees when a
       # rotation goes wrong (#189) — both are worth linting even though neither
-      # takes part in the backup round-trip below.
+      # takes part in the backup round-trip below. deploy/deploy.sh (#228) is
+      # here for the same reason: this job is the repo's single shellcheck owner,
+      # and the script's own behaviour is exercised by deploy-smoke.yml.
       - name: Shellcheck scripts/
         run: |
           shellcheck scripts/backup.sh scripts/restore.sh scripts/verify-db-roles.sh \
                      scripts/build.sh scripts/check-deploy-parity.sh \
+                     scripts/check-trivy-suppressions.sh \
+                     deploy/deploy.sh \
                      app/scripts/migrate-and-seed.sh app/scripts/preflight-superuser.sh
 
       - name: Install PostgreSQL 18 client

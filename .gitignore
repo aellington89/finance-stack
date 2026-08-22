@@ -18,9 +18,18 @@ __pycache__/
 .env*
 !.env.example
 
-# Database backups — contain financial data, never commit
+# Database backups — contain financial data, never commit. Both rules are
+# root-anchored, so deploy/backups/ needs its own: running deploy/deploy.sh from
+# a checkout (#228) writes real dumps there, and the rule above would not cover
+# them. deploy/imports/ and deploy/importer/parsers/ are already covered by the
+# unanchored patterns further down.
 /backups/*
 !/backups/.gitkeep
+/deploy/backups/
+
+# Written by deploy/deploy.sh after a green health gate — the rollback target of
+# one specific host, not a repository fact (#228).
+/deploy/.deployed-version
 
 # Next.js application (app/ directory)
 app/node_modules

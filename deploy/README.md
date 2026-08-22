@@ -10,6 +10,7 @@ Packed as `finance-stack-X.Y.Z.tar.gz` and attached to every
 
 ```
 /opt/finance-stack/
+  deploy.sh                install and upgrade — the one command you run
   compose.yml              the stack, images pinned to ${APP_VERSION}
   .env.example             copy to .env and fill in
   finance-stack.service    systemd unit
@@ -29,6 +30,10 @@ docker --version
 docker compose version
 ```
 
+`deploy.sh` additionally uses `curl` for its health gate, which is present on
+essentially every server distribution. It uses `jq` if you have it and falls back
+to a text extraction if you do not, so it is not a prerequisite.
+
 ## Install
 
 ```sh
@@ -47,15 +52,21 @@ chmod 600 .env
 #    otherwise create them itself, owned by root.
 mkdir -p imports importer/parsers backups
 
-# 4. Start. This pulls the images, waits for Postgres, runs the one-shot
-#    migrate job (which creates the databases, roles and seeds), then starts
-#    the app, importer and backup services.
-docker compose up -d
+# 4. Install. This pulls the images, waits for Postgres, runs the one-shot
+#    migrate job (which creates the databases, roles and seeds), starts the app,
+#    importer and backup services, and does not return success until
+#    /api/health reports the version you asked for.
+./deploy.sh
 
 # 5. Verify
 curl -sS http://127.0.0.1:3001/api/health
 docker compose ps
 ```
+
+`./deploy.sh` with no argument uses the `APP_VERSION` already in `.env`, which the
+bundle ships pre-filled. `docker compose up -d` still works and does the same
+thing; what it does not do is health-gate the result or take a backup first,
+which is why upgrades go through the script.
 
 Generate a real `AUTH_SECRET` rather than editing the placeholder by hand:
 
@@ -136,11 +147,13 @@ stay that way. See
 
 ## Upgrading
 
-> **This is the manual procedure.** [Issue
-> #228](https://github.com/aellington89/finance-stack/issues/228) replaces it
-> with `./deploy.sh <version>`, which adds a pre-upgrade backup gate, a health
-> gate, and automatic rollback. Until then, take the dump yourself — step 1 is
-> not optional.
+```sh
+cd /opt/finance-stack
+./deploy.sh 0.4.1
+```
+
+That is the whole procedure. The script is idempotent — re-running it with the
+version already deployed converges the stack and changes nothing else.
 
 **Read the release's `**Migration:**` marker first.** It is the first line of the
 release notes and says whether rolling back needs a dump restore:
@@ -151,41 +164,85 @@ release notes and says whether rolling back needs a dump restore:
 | `backward-compatible` | Re-pin the previous `APP_VERSION`. The old app runs against the new schema. |
 | `breaking` | **Restore the pre-upgrade dump.** There are no down migrations. |
 
-```sh
-cd /opt/finance-stack
+### What it does, in order
 
-# 1. Take a backup and note the file it writes.
-docker compose exec pg-backup /scripts/backup.sh
-ls -t backups/*.dump | head
+1. **Preflight** — Docker, the Compose plugin, `curl`, `.env`, and every required
+   variable actually set to something other than `changeme`.
+2. **Pull** — a nonexistent or bad version fails here, before anything running is
+   touched and before `.env` is written.
+3. **Backup gate** — a fresh `pg_dump` into `backups/`, taken *before* `migrate`
+   runs. **If the dump fails, the deploy aborts.** Skipped on a first install
+   (there is no database yet) and on a re-run of the deployed version (no schema
+   change is possible).
+4. **Pin** — writes `APP_VERSION` into `.env`, preserving its mode.
+5. **Apply** — `docker compose up -d`. Compose sequences it: postgres healthy →
+   migrate exits 0 → app and importer start.
+6. **Health gate** — polls `/api/health` until it returns 200 **and**
+   `build.version` equals the version you asked for, for up to 180 seconds. Both
+   conditions in one loop, because during an upgrade the old container answers
+   200 with the old version.
+7. **On failure** — prints the `migrate` and `finance-app` logs, re-pins the
+   previous version, brings it back up, re-polls, and tells you the dump path and
+   the exact restore command.
+8. **On success** — records the version in `.deployed-version` and removes image
+   tags older than the rollback target.
 
-# 2. Pin the new version.
-sed -i 's/^APP_VERSION=.*/APP_VERSION=X.Y.Z/' .env
+### Exit codes
 
-# 3. Pull first — a bad or nonexistent version fails before anything running
-#    is touched.
-docker compose pull
-
-# 4. Apply. migrate runs before the app starts, and the app does not start if
-#    it fails.
-docker compose up -d
-
-# 5. Health-gate the result. build.version must equal the version from step 2.
-curl -sS http://127.0.0.1:3001/api/health
-```
+| Code | Meaning |
+|---|---|
+| `0` | Deployed and healthy. |
+| `1` | Aborted before anything was applied — preflight, the pull, or the dump failed. The running stack and `.env` are untouched. |
+| `2` | The upgrade failed and was **rolled back**; the previous version is healthy again. |
+| `3` | The upgrade failed **and the rollback failed**. Needs a human. |
 
 ### Rolling back
 
-```sh
-sed -i 's/^APP_VERSION=.*/APP_VERSION=<previous>/' .env
-docker compose up -d
-```
-
-If the release was marked `breaking`, that is not sufficient on its own — restore
-the dump from step 1 as well:
+Automatic, on any failed health gate — there is nothing to run. To go back
+deliberately, name the older version:
 
 ```sh
-docker compose exec pg-backup /scripts/restore.sh --force Finances /backups/<file>.dump
+./deploy.sh 0.4.0
 ```
+
+**A rollback restores the application, not the database.** If the release you are
+leaving was marked `breaking`, the old app may not run against the schema now on
+disk, and you also need the dump the upgrade took. The script prints the exact
+command; it looks like this:
+
+```sh
+docker compose exec pg-backup /scripts/restore.sh --force /backups/Finances_<timestamp>.dump Finances
+```
+
+(If `pg-backup` is not running, use
+`docker compose run --rm -T --no-deps --entrypoint /scripts/restore.sh pg-backup --force /backups/<file>.dump Finances`.)
+
+### Overrides
+
+Environment variables, not `.env` keys — they configure the script, not the stack.
+
+| Variable | Default | Use |
+|---|---|---|
+| `DEPLOY_SKIP_PULL=1` | off | Deploy images already on the host (an offline or air-gapped upgrade). |
+| `DEPLOY_HEALTH_TIMEOUT` | `180` | Seconds to wait for the health gate. |
+| `DEPLOY_HEALTH_URL` | `http://127.0.0.1:3001/api/health` | If you moved the app's port. |
+
+### Doing it by hand
+
+`deploy.sh` is not magic, and there is no state it keeps that you cannot recreate.
+The equivalent manual sequence, if you need it:
+
+```sh
+docker compose exec pg-backup /scripts/backup.sh   # 1. and note the file it writes
+ls -t backups/*.dump | head
+sed -i 's/^APP_VERSION=.*/APP_VERSION=X.Y.Z/' .env  # 2. pin
+docker compose pull                                 # 3. pull
+docker compose up -d                                # 4. apply
+curl -sS http://127.0.0.1:3001/api/health           # 5. check build.version
+```
+
+Note `exec` there and `run --entrypoint` in the script: `pg-backup`'s entrypoint is
+a sleep loop, so a one-off run has to override it, while `exec` bypasses it.
 
 ## Backups
 

@@ -99,9 +99,11 @@ Surviving a reboot does **not** depend on it — that comes from
 `restart: unless-stopped`, which the Docker daemon honours on its own. The unit
 exists so that starting and stopping the stack is an ordinary system operation,
 and so a deliberate `systemctl stop` stays stopped across a reboot. There is no
-upgrade timer; upgrades take a backup and health-gate the result
-([#228](https://github.com/aellington89/finance-stack/issues/228)), which is not
-something to run unattended.
+upgrade timer, and `deploy.sh` is the reason it stays that way rather than the
+reason to add one: it distinguishes "rolled back cleanly" (exit 2) from "the
+rollback also failed" (exit 3) precisely because the difference needs a person.
+Nothing unattended can decide whether a `breaking` release additionally needs its
+database restored.
 
 ### One step the bundle cannot do
 
@@ -114,11 +116,45 @@ Postgres — the procedure is in the bundle README and in
 [#288](https://github.com/aellington89/finance-stack/issues/288), which proposes
 carrying `app/lib/` in the `finance-migrate` image so the CLI runs there.
 
-The upgrade command with its pre-upgrade backup gate and health-gated rollback
-([#228](https://github.com/aellington89/finance-stack/issues/228)) and the full
-runbook ([#229](https://github.com/aellington89/finance-stack/issues/229)) are the
-remaining steps of
+## Upgrading
+
+`deploy.sh` ships in the bundle and is the single entry point for both installing
+and upgrading ([#228](https://github.com/aellington89/finance-stack/issues/228)):
+
+```sh
+cd /opt/finance-stack && ./deploy.sh 0.4.1
+```
+
+Three things in it are worth understanding rather than just running.
+
+**The dump is a gate, not a step.** It runs before `migrate` does, and a failed
+dump aborts the deploy with nothing changed. `drizzle-kit` generates no down
+migrations, so the moment a migration is applied, the only route back to the old
+schema is a dump that already exists. Taking it afterwards would be taking it too
+late; making it skippable would make it optional exactly when it matters.
+
+**The health gate asserts one condition, not two in sequence.** It polls
+`/api/health` until the response is 200 **and** `build.version` equals the
+requested version. Splitting those — poll for 200, then check the version — is
+correct on a fresh boot and wrong on an upgrade, because the old container is
+still answering 200 with the old version while the new one starts.
+
+**Rollback restores the application, not the database.** On a failed gate the
+script re-pins the previous version, brings it back and re-polls — and then
+prints the pre-upgrade dump's path with the exact `restore.sh` invocation,
+because where the release carried a schema change the old app may not run against
+the schema now on disk. Check the release's `**Migration:**` marker: `none` and
+`backward-compatible` need no restore, `breaking` does.
+
+The exit codes are meant to be branched on: `0` deployed, `1` aborted with
+nothing applied, `2` rolled back and healthy, `3` rollback failed too. The full
+runbook ([#229](https://github.com/aellington89/finance-stack/issues/229)) is the
+one remaining step of
 [#223](https://github.com/aellington89/finance-stack/issues/223).
+
+`.github/workflows/deploy-smoke.yml` exercises install → failed upgrade →
+automatic rollback on every PR that touches the script, using the same image
+tagged under a version it does not report as the "bad release".
 
 ## Exposure posture
 

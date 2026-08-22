@@ -172,6 +172,33 @@ environment entry, profile or label — must match. It also compares the two
 The diff it prints is of the rendered `docker compose config` output, so it
 points at the resolved value rather than the line you typed.
 
+**`deploy/deploy.sh` needs no new variables here.** Its three overrides
+(`DEPLOY_SKIP_PULL`, `DEPLOY_HEALTH_TIMEOUT`, `DEPLOY_HEALTH_URL`) configure the
+script, not the stack, so they are plain environment variables documented in the
+script header and the bundle README. Adding one to `deploy/.env.example` would
+fail this gate, which allows exactly two deploy-only names.
+
+### Deploy smoke
+
+`.github/workflows/deploy-smoke.yml` runs `deploy/deploy.sh` end to end — first
+install, a no-op re-run, then an upgrade that is deliberately made to fail its
+health gate — and asserts each of the guarantees the script advertises
+([#228](https://github.com/aellington89/finance-stack/issues/228)). It runs
+weekly and on PRs touching the script, `deploy/compose.yml`, or the backup and
+restore scripts it invokes.
+
+The "bad release" costs nothing to maintain: `build.version` is inlined from
+`app/package.json` at image build time, so the job tags the *same* image as
+`9.9.9` and gets a container that starts, migrates and answers 200 while
+reporting the wrong version — exactly the failure the health gate exists for.
+
+A red job here usually means one of three things: the health poll no longer
+combines its two conditions, `docker compose run` lost its `--no-deps` or
+`--entrypoint` (which makes the backup gate start `migrate`, or hang on
+`pg-backup`'s sleep loop), or a message the assertions grep for was reworded.
+Shellcheck for the script lives in `backup-smoke.yml` with every other shell file
+in the repo.
+
 ### Docs index gate
 
 Every guide in `docs/` is indexed in two hand-maintained lists — `## Guides` in
@@ -266,8 +293,50 @@ the other three's findings in the same run rather than across four.
    [`.trivyignore`](.trivyignore) — the file documents the required format. Note
    that one file backs all four scans, so an entry silences its CVE everywhere.
    It is no longer empty: turning the gate on for the other three images required
-   seeding ten base-image and bundled-tooling findings, each with the same review
-   date. Read those before adding an eleventh — yours may already be covered.
+   seeding ten base-image and bundled-tooling findings, and it currently holds
+   fourteen. Read those before adding a fifteenth — yours may already be covered,
+   as three of the four added in
+   [#291](https://github.com/aellington89/finance-stack/issues/291) were by an
+   entry already sitting there for the same fixed version.
+
+   **Check step 1 before reaching for this, and say what you found.** An entry
+   whose justification is "clears on an upstream rebuild" is only honest if the
+   rebuild has not already happened. Docker Hub's
+   `https://hub.docker.com/v2/repositories/library/<image>/tags/<tag>` reports
+   `last_updated`; if that is older than the advisory, re-running the job cannot
+   help and suppression is the right call. Record that in the entry.
+
+**Stale suppressions are reported, not enforced.** Nothing removes an entry when
+the base is finally rebuilt — the CVE stops being reported and the line stays,
+still silencing that ID on all four images. `exp:` stops a suppression working
+but does not delete it, and it fires months after the fact. So the `image` job
+ends with `scripts/check-trivy-suppressions.sh`, which re-reads the images with
+Trivy's `--show-suppressed` and emits a warning annotation for every entry that
+no longer matches a finding anywhere. **It never fails the build** — a stale entry
+is not a vulnerability, and a gate that goes red for tidiness is a gate people
+stop reading.
+
+**Act on what it reports only when it ran in CI**, and then delete the entry *and*
+its comment. Run from a workstation it is advisory at best: it scans whatever
+images that machine has built, and if their cached base layer is older than the
+one CI pulls, packages present in CI's image are simply absent from yours — so
+live suppressions look dead. That is not theoretical. In
+[#291](https://github.com/aellington89/finance-stack/issues/291) exactly this
+deleted two live entries on a local verdict (a three-week-stale
+`python:3.14-slim`), and the gate went red on the next push. The script prints a
+warning when `CI` is unset for this reason.
+
+Two habits follow. Rebuild with `docker compose build --pull` before believing a
+local run. And when checking a package by hand, look where it actually lives —
+`setuptools` and `msgpack` are under `pip/_vendor/`, so listing the top level of
+`site-packages` "confirms" an absence that isn't real.
+
+If it ever warns that it **could not determine** which suppressions are live,
+that is the fail-safe firing rather than a result: suppressed findings come back
+under `ExperimentalModifiedFindings`, which is experimental and may be renamed by
+a Trivy bump. Fix the script against the current output before trusting any
+staleness verdict — the naive reading of a renamed field is "every entry is
+stale", which is exactly the answer that would get live suppressions deleted.
 
 **Two files are excluded from scanning outright**, via `skip-files` on the
 `finance-migrate` and `finance-backup` steps: drizzle-kit's vendored `esbuild`
