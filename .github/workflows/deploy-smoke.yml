@@ -162,8 +162,10 @@ jobs:
           fi
 
           # AC: migrate and app logs are surfaced on failure.
+          # `--` before the pattern: both markers start with a dash, and grep
+          # reads a leading-dash argument as an option without it.
           for marker in '--- migrate logs ---' '--- finance-app logs ---'; do
-            if ! grep -qF "$marker" upgrade.log; then
+            if ! grep -qF -- "$marker" upgrade.log; then
               echo "::error::'$marker' missing from the failure output"
               exit 1
             fi
