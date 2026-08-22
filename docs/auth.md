@@ -68,6 +68,18 @@ DATABASE_URL=postgresql://postgres:<password>@localhost:5433/Finances \
 
 For non-interactive use, set `CREATE_USER_PASSWORD` instead of the prompt.
 
+### On a deployment (no checkout, no Node)
+
+The same CLI ships inside the `finance-migrate` image, which is the one-shot administrative image that applies the migrations and hosts `verify-db-roles.sh` ([Issue #288](https://github.com/aellington89/finance-stack/issues/288)). This is the form to use on a server, and it needs nothing on the host but Docker:
+
+```bash
+docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username> [--role admin|user]
+```
+
+`DATABASE_URL` is not passed here: the `migrate` service already carries one built from `POSTGRES_USER` / `POSTGRES_PASSWORD`, which keeps the superuser password out of shell history and `ps` on a deployment host. `docker compose run` allocates a TTY, so the hidden prompt works exactly as it does locally; `CREATE_USER_PASSWORD` remains the non-interactive fallback.
+
+Two things make this work, and both are easy to remove by accident: the `migrate` stage of `app/Dockerfile` copies `lib/`, and it copies `tsconfig.json` — the latter purely because `paths` is declared there, and that is what resolves `@/lib/db` and friends under `tsx`. Without it the `lib/` copy is inert, and the failure appears only on a deployment host at first-user creation.
+
 ## Configuration
 
 | Variable | Where | Purpose |

@@ -21,6 +21,8 @@ cd app
 npm run auth:create-user -- <username>
 ```
 
+On a deployment there is no checkout to run that from, so the same CLI ships in the `finance-migrate` image: `docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>`.
+
 Sign in at http://localhost:3001/login and sign out from the sidebar footer. See [docs/auth.md](docs/auth.md) for the full model, the `AUTH_SECRET` requirement, and password resets.
 
 At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append transactions, and Metabase reads through a role that cannot touch `users` or `audit_log` and cannot write. Exactly one login role in the cluster is a superuser — the maintenance identity the one-shot jobs run as — and CI asserts that for *every* role, not a list of the expected ones. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.

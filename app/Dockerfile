@@ -26,9 +26,42 @@ FROM node:24-alpine AS migrate
 WORKDIR /app
 RUN apk add --no-cache postgresql-client bash
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json drizzle.config.ts ./
+COPY package.json drizzle.config.ts tsconfig.json ./
 COPY drizzle ./drizzle
 COPY scripts ./scripts
+
+# lib/ and tsconfig.json are here for the first-user CLI (Issue #288), not for
+# the migration job.
+#
+# There is no public registration, so the initial account — and every password
+# reset — comes from `npm run auth:create-user`. Until #288 neither published
+# image could run it: the runner stage below deletes npm (#131), and this stage
+# had npm, tsx, node_modules and app/scripts/ but not app/lib/. A bundle install
+# therefore came up healthy and could not be logged into without a checkout on
+# some other machine, which is precisely what #223 set out to remove. This stage
+# is the natural home — it already connects as the superuser and already exists
+# to do one-shot administrative work against the database, the same reason it
+# hosts /scripts/verify-db-roles.sh:
+#
+#   docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>
+#
+# tsconfig.json is load-bearing rather than incidental. `paths` is declared
+# there, and it is the only reason `@/lib/auth/roles`, `@/lib/db`,
+# `@/drizzle/schema` and `@/lib/auth/password` resolve under tsx — which reads
+# it through get-tsconfig, where `paths` without `baseUrl` implies a baseUrl of
+# the tsconfig's own directory, i.e. /app. Delete it as an unused config file
+# and the COPY below goes inert: first-user creation breaks on deployment hosts
+# while every test in CI stays green.
+#
+# The copy is whole rather than the three files create-user.ts actually reaches
+# (lib/auth/roles.ts, lib/db/index.ts, lib/auth/password.ts). lib/ is ~350 KB
+# against a node_modules that is already in this stage, so a narrow copy buys
+# nothing measurable and costs a tripwire that fires the first time anyone adds
+# an import to one of those modules — on a deployment host, at the one moment
+# the operator has no way to work around it. tsx transpiles on demand, so files
+# nothing loads are never resolved: lib/db/audited.ts sits next to lib/db/index.ts
+# and imports @/auth, and is simply never reached.
+COPY lib ./lib
 
 # Roles, seeds and the role-verification script used to be bind-mounted by the
 # `migrate` service (Issue #224). They are baked in now so the stack can run from
@@ -84,7 +117,12 @@ RUN adduser --system --uid 1001 nextjs
 # could ever clear. Deleting them removes the vulnerability rather than
 # suppressing the report.
 #
-# The `migrate` stage above deliberately keeps npm: it runs `npx drizzle-kit`.
+# The `migrate` stage above deliberately keeps npm, and since #288 for two
+# reasons rather than one: it runs `npx drizzle-kit`, and it is where the
+# first-user CLI (`npm run auth:create-user`) lives. Adding a script runner back
+# here for that one administrative command was the rejected alternative — it
+# would undo this deletion for the entire runtime to serve a command run once
+# per deployment.
 RUN rm -rf /usr/local/lib/node_modules/npm \
            /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx \

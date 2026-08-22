@@ -76,31 +76,28 @@ openssl rand -base64 33
 
 ### Create the first user
 
-There is no public registration, and **this is the one step the bundle cannot do
-by itself.** The first-user CLI needs the application source and Node, which is
-precisely what a deployment host does not have: the `finance-app` image ships the
-standalone server with npm removed, and the `finance-migrate` image carries the
-migration scripts but not `app/lib/`.
-
-This is tracked as
-[#288](https://github.com/aellington89/finance-stack/issues/288). Until it lands,
-run the CLI from a machine that *does* have a checkout, over an SSH tunnel to
-this host's Postgres (loopback-bound on 5433):
+There is no public registration, so the first account is created by hand. It runs
+in the `migrate` container — the same one-shot administrative image that applies
+the migrations and hosts `verify-db-roles.sh`
+([#288](https://github.com/aellington89/finance-stack/issues/288)):
 
 ```sh
-# On your workstation, in one terminal:
-ssh -L 5433:127.0.0.1:5433 <host>
-
-# In another, from the repository checkout:
-cd app
-DATABASE_URL=postgresql://postgres:<POSTGRES_PASSWORD>@localhost:5433/Finances \
-  npm run auth:create-user -- <username> [--role admin|user]
+docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username> [--role admin|user]
 ```
 
-`<POSTGRES_PASSWORD>` is the value from this deployment's `.env`. It must connect
-as `postgres`, not `finance_app` — the `users` table is deliberately read-only to
-the application role (#130), so an app-level compromise cannot mint an account.
-Re-running with an existing username resets that user's password.
+The password is prompted for twice, hidden, with an eight-character minimum.
+Set `CREATE_USER_PASSWORD` instead if you are scripting an unattended install.
+
+It connects as `postgres`, not `finance_app` — the `users` table is deliberately
+read-only to the application role (#130), so an app-level compromise cannot mint
+an account. You do not supply that credential: `compose.yml` builds the
+connection string from the `POSTGRES_USER` and `POSTGRES_PASSWORD` already in
+your `.env`, so the superuser password never reaches your shell history.
+
+**Re-running with an existing username resets that user's password**, which is
+also how you recover from losing it. `--role` defaults to `admin` and is written
+on the reset path too, so omitting it on a re-run puts that account back to
+`admin`; the command echoes the role it wrote.
 
 See [Authentication](https://github.com/aellington89/finance-stack/blob/master/docs/auth.md).
 
