@@ -30,6 +30,8 @@ on:
       # deploy-smoke.yml; this job is still where it gets linted, so an edit to
       # it has to be able to trigger the lint.
       - 'deploy/deploy.sh'
+      # And again (#291). This one runs in ci.yml's image job, not here.
+      - 'scripts/check-trivy-suppressions.sh'
       - 'app/scripts/*.sh'
       # The image these scripts now ship in (#224). This job exercises them from
       # the checkout rather than the image, so it does not prove the image is
@@ -82,6 +84,7 @@ jobs:
         run: |
           shellcheck scripts/backup.sh scripts/restore.sh scripts/verify-db-roles.sh \
                      scripts/build.sh scripts/check-deploy-parity.sh \
+                     scripts/check-trivy-suppressions.sh \
                      deploy/deploy.sh \
                      app/scripts/migrate-and-seed.sh app/scripts/preflight-superuser.sh
 

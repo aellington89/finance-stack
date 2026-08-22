@@ -637,3 +637,24 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
           trivyignores: .trivyignore
+
+      # Housekeeping, not a gate (#291). Nothing removes an entry from
+      # .trivyignore when the base image is rebuilt: the CVE stops being reported
+      # and the line stays, still silencing that ID across all four scans. `exp:`
+      # stops a suppression working but does not delete it, and it fires months
+      # later. This re-reads the images with --show-suppressed and warns about
+      # entries that no longer match anything, so pruning is something you are
+      # told about rather than something you have to remember.
+      #
+      # It exits 0 unconditionally — a stale entry is not a vulnerability, and a
+      # gate that goes red for tidiness is a gate people stop reading. The
+      # annotations are the whole output.
+      #
+      # Runs after the four scans deliberately: aquasecurity/setup-trivy has put
+      # trivy on PATH and populated the cache by then, so this reuses the
+      # database rather than downloading it again.
+      - name: Report stale suppressions
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+        run: ./scripts/check-trivy-suppressions.sh

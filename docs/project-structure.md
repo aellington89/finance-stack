@@ -244,5 +244,7 @@ finance-stack/
     ├── update-account-balance-history.sql   # Balance history rebuild script (manual / --profile init) — baked at /scripts
     ├── backup.sh                            # Scheduled pg_dump with retention pruning (pg-backup service) — baked at /scripts
     ├── restore.sh                           # Restore a dump into a clean database (#122) — baked at /scripts
+    ├── check-deploy-parity.sh               # CI gate: deploy/compose.yml still matches docker-compose.yml (#227)
+    ├── check-trivy-suppressions.sh          # CI report: .trivyignore entries that no longer match a finding (#291) — never fails the build
     └── verify-db-roles.sh                   # Grant matrix + behavioural privilege check per role (#130) — baked into finance-migrate
 ```
