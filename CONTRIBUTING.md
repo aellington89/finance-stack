@@ -294,7 +294,7 @@ the other three's findings in the same run rather than across four.
    that one file backs all four scans, so an entry silences its CVE everywhere.
    It is no longer empty: turning the gate on for the other three images required
    seeding ten base-image and bundled-tooling findings, and it currently holds
-   twelve. Read those before adding a thirteenth — yours may already be covered,
+   fourteen. Read those before adding a fifteenth — yours may already be covered,
    as three of the four added in
    [#291](https://github.com/aellington89/finance-stack/issues/291) were by an
    entry already sitting there for the same fixed version.
@@ -316,9 +316,20 @@ no longer matches a finding anywhere. **It never fails the build** — a stale e
 is not a vulnerability, and a gate that goes red for tidiness is a gate people
 stop reading.
 
-Act on what it reports: delete the entry *and* its comment. It found two dead
-ones on its first run — `setuptools` and `msgpack` suppressions that `pip 26.1.2`
-had made moot by not vendoring those packages at all.
+**Act on what it reports only when it ran in CI**, and then delete the entry *and*
+its comment. Run from a workstation it is advisory at best: it scans whatever
+images that machine has built, and if their cached base layer is older than the
+one CI pulls, packages present in CI's image are simply absent from yours — so
+live suppressions look dead. That is not theoretical. In
+[#291](https://github.com/aellington89/finance-stack/issues/291) exactly this
+deleted two live entries on a local verdict (a three-week-stale
+`python:3.14-slim`), and the gate went red on the next push. The script prints a
+warning when `CI` is unset for this reason.
+
+Two habits follow. Rebuild with `docker compose build --pull` before believing a
+local run. And when checking a package by hand, look where it actually lives —
+`setuptools` and `msgpack` are under `pip/_vendor/`, so listing the top level of
+`site-packages` "confirms" an absence that isn't real.
 
 If it ever warns that it **could not determine** which suppressions are live,
 that is the fail-safe firing rather than a result: suppressed findings come back

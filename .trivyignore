@@ -76,11 +76,24 @@ CVE-2026-53614 exp:2026-11-17
 # base had been rebuilt since the advisories landed (postgres:18.6 2026-08-15,
 # python:3.14-slim 2026-08-12), so re-running the job could not have cleared it.
 
-# (A "python:3.14-slim bundled packages" section stood here, suppressing
-# setuptools 70.3.0 and msgpack 1.1.2 under pip's vendored tree. Both were pruned
-# in #291: pip 26.1.2 vendors neither, so the packages are not in the image at all
-# and the entries had stopped covering anything. They were the first two the
-# staleness check found — which is the point of having it.)
+# --- python:3.14-slim bundled packages (finance-importer) -------------------
+CVE-2025-47273 exp:2026-11-17
+# setuptools 70.3.0, bundled in the base image rather than by
+# importer/requirements.txt. poll.py never imports it; it is present because the
+# image ships pip. Clears on a base rebuild, or could be removed outright if the
+# importer image ever drops pip after the install layer.
+GHSA-6v7p-g79w-8964 exp:2026-11-17
+# msgpack 1.1.2, pulled in under the base image's pip tooling, not by
+# requirements.txt. Same disposition as setuptools above.
+#
+# BOTH OF THESE WERE BRIEFLY DELETED IN #291 AND PUT STRAIGHT BACK, which is worth
+# recording because the mistake is easy to repeat. A local run of
+# scripts/check-trivy-suppressions.sh reported them stale, and a local
+# `ls site-packages` appeared to confirm it. Both were wrong: the machine's cached
+# python:3.14-slim was three weeks older than the one CI pulls, and these packages
+# live under pip/_vendor/, not at the top level. CI failed on the very next push.
+# Trust a staleness verdict from CI, where the image was just built from a freshly
+# pulled base — not from a workstation.
 
 # --- npm's own vendored dependencies (finance-migrate) ----------------------
 # The migrate stage deliberately keeps npm — it runs `npx drizzle-kit` — where

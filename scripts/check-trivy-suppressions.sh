@@ -22,6 +22,15 @@
 # has to fall through to the exit 0 at the bottom rather than abort the step.
 # Errors are handled where they can occur instead.
 #
+# ONLY ACT ON A VERDICT FROM CI. This scans whatever images are on the machine,
+# and a locally built image is not the artifact CI builds: if the cached base
+# layer is older than the one CI pulls, packages present in CI's image are simply
+# absent from yours, and their suppressions look stale when they are live. That is
+# not hypothetical — it happened while writing this (#291). Two entries were
+# deleted on a local verdict, from images whose python:3.14-slim was three weeks
+# stale, and CI went red on the next push. The script warns when it is not running
+# in CI for exactly this reason; heed it.
+#
 # IT ALSO FAILS SAFE, which matters more than it sounds. Suppressed findings come
 # back under `ExperimentalModifiedFindings` — experimental by name, and liable to
 # be renamed in a Trivy bump. If that happens, the naive reading is "no entry
@@ -66,6 +75,16 @@ fi
 if [ ! -f "$IGNORE_FILE" ]; then
     log "no ${IGNORE_FILE} — nothing to check"
     exit 0
+fi
+
+# See the header: outside CI the images are whatever the machine happens to have
+# built, and a stale cached base layer produces false staleness. Say so up front
+# rather than letting the confident-looking output below be acted on.
+if [ -z "${CI:-}" ]; then
+    log "NOTE: not running in CI. Anything reported below is only true of the"
+    log "      images on this machine — if their base layer is older than the one"
+    log "      CI pulls, live suppressions can look stale. Confirm from a CI run"
+    log "      before deleting anything."
 fi
 
 # --severity and --ignore-unfixed mirror the scan steps in ci.yml, because both
@@ -169,8 +188,10 @@ for ident, lineno, expiry in expired:
 
 for ident, lineno in stale:
     print(f"::warning file={ignore_file},line={lineno}::{ident} no longer matches a "
-          f"finding in any image — upstream has fixed it. Delete this entry and its "
-          f"comment; nothing removes it automatically.")
+          f"finding in any of the images scanned. From a CI run that means upstream "
+          f"fixed it — delete this entry and its comment, since nothing removes it "
+          f"automatically. From a workstation, confirm against CI first: a cached "
+          f"base layer older than the one CI pulls makes live suppressions look dead.")
 
 if not stale and not expired:
     print("[suppressions] ✓ every entry still matches a live finding — nothing to prune")
