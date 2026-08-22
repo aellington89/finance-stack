@@ -14,8 +14,11 @@
 # reboot as a stop — which is exactly what `unless-stopped` alone would not give
 # you after a `docker compose down`.
 #
-# There is deliberately no upgrade timer. Upgrades take a backup and health-gate
-# the result (Issue #228); they are not something to run unattended.
+# There is deliberately no upgrade timer. Upgrades go through ./deploy.sh, which
+# gates on a pre-upgrade dump and health-gates the result (Issue #228) — and
+# whose exit codes distinguish "rolled back cleanly" from "the rollback failed
+# too" precisely because that difference needs a person. This unit starts and
+# stops the stack; it does not upgrade it.
 
 [Unit]
 Description=Finance Stack

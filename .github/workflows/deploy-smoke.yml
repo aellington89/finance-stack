@@ -1,0 +1,208 @@
+name: Deploy smoke
+
+# Proves deploy/deploy.sh (Issue #228) actually does what it claims: gates the
+# upgrade on a dump, health-gates the result, and puts the previous version back
+# by itself when the new one does not come up reporting the version it was asked
+# for. None of that is reachable by shellcheck, and the rollback path in
+# particular is the one path an operator only ever meets on a bad day.
+#
+# THE BAD RELEASE IS FREE. `build.version` is inlined from app/package.json at
+# image build time (app/lib/version.ts), so tagging the SAME image as 9.9.9
+# yields a container that pulls, starts, migrates and answers 200 — while
+# reporting the wrong version. That is exactly the failure the health gate
+# exists for, with no second build and no deliberately broken image to maintain.
+#
+# Shellcheck for deploy.sh lives in backup-smoke.yml with every other shell file
+# in the repo; this workflow owns behaviour only.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'        # Mondays 07:00 UTC, an hour after backup-smoke
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'deploy/deploy.sh'
+      - 'deploy/compose.yml'
+      - 'deploy/.env.example'
+      # deploy.sh invokes both, and the restore command it prints on rollback is
+      # only correct if restore.sh's argument order stays what it is today.
+      - 'scripts/backup.sh'
+      - 'scripts/restore.sh'
+      - '.github/workflows/deploy-smoke.yml'
+
+jobs:
+  deploy-smoke:
+    runs-on: ubuntu-latest
+
+    env:
+      # The runner has no access to GHCR for a version that has not been
+      # published yet — the images under test are built here and tagged locally.
+      DEPLOY_SKIP_PULL: 1
+      # 180s is right for a real host; here it is the floor on how long the
+      # deliberately-failing run takes, and nothing needs 180s on a runner.
+      DEPLOY_HEALTH_TIMEOUT: 60
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same invocation as ci.yml's image job: `docker compose build`, not a bare
+      # `docker build`, because the runner and migrate stages both COPY --from=repo.
+      - name: Build the four service images
+        working-directory: .
+        env:
+          REPO_CONTEXT: ${{ github.workspace }}
+        run: docker compose build finance-app migrate importer pg-backup
+
+      - name: Tag them under a good version and a bogus one
+        working-directory: .
+        run: |
+          VER="$(jq -r .version app/package.json)"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "Real version is $VER; 9.9.9 is the same image under a lying tag."
+          for IMG in finance-app finance-migrate finance-importer finance-backup; do
+            docker tag "$IMG:latest" "local/$IMG:$VER"
+            docker tag "$IMG:latest" "local/$IMG:9.9.9"
+          done
+
+      # Stand the bundle up exactly as the README tells an operator to: copy the
+      # template, replace every changeme, create the three bind-mount directories.
+      - name: Configure the bundle
+        working-directory: deploy
+        run: |
+          sed -e "s/^APP_VERSION=.*/APP_VERSION=${VER}/" \
+              -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=local|' \
+              -e 's/^\([A-Z_]*\)=changeme.*/\1=deploy-smoke-secret/' \
+              .env.example > .env
+          chmod 600 .env
+          mkdir -p imports importer/parsers backups
+          # Assignment lines only — the template's prose header says the word too.
+          if grep -qE '^[A-Z_]+=changeme' .env; then
+            echo "::error::a changeme placeholder survived — deploy.sh's preflight would (correctly) refuse this"
+            exit 1
+          fi
+
+      # AC: a full first install on a clean host, and the backup gate SKIPPED
+      # rather than failed — there is no database to dump yet.
+      #
+      # Asserted on deploy.sh's own log line, not on backups/ being empty: the
+      # pg-backup SERVICE runs its first dump the moment `up -d` starts it, so
+      # backups/ is legitimately non-empty seconds after any install. Only the
+      # log distinguishes "the gate was skipped" from "the gate ran".
+      - name: First install
+        working-directory: deploy
+        run: |
+          ./deploy.sh 2>&1 | tee install.log
+
+          if ! grep -qF "skipping the backup gate — there is no database to dump yet" install.log; then
+            echo "::error::the backup gate did not report itself skipped on a first install"
+            exit 1
+          fi
+          if grep -qF "pre-upgrade dump:" install.log; then
+            echo "::error::a pre-upgrade dump was taken on a first install"
+            exit 1
+          fi
+          if [ "$(cat .deployed-version)" != "$VER" ]; then
+            echo "::error::.deployed-version is '$(cat .deployed-version)', expected '$VER'"
+            exit 1
+          fi
+          echo "✓ installed $VER; the gate was skipped, not run"
+
+      # AC: re-running with the already-deployed version is a safe no-op.
+      - name: Re-run at the same version
+        working-directory: deploy
+        run: |
+          ./deploy.sh "$VER" 2>&1 | tee rerun.log
+
+          if ! grep -qF "already deployed" rerun.log; then
+            echo "::error::a re-run at the deployed version did not skip the gate — no schema change is possible there"
+            exit 1
+          fi
+          if grep -qF "pre-upgrade dump:" rerun.log; then
+            echo "::error::a re-run at the deployed version took a pre-upgrade dump"
+            exit 1
+          fi
+          if [ "$(cat .deployed-version)" != "$VER" ]; then
+            echo "::error::.deployed-version moved on a no-op re-run"
+            exit 1
+          fi
+          echo "✓ re-run at $VER changed nothing"
+
+      # The heart of it. 9.9.9 is the same image, so it pulls, starts, migrates
+      # and answers 200 — and reports $VER. Only the version half of the health
+      # condition can fail here, which is precisely what is being tested.
+      - name: Upgrade to a version that reports the wrong build, and roll back
+        working-directory: deploy
+        run: |
+          set +e
+          ./deploy.sh 9.9.9 > upgrade.log 2>&1
+          rc=$?
+          set -e
+          cat upgrade.log
+
+          if [ "$rc" != "2" ]; then
+            echo "::error::deploy.sh exited $rc, expected 2 (upgrade failed, rollback succeeded)"
+            exit 1
+          fi
+
+          # AC: a fresh dump landed BEFORE migrate ran. Taken from deploy.sh's own
+          # report, so the pg-backup service's scheduled dumps cannot be mistaken
+          # for the gate's.
+          DUMP="$(sed -n 's/^\[deploy\] ✓ pre-upgrade dump: //p' upgrade.log | tail -n1)"
+          if [ -z "$DUMP" ] || [ ! -f "$DUMP" ]; then
+            echo "::error::the gate reported no pre-upgrade dump, or named one that does not exist: '$DUMP'"
+            exit 1
+          fi
+          echo "DUMP=$DUMP" >> "$GITHUB_ENV"
+          echo "pre-upgrade dump: $DUMP"
+
+          # AC: the restore command is printed with the REAL dump path.
+          if ! grep -qF "restore.sh --force /backups/$(basename "$DUMP") Finances" upgrade.log; then
+            echo "::error::the printed restore command does not name the dump that was actually taken"
+            exit 1
+          fi
+
+          # AC: migrate and app logs are surfaced on failure.
+          for marker in '--- migrate logs ---' '--- finance-app logs ---'; do
+            if ! grep -qF "$marker" upgrade.log; then
+              echo "::error::'$marker' missing from the failure output"
+              exit 1
+            fi
+          done
+
+          # AC: after rollback the previous version is pinned, recorded and healthy.
+          if ! grep -qx "APP_VERSION=$VER" .env; then
+            echo "::error::.env was not re-pinned to $VER after rollback"
+            grep '^APP_VERSION=' .env
+            exit 1
+          fi
+          if [ "$(cat .deployed-version)" != "$VER" ]; then
+            echo "::error::.deployed-version moved despite the upgrade failing"
+            exit 1
+          fi
+          if [ "$(stat -c '%a' .env)" != "600" ]; then
+            echo "::error::.env is mode $(stat -c '%a' .env) after the pin/rollback cycle, expected 600"
+            exit 1
+          fi
+
+          HEALTH="$(curl -fsS http://127.0.0.1:3001/api/health)"
+          GOT="$(echo "$HEALTH" | jq -r '.build.version')"
+          if [ "$GOT" != "$VER" ]; then
+            echo "::error::/api/health reports '$GOT' after rollback, expected '$VER'"
+            exit 1
+          fi
+          echo "✓ rolled back to $VER, healthy, restore command printed"
+
+      # The gate is only worth having if what it produces is restorable. Restores
+      # into a throwaway database, so no --force is needed and Finances is not
+      # touched — the same shape as backup-smoke.yml's round trip.
+      - name: The pre-upgrade dump is restorable
+        working-directory: deploy
+        run: |
+          docker compose run --rm -T --no-deps --entrypoint /scripts/restore.sh pg-backup \
+            "/backups/$(basename "$DUMP")" Finances_Restore_Check
+          echo "✓ the dump deploy.sh gated on actually restores"
+
+      - name: Tear down
+        if: always()
+        working-directory: deploy
+        run: docker compose down -v --remove-orphans || true

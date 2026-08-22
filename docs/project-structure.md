@@ -10,6 +10,7 @@ finance-stack/
 ├── .env.example                          # Template for credentials (copy to .env)
 ├── .dockerignore                         # Excludes files from Docker build context
 ├── deploy/                               # Deployment bundle — packed as finance-stack-X.Y.Z.tar.gz per release (#227)
+│   ├── deploy.sh                         # Install + upgrade: backup gate, health gate, automatic rollback (#228)
 │   ├── compose.yml                       # Production stack: images pinned to ${APP_VERSION}, no build:, finance-app on 127.0.0.1
 │   ├── .env.example                      # Deploy-time env — the root template plus APP_VERSION and IMAGE_REGISTRY
 │   ├── finance-stack.service             # systemd unit (oneshot around `docker compose up -d`)
@@ -221,7 +222,8 @@ finance-stack/
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
 ├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests
 ├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
-├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122)
+├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122); also the repo's shellcheck step
+├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh install → failed upgrade → automatic rollback (#228)
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── caddy/
 │   └── Caddyfile                         # Reverse proxy / automatic TLS for exposed deployments (--profile edge, #182)

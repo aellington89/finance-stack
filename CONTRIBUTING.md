@@ -172,6 +172,33 @@ environment entry, profile or label — must match. It also compares the two
 The diff it prints is of the rendered `docker compose config` output, so it
 points at the resolved value rather than the line you typed.
 
+**`deploy/deploy.sh` needs no new variables here.** Its three overrides
+(`DEPLOY_SKIP_PULL`, `DEPLOY_HEALTH_TIMEOUT`, `DEPLOY_HEALTH_URL`) configure the
+script, not the stack, so they are plain environment variables documented in the
+script header and the bundle README. Adding one to `deploy/.env.example` would
+fail this gate, which allows exactly two deploy-only names.
+
+### Deploy smoke
+
+`.github/workflows/deploy-smoke.yml` runs `deploy/deploy.sh` end to end — first
+install, a no-op re-run, then an upgrade that is deliberately made to fail its
+health gate — and asserts each of the guarantees the script advertises
+([#228](https://github.com/aellington89/finance-stack/issues/228)). It runs
+weekly and on PRs touching the script, `deploy/compose.yml`, or the backup and
+restore scripts it invokes.
+
+The "bad release" costs nothing to maintain: `build.version` is inlined from
+`app/package.json` at image build time, so the job tags the *same* image as
+`9.9.9` and gets a container that starts, migrates and answers 200 while
+reporting the wrong version — exactly the failure the health gate exists for.
+
+A red job here usually means one of three things: the health poll no longer
+combines its two conditions, `docker compose run` lost its `--no-deps` or
+`--entrypoint` (which makes the backup gate start `migrate`, or hang on
+`pg-backup`'s sleep loop), or a message the assertions grep for was reworded.
+Shellcheck for the script lives in `backup-smoke.yml` with every other shell file
+in the repo.
+
 ### Docs index gate
 
 Every guide in `docs/` is indexed in two hand-maintained lists — `## Guides` in
