@@ -8,6 +8,13 @@ Packed as `finance-stack-X.Y.Z.tar.gz` and attached to every
 [GitHub Release](https://github.com/aellington89/finance-stack/releases)
 ([Issue #227](https://github.com/aellington89/finance-stack/issues/227)).
 
+This file is canonical for the override variables, the manual equivalent
+sequence, and the troubleshooting commands below, and it is the copy that matches
+the release you are holding. The repository's
+[docs/deployment.md](https://github.com/aellington89/finance-stack/blob/master/docs/deployment.md)
+carries the same install and upgrade procedure with links into the full guides —
+backups, database roles, secrets, auth — and tracks `master`.
+
 ```
 /opt/finance-stack/
   deploy.sh                install and upgrade — the one command you run
@@ -85,8 +92,15 @@ the migrations and hosts `verify-db-roles.sh`
 docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username> [--role admin|user]
 ```
 
-The password is prompted for twice, hidden, with an eight-character minimum.
-Set `CREATE_USER_PASSWORD` instead if you are scripting an unattended install.
+The password is prompted for twice, hidden, with an eight-character minimum. For
+a scripted install there is no TTY to prompt on, so pass the password into the
+container with `-e` — exporting it in your own shell does nothing, because
+`docker compose run` does not forward the host environment:
+
+```sh
+docker compose run --rm -e CREATE_USER_PASSWORD='…' \
+  --entrypoint npm migrate run auth:create-user -- <username>
+```
 
 It connects as `postgres`, not `finance_app` — the `users` table is deliberately
 read-only to the application role (#130), so an app-level compromise cannot mint
@@ -273,7 +287,7 @@ docker compose --profile init run --rm init-script   # rebuild balance history
 docker compose ps                                    # what is up, and healthy
 docker compose logs migrate                          # first stop for a failed start
 docker compose logs finance-app | jq -c 'select(.level=="error")'
-docker compose exec pg-backup /scripts/verify-db-roles.sh   # role/grant drift
+docker compose run --rm --entrypoint bash migrate /scripts/verify-db-roles.sh Finances   # role/grant drift
 ```
 
 `finance-app` will not start until `migrate` has exited 0, so a stack stuck with

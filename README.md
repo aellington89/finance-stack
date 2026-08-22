@@ -36,7 +36,7 @@ Credentials are sourced from a single `.env` file on the deployment host — nev
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Node.js 24+](https://nodejs.org/) (for the Next.js application)
+- [Node.js 24+](https://nodejs.org/) — for the Next.js application, **local development only**. A deployed server needs neither Node nor a checkout; see [Deploying to a server](#deploying-to-a-server).
 
 ## Getting Started
 
@@ -125,6 +125,31 @@ docker compose down
 
 Data is persisted in Docker volumes and will be available on next startup.
 
+## Deploying to a server
+
+Getting Started above is the **development** path — a checkout, Node, and a build
+on your machine. A server gets none of that. Every release attaches
+`finance-stack-X.Y.Z.tar.gz` to its [GitHub Release](https://github.com/aellington89/finance-stack/releases);
+it unpacks to `/opt/finance-stack/`, pulls four published images from GHCR, and
+needs only Docker Engine and the Compose plugin on the host:
+
+```bash
+tar xzf finance-stack-X.Y.Z.tar.gz && cd finance-stack-X.Y.Z
+cp .env.example .env && chmod 600 .env   # then replace every `changeme`
+./deploy.sh
+```
+
+`deploy.sh` is the upgrade command too: it takes a database dump **before** any
+migration runs, aborts if that dump fails, health-gates the result against
+`/api/health`, and rolls back automatically if the new version never reports
+healthy. Since Drizzle generates no down migrations, that dump is the only route
+back across a schema change — which is why each release declares a
+`**Migration:**` marker saying whether a rollback needs it.
+
+See [docs/deployment.md](docs/deployment.md) for the full runbook: first install,
+creating the first user, upgrading, rollback, database restore, backups, and
+pointing Metabase at its read-only role.
+
 ## Backups
 
 The `pg-backup` service runs a scheduled `pg_dump` of the `Finances` and
@@ -148,7 +173,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Contributing](CONTRIBUTING.md) — dev workflow, conventions, and the release process
 - [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
-- [Deployment & Exposure](docs/deployment.md) — trusted-network vs public-internet posture, TLS termination, security headers, and rate limits
+- [Deployment & Exposure](docs/deployment.md) — installing and upgrading a release, rollback and database restore, and the trusted-network vs public-internet posture
 - [Secrets](docs/secrets.md) — every credential, how production sources them, rotation, and what keeps them out of the repo and the images
 - [Audit Log](docs/audit-log.md) — how mutations are recorded, who gets attributed, reading the log, and retention
 - [Input Validation & Error Messages](docs/input-validation.md) — the per-action validation checklist, the SQL parameterization rule, and what a user is allowed to see

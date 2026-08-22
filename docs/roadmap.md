@@ -44,11 +44,22 @@ target and building there, and the image that runs is not the image CI verified
 process that stops before producing a deployable artifact cannot make a promise
 about how the thing behaves once deployed.
 
-**v1.0.0 is cut once Phases 0–2.5 have shipped and stabilized in real use**,
-which includes closing out the remaining security-epic
-([#100](https://github.com/aellington89/finance-stack/issues/100)) scope. It is a
-commitment made *after* the risky auth work has proven stable, not the moment it
-merges.
+**v1.0.0 is cut once Phases 0–2.5 have shipped and stabilized in real use.** It
+is a commitment made *after* the risky auth work has proven stable, not the moment
+it merges. The security-epic condition that used to sit here
+([#100](https://github.com/aellington89/finance-stack/issues/100)) is closed; what
+remains is the **v1.0.0 — Stabilization** milestone, which exists so that "has
+stabilized" is a checkable condition rather than a feeling:
+
+| Gate | Why it blocks the promise |
+|---|---|
+| [#294](https://github.com/aellington89/finance-stack/issues/294) — run v0.4.0 on a real host, and a real upgrade | v0.4.0 is the *first tag that publishes anything*. Until a released bundle has actually installed and upgraded somewhere, "expose it safely" rests on a deployment path that has never deployed. |
+| [#141](https://github.com/aellington89/finance-stack/issues/141) — E2E tests | Nothing currently asserts the core money path end to end, so a regression in it can ship unseen. |
+| [#142](https://github.com/aellington89/finance-stack/issues/142) — coverage thresholds | Without a floor, coverage erodes silently between releases. |
+
+v0.4.0 is the **release candidate**, and a candidate is the artifact you run in
+order to find out what is wrong with it. Promoting it to 1.0 in the same breath
+would mean there was never a candidate period at all.
 
 ## The roadmap
 
@@ -56,9 +67,9 @@ merges.
 |---|---|---|---|
 | **v0.1.5** ✅ | Phase 0 — Quick wins + the migration refactor | Finish the 0.1.x tech-debt cleanup — **released 2026-07-10** | Patch |
 | **v0.2.0** ✅ | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost — **released 2026-08-09** | Minor |
-| **v0.3.0** | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity | Minor |
-| **v0.4.0** | Phase 2.5 — Deployment & upgrade | GHCR images + deploy bundle: a verified artifact and a backup-gated, health-checked upgrade. **This is the 1.0 release candidate** | Minor |
-| **v1.0.0** | *(stabilization of 0.2.0–0.4.0)* | **The safety/stability commitment: trustworthy & exposable** | **Major** |
+| **v0.3.0** ✅ | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity — **released 2026-08-15** | Minor |
+| **v0.4.0** ✅ | Phase 2.5 — Deployment & upgrade | GHCR images + deploy bundle: a verified artifact and a backup-gated, health-checked upgrade. **This is the 1.0 release candidate** — **released 2026-08-22** | Minor |
+| **v1.0.0** | v1.0.0 — Stabilization | **The safety/stability commitment: trustworthy & exposable** — gated on #294, #141, #142 | **Major** |
 | **v1.1.0** | Phase 3 — DX compounding | Importer hardening, E2E tests, tooling | Minor |
 | **v1.2.0** | Phase 4 — Performance polish | Caching, materialized views, chart consolidation | Minor |
 | **v1.3.0** | Phase 5 — Small UX fixes | Accessibility, mobile, UX debt | Minor |
@@ -68,9 +79,11 @@ merges.
 > 1.0). This roadmap takes the conservative path: 1.0 is a promise best made after
 > auth has shaken out across a 0.2/0.3/0.4 line. Testing gates
 > [#141](https://github.com/aellington89/finance-stack/issues/141) and
-> [#142](https://github.com/aellington89/finance-stack/issues/142) (nominally
-> Phase 3 / v1.1.0) are **recommended before cutting v1.0.0** for release
-> confidence.
+> [#142](https://github.com/aellington89/finance-stack/issues/142) were previously
+> filed under Phase 3 and described as *recommended* before v1.0.0; they are now
+> **required**, and moved into the v1.0.0 — Stabilization milestone with
+> [#294](https://github.com/aellington89/finance-stack/issues/294). A gate that
+> only applies when someone remembers it is not a gate.
 
 ## Per-issue mapping
 
@@ -111,6 +124,8 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > phases below: a milestone maps to a version *band*, and you cut when ready.
 
 ### v0.3.0 — Phase 2 (Auth-gated lookup-table protection)
+**✅ Released 2026-08-15** — see [CHANGELOG](../CHANGELOG.md#030---2026-08-15).
+
 - [#81](https://github.com/aellington89/finance-stack/issues/81) Restrict settings/categories page to admin users *(superseded by #87 — see the note below)*
 - [#87](https://github.com/aellington89/finance-stack/issues/87) Restrict user-level editing of static lookup tables
 - [#109](https://github.com/aellington89/finance-stack/issues/109) Protect the lookup rows the app owns; drop Transaction Type creation
@@ -152,21 +167,31 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 > CRUD still works, so the decision cannot be quietly reversed.
 
 ### v0.4.0 — Phase 2.5 (Deployment & upgrade — 1.0 release candidate)
+**✅ Released 2026-08-22** — see [CHANGELOG](../CHANGELOG.md#040---2026-08-22).
+The epic closed with #229; every child above shipped in this release.
+
 - [#223](https://github.com/aellington89/finance-stack/issues/223) Deployment & upgrade mechanism: GHCR images + deploy bundle *(tracking epic — closes when its children do)*
+- [#277](https://github.com/aellington89/finance-stack/issues/277) Migration-reversibility marker in CHANGELOG and the changelog gate *(split from #229 — no dependencies; had to land before the v0.4.0 tag)*
 - [#224](https://github.com/aellington89/finance-stack/issues/224) Containerize the importer and backup services; bake code out of bind mounts
 - [#225](https://github.com/aellington89/finance-stack/issues/225) Fold database creation into the migrate service
 - [#226](https://github.com/aellington89/finance-stack/issues/226) Publish versioned images to GHCR from `release.yml`
 - [#227](https://github.com/aellington89/finance-stack/issues/227) Deployment bundle: production compose, systemd unit, release asset
 - [#228](https://github.com/aellington89/finance-stack/issues/228) `deploy.sh`: pre-upgrade backup gate and health-gated rollback
-- [#229](https://github.com/aellington89/finance-stack/issues/229) Deployment docs and the migration-reversibility marker
+- [#229](https://github.com/aellington89/finance-stack/issues/229) Deployment docs
 - [#288](https://github.com/aellington89/finance-stack/issues/288) Let the deployment bundle create the first user *(new — from #227)*
+
+### v1.0.0 — Stabilization
+Not a phase of new work: the conditions under which the 1.0 promise can honestly
+be made. See [What v1.0.0 means here](#what-v100-means-here).
+
+- [#294](https://github.com/aellington89/finance-stack/issues/294) Run v0.4.0 on a real host, and a real upgrade, before cutting v1.0.0 *(new — from the v0.4.0 release review)*
+- [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(moved from Phase 3 — now required, not recommended)*
+- [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(moved from Phase 3 — now required, not recommended)*
 
 ### v1.1.0 — Phase 3 (DX compounding)
 - [#124](https://github.com/aellington89/finance-stack/issues/124) Importer idempotency + dead-letter handling
 - [#132](https://github.com/aellington89/finance-stack/issues/132) Importer Dockerfile + healthcheck
 - [#133](https://github.com/aellington89/finance-stack/issues/133) Pre-commit hooks + Makefile
-- [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(recommended before v1.0.0)*
-- [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(recommended before v1.0.0)*
 - [#185](https://github.com/aellington89/finance-stack/issues/185) Audit docker-compose services: necessity & profile gating *(new)*
 - [#193](https://github.com/aellington89/finance-stack/issues/193) Adopt `react-hooks/set-state-in-effect`; drop the `eslint-plugin-react-hooks` pin *(new — from #131)*
 - [#195](https://github.com/aellington89/finance-stack/issues/195) Run `npm run typecheck` in CI *(new — from #131)*
@@ -176,6 +201,7 @@ The milestone shipped whole rather than sliced; all 23 issues below are in it.
 - [#260](https://github.com/aellington89/finance-stack/issues/260) `release.yml` uses `MB_DB_USER: metabase`, diverging from the shipped `metabase_user` *(new — from #250)*
 - [#211](https://github.com/aellington89/finance-stack/issues/211) Re-take `node:26-alpine` once it reaches LTS *(after 2026-10-28; from #210)*
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
+- [#292](https://github.com/aellington89/finance-stack/issues/292) `.trivyignore`: split by source of finding, or move to `.trivyignore.yaml` *(new — from #291)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
 - [#271](https://github.com/aellington89/finance-stack/issues/271) `transaction_types` id 9 ships as `Accrued Amoritized Interest` — *amortized* is misspelled *(new — from #109)*
