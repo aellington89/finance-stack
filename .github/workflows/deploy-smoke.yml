@@ -12,6 +12,13 @@ name: Deploy smoke
 # reporting the wrong version. That is exactly the failure the health gate
 # exists for, with no second build and no deliberately broken image to maintain.
 #
+# It also owns the first-user path (Issue #288). That is a PACKAGING guarantee —
+# "a host with only Docker and the release bundle can create the first account" —
+# and it is unprovable anywhere else in CI: a unit test runs on a machine with a
+# full checkout, which is exactly the condition being removed. Here the bundle is
+# all there is, so the command either works from the published image or it does
+# not.
+#
 # Shellcheck for deploy.sh lives in backup-smoke.yml with every other shell file
 # in the repo; this workflow owns behaviour only.
 
@@ -28,6 +35,10 @@ on:
       # only correct if restore.sh's argument order stays what it is today.
       - 'scripts/backup.sh'
       - 'scripts/restore.sh'
+      # The migrate stage carries the first-user CLI and the tsconfig.json that
+      # makes its @/… imports resolve (#288). A change there can break the first
+      # -user step below without touching anything else in this list.
+      - 'app/Dockerfile'
       - '.github/workflows/deploy-smoke.yml'
 
 jobs:
@@ -106,6 +117,92 @@ jobs:
             exit 1
           fi
           echo "✓ installed $VER; the gate was skipped, not run"
+
+      # AC (#288): the bundle can create the first user. Nothing on this runner
+      # is used but the images and deploy/ — no checkout is on the PATH of this
+      # command, which is the whole point.
+      #
+      # -T because there is no TTY on a runner, so the hidden password prompt
+      # cannot be used and CREATE_USER_PASSWORD is the documented fallback. An
+      # operator on a real host gets the prompt: `docker compose run` allocates a
+      # TTY by default.
+      - name: The bundle can create the first user
+        working-directory: deploy
+        run: |
+          set -o pipefail
+
+          docker compose run --rm -T \
+            -e CREATE_USER_PASSWORD=deploy-smoke-first-user \
+            --entrypoint npm migrate run auth:create-user -- smokeuser 2>&1 | tee createuser.log
+
+          if ! grep -qF '✓ User "smokeuser" is ready in Finances' createuser.log; then
+            echo "::error::the bundle could not create the first user — see app/Dockerfile's migrate stage (#288)"
+            exit 1
+          fi
+
+          # --role defaults to admin, and re-running without it resets the role
+          # to admin. That is documented as a sharp edge, so it is asserted.
+          ROLE="$(docker compose run --rm -T --entrypoint psql migrate \
+            -d Finances -tAc "select role from users where username='smokeuser'" | tr -d '[:space:]')"
+          if [ "$ROLE" != "admin" ]; then
+            echo "::error::first user was created with role '$ROLE', expected 'admin'"
+            exit 1
+          fi
+          echo "✓ created smokeuser as admin, from the bundle alone"
+
+      # AC (#288): re-running upserts on username — this is the password-reset
+      # path, not a second account.
+      - name: Re-running the CLI resets the password
+        working-directory: deploy
+        run: |
+          BEFORE="$(docker compose run --rm -T --entrypoint psql migrate \
+            -d Finances -tAc "select password_hash from users where username='smokeuser'" | tr -d '[:space:]')"
+
+          docker compose run --rm -T \
+            -e CREATE_USER_PASSWORD=deploy-smoke-second-password \
+            --entrypoint npm migrate run auth:create-user -- smokeuser > /dev/null
+
+          AFTER="$(docker compose run --rm -T --entrypoint psql migrate \
+            -d Finances -tAc "select password_hash from users where username='smokeuser'" | tr -d '[:space:]')"
+          ROWS="$(docker compose run --rm -T --entrypoint psql migrate \
+            -d Finances -tAc "select count(*) from users where username='smokeuser'" | tr -d '[:space:]')"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "$AFTER" ]; then
+            echo "::error::re-running the CLI did not change the stored password hash"
+            exit 1
+          fi
+          if [ "$ROWS" != "1" ]; then
+            echo "::error::re-running the CLI left $ROWS rows for smokeuser, expected 1 (it must upsert, not insert)"
+            exit 1
+          fi
+          echo "✓ the same command resets a password rather than adding an account"
+
+      # AC (#288): it must connect as the superuser. The users table is read-only
+      # to finance_app (#130) so that an app-level compromise cannot mint an
+      # account — asserted here rather than left as a claim in the docs, because
+      # it is the reason the documented command uses the superuser DATABASE_URL
+      # the migrate service already carries.
+      - name: Creating a user as finance_app is refused
+        working-directory: deploy
+        run: |
+          set +e
+          docker compose run --rm -T \
+            -e DATABASE_URL="postgresql://finance_app:deploy-smoke-secret@postgres:5432/Finances" \
+            -e CREATE_USER_PASSWORD=deploy-smoke-should-not-work \
+            --entrypoint npm migrate run auth:create-user -- shouldnotexist > refused.log 2>&1
+          rc=$?
+          set -e
+          cat refused.log
+
+          if [ "$rc" = "0" ]; then
+            echo "::error::finance_app was able to write to users — the #130 grant has regressed"
+            exit 1
+          fi
+          if ! grep -qF "permission denied for table users" refused.log; then
+            echo "::error::the run failed, but not with 'permission denied for table users' — check what actually broke"
+            exit 1
+          fi
+          echo "✓ finance_app is refused, as #130 intends"
 
       # AC: re-running with the already-deployed version is a safe no-op.
       - name: Re-run at the same version

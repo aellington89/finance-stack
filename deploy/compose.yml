@@ -98,6 +98,21 @@ services:
       PGPORT: 5432
       PGUSER: ${POSTGRES_USER}          # Superuser: this job applies DDL and creates roles
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      # Not for the migration job itself — migrate-and-seed.sh builds its own URL
+      # inline per drizzle-kit invocation, so that path is unaffected by this.
+      # This is for the on-demand first-user CLI (#288), which reaches the
+      # database through app/lib/db and therefore reads DATABASE_URL at module
+      # load:
+      #
+      #   docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>
+      #
+      # The superuser above, deliberately: the users table is read-only to
+      # finance_app (#130) so that an app-level compromise cannot mint an
+      # account, which means that role cannot run this command at all. Supplied
+      # here rather than typed as `-e DATABASE_URL=...` so creating the first
+      # user never puts the superuser password into shell history or ps output
+      # on a deployment host.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${FINANCE_APP_DB:-Finances}
       FINANCE_APP_DB: ${FINANCE_APP_DB:-Finances}
       # Passwords for the least-privilege service roles this job creates (#130).
       # Deliberately no defaults — migrate-and-seed.sh aborts if any is empty
