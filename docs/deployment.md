@@ -105,16 +105,26 @@ rollback also failed" (exit 3) precisely because the difference needs a person.
 Nothing unattended can decide whether a `breaking` release additionally needs its
 database restored.
 
-### One step the bundle cannot do
+### Creating the first user
 
-**Creating the first user.** The CLI needs the application source and Node: the
-`finance-app` image ships the standalone server with npm removed, and
-`finance-migrate` carries the migration scripts but not `app/lib/`. Run it from a
-machine that has a checkout, over an SSH tunnel to the host's loopback-bound
-Postgres — the procedure is in the bundle README and in
-[Authentication](auth.md). Tracked as
-[#288](https://github.com/aellington89/finance-stack/issues/288), which proposes
-carrying `app/lib/` in the `finance-migrate` image so the CLI runs there.
+There is no public registration, so a fresh install has no account to sign in
+with until you make one. It runs in the `migrate` container, which is where every
+other one-shot administrative command already lives:
+
+```sh
+docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>
+```
+
+This used to be the one step the bundle could not do. The CLI needs Node and the
+application source, and neither published image had both — the `finance-app`
+runner stage deletes npm ([#131](https://github.com/aellington89/finance-stack/issues/131)),
+and `finance-migrate` carried `app/scripts/` but not `app/lib/`, so a bundle
+install came up healthy and could not be logged into without a checkout on some
+other machine. `finance-migrate` now carries `app/lib/` and `app/tsconfig.json`
+(the latter is what makes the `@/…` imports resolve under `tsx`), which closes
+the last hole in "a host needs Docker and nothing else"
+([#288](https://github.com/aellington89/finance-stack/issues/288)). Details and
+the password-reset path are in [Authentication](auth.md).
 
 ## Upgrading
 
