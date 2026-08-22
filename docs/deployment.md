@@ -1,7 +1,10 @@
 # Deployment & Exposure
 
-Where this stack may safely run, what has to be true before it is reachable from
-the internet, and how the edge controls are verified. Added in
+How a release is installed, upgraded, rolled back and restored on a server, and
+what has to be true before that server is reachable from the internet. The
+deployment half comes from the epic in
+[Issue #223](https://github.com/aellington89/finance-stack/issues/223); the
+exposure half from
 [Issue #182](https://github.com/aellington89/finance-stack/issues/182).
 
 ## What the stack is made of
@@ -47,8 +50,14 @@ imports/  importer/parsers/  backups/      data, bind-mounted
 ```
 
 Requirements on the host are Docker Engine and the Compose plugin. Nothing else —
-no source tree, no Node, no build toolchain. Install and upgrade steps live in the
-bundle's own `README.md`, so they travel with the release they describe.
+no source tree, no Node, no build toolchain.
+
+**The bundle carries its own copy of this runbook**, so the steps travel with the
+release they describe and work on a host that cannot reach GitHub. This page is
+the same procedure with links into the rest of these guides; the bundle's
+`README.md` is the reference for what is deliberately not repeated here — the
+`DEPLOY_*` override variables, the equivalent sequence done by hand, and the
+troubleshooting one-liners.
 
 `deploy/compose.yml` is a mirror of the repo's `docker-compose.yml` with exactly
 two differences:
@@ -89,7 +98,105 @@ pattern already applied to `postgres` and `metabase`, extended to the app tier.
 Two ways in, then: an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 <host>`) for
 occasional access, or the `edge` profile below for anything long-lived.
 
+## First install
+
+The bundle is the whole install. On a host with Docker Engine and the Compose
+plugin:
+
+```sh
+# 1. Unpack, and put it where it lives
+tar xzf finance-stack-X.Y.Z.tar.gz
+sudo mv finance-stack-X.Y.Z /opt/finance-stack
+cd /opt/finance-stack
+
+# 2. Configure
+cp .env.example .env
+chmod 600 .env
+"${EDITOR:-vi}" .env
+
+# 3. Create the bind-mount directories, so Docker does not create them as root
+mkdir -p imports importer/parsers backups
+
+# 4. Install
+./deploy.sh
+
+# 5. Verify
+curl -sS http://127.0.0.1:3001/api/health
+docker compose ps
+```
+
+`./deploy.sh` with no argument uses the `APP_VERSION` already in `.env`, which
+the bundle ships pre-filled to the release it was cut from. Step 4 pulls the
+images, waits for Postgres, runs the one-shot `migrate` job — which creates the
+databases, roles and seeds — then starts the app, importer and backup services,
+and does not return success until `/api/health` reports that version.
+
+**Every `changeme` in `.env` has to go.** `deploy.sh` refuses to run with a
+placeholder still in place, and requires these eight to be set to something real:
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `AUTH_SECRET`,
+`FINANCE_APP_DB_PASSWORD`, `FINANCE_IMPORTER_DB_PASSWORD`,
+`FINANCE_BI_DB_PASSWORD`, `IMAGE_REGISTRY`. Generate the secret rather than
+inventing one, since it signs every session cookie:
+
+```sh
+openssl rand -base64 33
+```
+
+Three things about that file are better known before you fill it in than after:
+
+- **`MB_DB_PASS` is deliberately not required.** Empty is a meaningful value
+  there — it tells the migrate job to skip provisioning Metabase's metadata role
+  and database entirely
+  ([#225](https://github.com/aellington89/finance-stack/issues/225)). A leftover
+  `changeme` is still a misconfiguration and still aborts.
+- **`POSTGRES_PASSWORD` is the one credential that does not rotate in place.** It
+  is applied only when the Postgres data directory is first initialized, so
+  editing it later changes nothing and locks out every maintenance job. Set it
+  now; changing it afterwards means altering the role first, per
+  [Rotating a role password](database.md#rotating-a-role-password).
+- **The three `FINANCE_*_DB_PASSWORD` values go into URL-form connection
+  strings**, so keep them URL-safe or percent-encode them — a literal `@ : / ? #`
+  breaks the URL. The full credential inventory, how production sources them, and
+  the rotation procedure are in [Secrets](secrets.md).
+
+`.env` is mode `600` because it is the deployment's entire secret store, and
+`deploy.sh` preserves that mode every time it re-pins a version.
+
+### Creating the first user
+
+There is no public registration, so a fresh install has no account to sign in
+with until you make one. It runs in the `migrate` container, which is where every
+other one-shot administrative command already lives:
+
+```sh
+docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>
+```
+
+The password is prompted for twice, hidden, with an eight-character minimum, and
+re-running with an existing username resets it. A scripted install has no TTY to
+prompt on, so pass the password in with `-e CREATE_USER_PASSWORD='…'` on that
+same command — exporting it in your own shell does nothing, since
+`docker compose run` does not forward the host environment.
+
+This used to be the one step the bundle could not do. The CLI needs Node and the
+application source, and neither published image had both — the `finance-app`
+runner stage deletes npm ([#131](https://github.com/aellington89/finance-stack/issues/131)),
+and `finance-migrate` carried `app/scripts/` but not `app/lib/`, so a bundle
+install came up healthy and could not be logged into without a checkout on some
+other machine. `finance-migrate` now carries `app/lib/` and `app/tsconfig.json`
+(the latter is what makes the `@/…` imports resolve under `tsx`), which closes
+the last hole in "a host needs Docker and nothing else"
+([#288](https://github.com/aellington89/finance-stack/issues/288)). Details and
+the password-reset path are in [Authentication](auth.md).
+
 ### systemd
+
+```sh
+sudo cp finance-stack.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now finance-stack
+systemctl status finance-stack
+```
 
 `finance-stack.service` is `Type=oneshot` + `RemainAfterExit=yes` around
 `docker compose up -d` / `down`, with `TimeoutStartSec=600` because a first
@@ -105,27 +212,6 @@ rollback also failed" (exit 3) precisely because the difference needs a person.
 Nothing unattended can decide whether a `breaking` release additionally needs its
 database restored.
 
-### Creating the first user
-
-There is no public registration, so a fresh install has no account to sign in
-with until you make one. It runs in the `migrate` container, which is where every
-other one-shot administrative command already lives:
-
-```sh
-docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>
-```
-
-This used to be the one step the bundle could not do. The CLI needs Node and the
-application source, and neither published image had both — the `finance-app`
-runner stage deletes npm ([#131](https://github.com/aellington89/finance-stack/issues/131)),
-and `finance-migrate` carried `app/scripts/` but not `app/lib/`, so a bundle
-install came up healthy and could not be logged into without a checkout on some
-other machine. `finance-migrate` now carries `app/lib/` and `app/tsconfig.json`
-(the latter is what makes the `@/…` imports resolve under `tsx`), which closes
-the last hole in "a host needs Docker and nothing else"
-([#288](https://github.com/aellington89/finance-stack/issues/288)). Details and
-the password-reset path are in [Authentication](auth.md).
-
 ## Upgrading
 
 `deploy.sh` ships in the bundle and is the single entry point for both installing
@@ -135,7 +221,47 @@ and upgrading ([#228](https://github.com/aellington89/finance-stack/issues/228))
 cd /opt/finance-stack && ./deploy.sh 0.4.1
 ```
 
-Three things in it are worth understanding rather than just running.
+It is idempotent — re-running it at the already-deployed version converges the
+stack and changes nothing else.
+
+**Read the release's `**Migration:**` marker first.** It is the first line of the
+release notes, on the GitHub Release and in [`CHANGELOG.md`](../CHANGELOG.md)
+alike, and it answers in advance the question a failed upgrade would otherwise
+ask you at the worst possible moment
+([#277](https://github.com/aellington89/finance-stack/issues/277)):
+
+| Marker | Rolling back across this release means |
+|---|---|
+| `none` | Re-pin the previous `APP_VERSION`. |
+| `backward-compatible` | Re-pin the previous `APP_VERSION`. The old app runs against the new schema. |
+| `breaking` | **Restore the pre-upgrade dump.** There are no down migrations. |
+
+How a release picks its value is in
+[Releases & Tagging](releases.md#release-procedure); the changelog gate fails a
+release that carries no marker, so "the notes didn't say" is not a state you can
+end up in.
+
+### What it does, in order
+
+1. **Preflight** — Docker, the Compose plugin, `curl`, `.env`, and every required
+   variable actually set to something other than `changeme`.
+2. **Pull** — a nonexistent or bad version fails here, before anything running is
+   touched and before `.env` is written.
+3. **Backup gate** — a fresh `pg_dump` into `backups/`, taken *before* `migrate`
+   runs. **If the dump fails, the deploy aborts.** Skipped on a first install
+   (there is no database yet) and on a re-run of the deployed version (no schema
+   change is possible), and never skipped silently.
+4. **Pin** — writes `APP_VERSION` into `.env`, preserving its mode.
+5. **Apply** — `docker compose up -d`. Compose sequences it: postgres healthy →
+   migrate exits 0 → app and importer start.
+6. **Health gate** — polls `/api/health` for up to 180 seconds.
+7. **On failure** — prints the `migrate` and `finance-app` logs, re-pins the
+   previous version, brings it back up, re-polls, and tells you the dump path and
+   the exact restore command.
+8. **On success** — records the version in `.deployed-version` and removes image
+   tags older than the rollback target.
+
+Three of those are worth understanding rather than just running.
 
 **The dump is a gate, not a step.** It runs before `migrate` does, and a failed
 dump aborts the deploy with nothing changed. `drizzle-kit` generates no down
@@ -153,18 +279,160 @@ still answering 200 with the old version while the new one starts.
 script re-pins the previous version, brings it back and re-polls — and then
 prints the pre-upgrade dump's path with the exact `restore.sh` invocation,
 because where the release carried a schema change the old app may not run against
-the schema now on disk. Check the release's `**Migration:**` marker: `none` and
-`backward-compatible` need no restore, `breaking` does.
+the schema now on disk.
 
-The exit codes are meant to be branched on: `0` deployed, `1` aborted with
-nothing applied, `2` rolled back and healthy, `3` rollback failed too. The full
-runbook ([#229](https://github.com/aellington89/finance-stack/issues/229)) is the
-one remaining step of
-[#223](https://github.com/aellington89/finance-stack/issues/223).
+The exit codes are meant to be branched on:
+
+| Code | Meaning |
+|---|---|
+| `0` | Deployed and healthy. |
+| `1` | Aborted before anything was applied — preflight, the pull, or the dump failed. The running stack and `.env` are untouched. |
+| `2` | The upgrade failed and was **rolled back**; the previous version is healthy again. |
+| `3` | The upgrade failed **and the rollback failed**. Needs a human. |
 
 `.github/workflows/deploy-smoke.yml` exercises install → failed upgrade →
 automatic rollback on every PR that touches the script, using the same image
 tagged under a version it does not report as the "bad release".
+
+The bundle's own `README.md` is the reference for the parts deliberately not
+repeated here: the `DEPLOY_SKIP_PULL` / `DEPLOY_HEALTH_TIMEOUT` /
+`DEPLOY_HEALTH_URL` overrides, the equivalent sequence done by hand, and the
+troubleshooting one-liners. It ships beside `deploy.sh` in the release you are
+running, so it is always the copy that matches.
+
+### Rolling back
+
+On a failed health gate there is nothing to run — the script has already re-pinned
+the previous version, brought it back and re-polled. Exit `2` means that worked
+and the previous version is healthy; exit `3` means it did not.
+
+To go back deliberately, name the older version:
+
+```sh
+./deploy.sh 0.4.0
+```
+
+Either way you have restored the *application*. If the release you are leaving was
+marked `breaking`, the schema on disk is still the new one and the old app may not
+run against it — carry on to the next section. For `none` and
+`backward-compatible`, you are done.
+
+### Restoring the database
+
+`deploy.sh` prints the exact command on a rollback, with the real dump path
+filled in. It looks like this:
+
+```sh
+docker compose exec pg-backup /scripts/restore.sh --force /backups/Finances_<timestamp>.dump Finances
+```
+
+If `pg-backup` is not running, use the one-shot form instead — `run` rather than
+`exec`, because that service's entrypoint is a sleep loop:
+
+```sh
+docker compose run --rm -T --no-deps --entrypoint /scripts/restore.sh \
+  pg-backup --force /backups/Finances_<timestamp>.dump Finances
+```
+
+`--force` is required because the target is **dropped and recreated** before the
+dump is applied; `restore.sh` refuses to touch `Finances` or `metabase` without
+it. It terminates existing connections to the target so the drop can proceed, so
+`finance-app` will error until it reconnects — bring it down first
+(`docker compose stop finance-app`) if you would rather not serve errors during
+the restore. Full flag reference in [Backups](backups.md#restoring).
+
+The whole sequence for a `breaking` rollback, then:
+
+```sh
+./deploy.sh 0.4.0                                    # 1. old app (auto-rollback has done this)
+docker compose stop finance-app                      # 2. optional, avoids serving errors
+docker compose exec pg-backup /scripts/restore.sh \
+  --force /backups/Finances_<timestamp>.dump Finances # 3. old schema and data
+./deploy.sh 0.4.0                                    # 4. re-converge and health-gate
+```
+
+Step 4 is not redundant. The restore recreated the database, and
+[`02-grants.sql`](../init-db/roles/02-grants.sql) converges rather than assuming,
+so re-running the deploy re-applies the roles and grants and then health-gates
+the result instead of leaving you to check by eye. It is idempotent, so it costs
+nothing if everything was already in place.
+
+## Backups on a deployment
+
+`pg-backup` starts with the stack and needs no configuration. It dumps every
+database in `BACKUP_DBS` (default `Finances,metabase`) into `./backups/` beside
+`compose.yml`, once at start and then every `BACKUP_INTERVAL_SECONDS` (daily by
+default), pruning dumps older than `BACKUP_RETENTION_DAYS` (14) while always
+keeping the newest of each database. Its healthcheck reports **unhealthy** if no
+dump is newer than 1.5× the interval, which is the quick signal that the loop has
+stalled. Configuration, formats and full disaster recovery are in
+[Backups](backups.md).
+
+Two things matter more on a deployment host than they do on a laptop:
+
+- **The dumps sit on the same host as the database they protect.** A lost disk
+  loses both. Copy them somewhere else — `scripts/backup.sh` exposes a
+  `BACKUP_POST_HOOK` for exactly this, run after each dump.
+- **Retention prunes pre-upgrade dumps like any other.** The gate's dumps land in
+  the same directory in the same format, so the restore point for a `breaking`
+  release disappears after `BACKUP_RETENTION_DAYS`. If you may want to roll back
+  later than that, copy that dump aside — the script prints its path on success
+  and on rollback.
+
+Verify that a dump actually restores, rather than assuming it does, by restoring
+into a throwaway database:
+
+```sh
+docker compose exec pg-backup /scripts/restore.sh --force Finances Finances_Restore_Check
+```
+
+## Metabase after a deploy
+
+Metabase is behind the `bi` profile and does not start by default:
+
+```sh
+docker compose --profile bi up -d
+```
+
+A fresh deploy starts it with an empty `metabase_data` volume and an empty
+metadata database, so **it has no analytics connection at all** — not a
+misconfigured one, none. Metabase stores those connections in its own metadata
+database rather than in environment variables, so no `compose.yml` change can
+create one and no `deploy.sh` run will notice it is missing. It is a manual step,
+once, in the admin UI:
+
+| Field | Value |
+|---|---|
+| Host | `postgres` |
+| Port | `5432` |
+| Database | `Finances` (or whatever `FINANCE_APP_DB` names) |
+| Username | **`finance_bi`** |
+| Password | `FINANCE_BI_DB_PASSWORD` from `.env` |
+
+**Do not use `postgres` or `finance_app` here**, tempting though `finance_app` is
+when a question fails on a missing table. Both can read `users.password_hash`,
+and Metabase permits native SQL, so hiding the table in its admin UI is a display
+setting rather than a privilege boundary. `finance_bi` exists precisely to have
+`SELECT` on the core tables and views and **nothing on `users` or `audit_log`**
+([#249](https://github.com/aellington89/finance-stack/issues/249)). The
+step-by-step, and the query that tells you what the connection is *actually* set
+to, are in
+[Pointing Metabase at a least-privilege role](database.md#pointing-metabase-at-a-least-privilege-role).
+
+Two things that look like this one and are not:
+
+- **`MB_DB_USER` is a different role.** It owns Metabase's *internal* metadata
+  database and has no access to `Finances`. It is not what you are editing here.
+- **`finance_metabase` is gone.** A stricter views-only role of that name was
+  retired in [#250](https://github.com/aellington89/finance-stack/issues/250)
+  after it turned out that nothing had ever been pointed at it. If you find it
+  named in older notes, the answer is `finance_bi`.
+
+Restoring the `metabase` dump into a new deployment carries the stored connection
+across, credential included — which also means it carries a *stale* credential
+across if `FINANCE_BI_DB_PASSWORD` has been rotated since the dump was taken. Every
+chart failing with `password authentication failed` right after a restore is that,
+not a broken restore.
 
 ## Exposure posture
 
