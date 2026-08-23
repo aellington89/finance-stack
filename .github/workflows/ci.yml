@@ -493,14 +493,28 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Integration tests
+      # Issue #142. One step rather than the `test:unit` + `test:integration`
+      # pair this replaces, because a coverage threshold is only meaningful over
+      # the merged map. lib/queries and lib/actions are ~840 of the 1518
+      # statements in the denominator and sit near 5% on a unit-only run — they
+      # are almost entirely the integration project's work — so thresholds
+      # checked against either half alone would be measuring the wrong thing,
+      # and running both halves separately *and* a coverage pass would run the
+      # whole suite twice on every PR.
+      #
+      # The split is not lost: vitest prefixes every failure with its project
+      # name, so "which suite went red" is still the first thing in the log.
+      # That is the one thing the two-audit-steps pattern above buys that this
+      # does not need to buy separately.
+      #
+      # Thresholds live in app/vitest.config.ts with the baseline they came
+      # from. A drop fails here; raising them is a deliberate, reviewed diff
+      # (thresholds.autoUpdate is off on purpose).
+      - name: Tests (with coverage)
         env:
           DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
           AUTH_SECRET: ci-only-integration-test-secret
-        run: npm run test:integration
+        run: npm run test:coverage
 
   # Issue #131. Builds the production image on every PR — previously it was only
   # built on a `v*` tag by release.yml, so a broken Dockerfile reached master

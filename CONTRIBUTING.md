@@ -401,12 +401,19 @@ After the gates pass, CI runs:
 
 ```sh
 npm run lint
-npm run test:unit
-npm run test:integration   # requires the Finances_Test database
+npm run test:coverage      # both projects; requires the Finances_Test database
 ```
 
+`test:coverage` rather than `test:unit` + `test:integration`: since Issue #142
+the suite runs once, merged, and **fails if coverage drops below the thresholds
+in `app/vitest.config.ts`**. Running the halves separately would check the
+thresholds against the wrong denominator — `lib/queries` and `lib/actions` are
+most of it and are covered by the integration project, not the unit one.
+
 See [docs/testing.md](docs/testing.md) for the unit/integration split and how
-to point integration tests at the right database.
+to point integration tests at the right database, and
+[docs/testing.md#coverage](docs/testing.md#coverage) for the thresholds, what
+the denominator includes, and how to raise them.
 
 **`no-console` is enforced** over `app/`, `lib/`, `components/` and `hooks/`
 (Issue #129). Application code logs through `lib/log.ts`, which emits one line
