@@ -57,6 +57,88 @@ npm run test:integration
 npm run test:coverage
 ```
 
+## Coverage
+
+`npm run test:coverage` runs both projects, merges the maps, and **fails if any
+threshold is missed** (Issue [#142](https://github.com/aellington89/finance-stack/issues/142)).
+CI runs exactly this command, as a single `Tests (with coverage)` step — the
+unit and integration halves are not run separately there, because a threshold
+over either half alone measures the wrong thing: `lib/queries` and `lib/actions`
+are ~840 of the 1518 statements in the denominator and sit near 5% until the
+integration project runs.
+
+Thresholds are the measured baseline minus two points, rounded down. Two points
+absorbs ordinary jitter; anything larger absorbs a regression.
+
+| Scope | Statements | Branches | Functions | Lines |
+|---|---|---|---|---|
+| Global | 85 | 75 | 83 | 86 |
+| `lib/**/*.ts` | 83 | 71 | 80 | 84 |
+| `scripts/**/*.ts` | 97 | 90 | 98 | 97 |
+| `components/**/*.ts` | 78 | 85 | 82 | 78 |
+
+Baseline they were derived from, measured 2026-08-23 over the merged run (743
+tests): **87.5 / 77.3 / 85.4 / 88.1**. Branches is the weak metric across every
+scope and the one to watch. To raise a threshold, run the merged suite, take the
+new number, subtract two, and update `app/vitest.config.ts` **and this table** in
+the same commit — `thresholds.autoUpdate` is deliberately off, because it
+rewrites the config from inside a CI run and the resulting diff has no author
+and no reason.
+
+### What is measured, and what is not
+
+The denominator is *the surface a `*.test.ts` running in a node environment can
+actually reach* — not "all source". Padding it with files no test can execute
+makes the percentage a constant rather than a gate, and a constant cannot detect
+a regression.
+
+In: `lib/**/*.ts`, `app/api/health/**/*.ts`, `components/**/*.ts`,
+`scripts/**/*.ts`, `instrumentation.ts` — 51 files, 1518 statements.
+
+Out, and why:
+
+| Excluded | Why |
+|---|---|
+| `**/*.tsx`, `hooks/**` | **Nothing here can render React.** Both projects are `environment: node` and collect `*.test.ts` only, so a component can be imported but never mounted. [#296](https://github.com/aellington89/finance-stack/issues/296) adds a jsdom project, which is what makes this removable. |
+| `app/(app)/**` | Next.js pages and layouts — same reason, plus they are the target of [#141](https://github.com/aellington89/finance-stack/issues/141)'s E2E suite rather than of unit tests. |
+| `auth.ts`, `proxy.ts` | Framework wiring the suite *replaces*: `vitest-setup.ts` mocks `@/auth` wholesale, so `auth.ts` can never report anything but 0% however well tested its dependents are. |
+| `lib/db/index.ts` | The `pg` Pool singleton — construction, no branches worth gating. |
+| The five `scripts/` entrypoints | argv-parsing and stdout shells. The logic each wraps lives in a sibling module (`check-changelog-core.ts`, `docs-index-check.ts`, `release-notes-core.ts`, `seed-reference-check.ts`) which stays in and sits near 100%. |
+
+Note that `components/**/*.ts` therefore covers only the two genuinely non-React
+modules under `components/` (`ui/date-range-macros.ts`,
+`transactions/transaction-columns.ts`). #142 asked for ~70% across all of
+`components/`; that needs the renderer #296 adds. The visible cost today is that
+the five `tests/unit/components/*.test.ts` files exercise pure transforms which
+happen to be exported *from* `.tsx` components — those tests still run and still
+gate behaviour, but their coverage is not counted until #296 moves the
+transforms into sibling `.ts` modules.
+
+### Three glob traps
+
+All three are live in `app/vitest.config.ts`, all three have already caused a
+silent misconfiguration, and the comments there restate them. In short:
+
+1. **Coverage globs resolve against `app/`, not the repo root.** `app/api/health/**`
+   means `app/app/api/health/` on disk. Getting it backwards matches nothing,
+   which reads in a report as "that code is uncovered" rather than as a broken
+   pattern.
+2. **`coverage.include` is matched with picomatch's `contains: true`** — against
+   any *substring* of the absolute path. So `components/**/*.ts` matches
+   `card.tsx`, because `components/ui/card.ts` is a substring of
+   `.../components/ui/card.tsx`. The explicit `**/*.tsx` exclusion is the only
+   thing holding the React tree out of the report.
+3. **Threshold globs behave the opposite way** — anchored, no `contains`, matched
+   against the path relative to `app/`. And the global block is not "everything
+   the globs did not match": vitest evaluates it over every file in the map,
+   glob-matched ones included, so those four numbers are additional assertions
+   rather than a partition.
+
+A fourth, now fixed: parentheses are extglob syntax, so the old
+`exclude: ["app/(app)/test-ui/**"]` matched **nothing** and the dev playground
+page was counted for as long as it existed. Escape them (`app/\(app\)/…`) or
+avoid path segments that need it.
+
 ## Authentication in Integration Tests
 
 Every server action starts with a `requireActionUser()` session check (Issue #120), so [`vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) mocks `@/auth` with a default **authenticated** session — action tests exercise business logic without any sign-in ceremony.

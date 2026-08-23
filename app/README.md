@@ -30,7 +30,7 @@ The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` sh
 | `npm test` | Run all tests |
 | `npm run test:unit` | Unit tests only (no DB required) |
 | `npm run test:integration` | Integration tests (requires `Finances_Test` DB) |
-| `npm run test:coverage` | Generate coverage report in `coverage/` |
+| `npm run test:coverage` | Run all tests with coverage; **fails if a threshold is missed** (report in `coverage/`) |
 | `npm run db:generate` | Generate a migration file from a `schema.ts` change |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:pull` | Introspect DB into `schema.ts` (inspection only — `schema.ts` is the source of truth) |
@@ -46,6 +46,8 @@ Tests use Vitest with two separate projects:
 The integration test global setup (`tests/integration/setup.ts`) asserts that `DATABASE_URL` contains `Finances_Test` before any test runs, preventing accidental execution against production.
 
 To seed the test database with sample data, see [docs/database.md](../docs/database.md#test-database).
+
+Coverage thresholds are enforced by `npm run test:coverage`, which is what CI runs — as one step, not as separate unit and integration steps. See [docs/testing.md](../docs/testing.md#coverage) for the current thresholds, what is and is not in the denominator, and the three glob traps in `vitest.config.ts` worth knowing before editing it.
 
 ## Schema changes
 
