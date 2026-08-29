@@ -55,6 +55,49 @@
 # the entries that no longer match a finding in any image; those are the ones to
 # remove, along with their comment.
 
+# --- OpenSSL, both base families (all four images) ---------------------------
+CVE-2026-14456 exp:2026-10-06
+# OpenSSL DoS through unbounded memory growth in the QUIC server listener.
+# Reported against libcrypto3/libssl3 3.5.7-r0 on alpine 3.24.1 (finance-app,
+# finance-migrate; fixed in 3.5.8-r0) and against libssl3t64/openssl/
+# openssl-provider-legacy 3.5.6-1~deb13u2 on debian 13.6 (finance-importer,
+# finance-backup; fixed in 3.5.7-1~deb13u2). It is the first entry in this file
+# that genuinely belongs in every image, so the widening the header warns about
+# does not apply here — all four report it, and all four are covered.
+#
+# WHY IT DOES NOT APPLY. The vulnerable code is the QUIC *server* path: an
+# application that builds a Listener SSL object and accepts inbound QUIC
+# connections with SSL_accept(). Initial packets for unknown connection IDs
+# allocate per-channel state and queue it, unbounded, when the application does
+# not accept fast enough. Reaching it requires *being* a QUIC server. These four
+# images run `node server.js`, `migrate-and-seed.sh`, `python poll.py` and
+# pg_dump/postgres — an HTTP/1.1 origin behind a reverse proxy, two psql clients
+# and a file poller. None opens a QUIC listener; OpenSSL is reached here for
+# client-side and TCP TLS only, and postgres has no QUIC support at all. (Node
+# also links its own OpenSSL statically, so the alpine packages flagged above
+# are the distro's, not the one node actually uses.) The single component in the
+# stack that could speak HTTP/3 is caddy — a stock caddy:2.11.4-alpine this repo
+# neither builds nor scans, started only under the `edge` profile, with no http3
+# directive anywhere in caddy/, terminating TLS with Go's crypto/tls rather than
+# OpenSSL.
+#
+# WHY NOT JUST REBUILD — checked before suppressing rather than after (#291).
+# Unlike the util-linux batch below, "wait for the base to be rebuilt" has
+# already been tried: all three bases were rebuilt within the last three days
+# (node:24-alpine and python:3.14-slim 2026-08-27, postgres:18.6 2026-08-26) and
+# the CI run on 2026-08-29 pulled them fresh and still found the vulnerable
+# versions. The fix exists in both distros' package databases — that is what
+# makes this a gating `fixed` finding rather than an unfixed one — but it had
+# not reached those rebuilds. Re-running the job cannot clear it today.
+#
+# THE DATE IS DELIBERATELY NOT THE 2026-11-17 the entries below share. Those all
+# clear on one Debian util-linux update. This one clears on an OpenSSL update
+# that is already published in both distros and should arrive with the next base
+# rebuild — weeks, not months — so a short date forces the re-check instead of
+# parking it for a quarter. If it survives to 2026-10-06, that is real
+# information: it means two distros' rebuilds have skipped a published fix
+# twice, and the header's "change the base image" advice starts to apply.
+
 # --- Debian base (finance-importer, finance-backup) -------------------------
 CVE-2026-53615 exp:2026-11-17
 # util-linux 2.41-5 in debian 13.6, reported against bsdutils/libblkid1/libmount1
