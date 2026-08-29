@@ -31,6 +31,8 @@ The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` sh
 | `npm run test:unit` | Unit tests only (no DB required) |
 | `npm run test:integration` | Integration tests (requires `Finances_Test` DB) |
 | `npm run test:coverage` | Run all tests with coverage; **fails if a threshold is missed** (report in `coverage/`) |
+| `npm run test:e2e` | Playwright money-path suite (builds the app, serves it on `:3100`) |
+| `npm run test:e2e:ui` | The same suite in Playwright's UI runner |
 | `npm run db:generate` | Generate a migration file from a `schema.ts` change |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:pull` | Introspect DB into `schema.ts` (inspection only — `schema.ts` is the source of truth) |
@@ -38,14 +40,17 @@ The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` sh
 
 ## Testing
 
-Tests use Vitest with two separate projects:
+Tests use Vitest with two separate projects, plus a Playwright suite:
 
 - **Unit tests** (`tests/unit/`) — pure functions, Zod schemas, utilities. No database connection needed.
 - **Integration tests** (`tests/integration/`) — server actions against `Finances_Test`. Requires `DATABASE_URL` set to the test database.
+- **E2E tests** (`e2e/`) — one Playwright spec driving the core money path in a browser against the production build: sign in → create an account → post a transaction → assert the dashboard Net Worth KPI moved by exactly that amount. Also requires `Finances_Test`.
 
-The integration test global setup (`tests/integration/setup.ts`) asserts that `DATABASE_URL` contains `Finances_Test` before any test runs, preventing accidental execution against production.
+Both DB-backed suites assert that `DATABASE_URL` contains `Finances_Test` before anything runs, preventing accidental execution against production — one shared check in `tests/support/assert-test-database.ts`.
 
 To seed the test database with sample data, see [docs/database.md](../docs/database.md#test-database).
+
+The E2E suite reports no coverage and is deliberately outside the denominator; see [docs/testing.md](../docs/testing.md#end-to-end-tests) for how it runs, why it is one path, and the one-line mutation that proves it can still fail.
 
 Coverage thresholds are enforced by `npm run test:coverage`, which is what CI runs — as one step, not as separate unit and integration steps. See [docs/testing.md](../docs/testing.md#coverage) for the current thresholds, what is and is not in the denominator, and the three glob traps in `vitest.config.ts` worth knowing before editing it.
 

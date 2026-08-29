@@ -85,7 +85,13 @@ function ComboboxField({
           return options.find((o) => o.id === id)?.name ?? String(id);
         }}
       >
+        {/* `id` rather than the hidden input alone: <Label htmlFor={name}>
+            above points at an id, and the only element carrying `name` here is
+            a hidden input with no id — so the field had no accessible label at
+            all. Fixing that is also what gives the E2E suite a getByLabel()
+            handle on it (Issue #141). */}
         <ComboboxInput
+          id={name}
           placeholder={`Select ${label.toLowerCase()}...`}
           className="w-full"
           aria-invalid={error ? true : undefined}
@@ -139,7 +145,9 @@ function ClearableComboboxField({
           return options.find((o) => o.id === id)?.name ?? String(id);
         }}
       >
+        {/* id={name} for the label association — see ComboboxField above. */}
         <ComboboxInput
+          id={name}
           placeholder={`Select ${label.toLowerCase()} (optional)...`}
           showClear={!!value}
           className="w-full"
@@ -249,9 +257,10 @@ export function TransactionForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Amount *</Label>
+          <Label htmlFor="amount">Amount *</Label>
           <input type="hidden" name="amount" value={amount} />
           <CurrencyInput
+            id="amount"
             value={amount}
             onChange={setAmount}
             autoComplete="off"

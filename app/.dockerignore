@@ -1,5 +1,12 @@
 node_modules
 .next
+# The E2E suite and its output (Issue #141). The build stage does `COPY . .`,
+# so without these the specs, the Playwright config and any local report ship
+# inside the finance-app image.
+e2e
+playwright.config.ts
+playwright-report
+test-results
 # Credentials — this is the .dockerignore that governs the finance-app image,
 # since compose sets the build context to ./app. `.env.local` / `.env*.local`
 # alone let a bare `.env` or `.env.production` through, and Next.js copies every

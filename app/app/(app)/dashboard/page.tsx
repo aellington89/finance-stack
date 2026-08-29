@@ -125,7 +125,15 @@ export default async function DashboardSummaryPage({
                 Net Worth
                 <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
-              <span className="text-5xl font-bold tabular-nums tracking-tight">
+              {/* The E2E money-path spec reads this figure before and after
+                  posting, and asserts it moved by exactly the amount posted
+                  (Issue #141). Two links on this page point at
+                  /dashboard/net-worth — this one and the trend chart below —
+                  so the testid is what tells them apart. */}
+              <span
+                data-testid="kpi-net-worth"
+                className="text-5xl font-bold tabular-nums tracking-tight"
+              >
                 {formatCurrency(summary.netWorth)}
               </span>
             </Link>

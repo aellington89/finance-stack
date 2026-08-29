@@ -42,11 +42,14 @@
 # on the same date, because the thing that clears most of them is the same event:
 # an upstream rebuild of the base image.
 #
-# A second generation joined them in #291, and the widening this file's opening
-# note warns about is now concrete rather than hypothetical: the util-linux
-# entries silence those CVEs on the two Alpine images too, which do not report
-# them today and would not report them if they later did. That is the price of
-# one file backing four scans, and it is what the split described above buys back.
+# A second generation joined them in #291 and has since been pruned in #303,
+# which is the first time this file has gone backwards and is worth recording as
+# the normal end of an entry's life: the reporter named eight entries as matching
+# nothing, and they were deleted rather than left to expire. The widening this
+# file's opening note warns about was concrete while they were here — the Debian
+# util-linux entries silenced those CVEs on the two Alpine images too, which
+# never reported them — and it is concrete again in the OpenSSL entry below, for
+# the opposite and harmless reason: that one is reported by all four.
 #
 # NOTHING REMOVES AN ENTRY WHEN THE BASE IS REBUILT. The CVE simply stops being
 # reported and the line stays here, inert, until someone deletes it — `exp:` stops
@@ -55,26 +58,49 @@
 # the entries that no longer match a finding in any image; those are the ones to
 # remove, along with their comment.
 
-# --- Debian base (finance-importer, finance-backup) -------------------------
-CVE-2026-53615 exp:2026-11-17
-# util-linux 2.41-5 in debian 13.6, reported against bsdutils/libblkid1/libmount1
-# /libsmartcols1/libuuid1/liblastlog2-2/login/mount in both python:3.14-slim and
-# postgres:18.6. Fixed in 2.41.5-0+deb13u1, which reaches us when those two base
-# images are rebuilt upstream — nothing in this repo installs util-linux. Try
-# re-running the job before extending this: the fix arrives on its own.
-CVE-2026-53612 exp:2026-11-17
-CVE-2026-53613 exp:2026-11-17
-CVE-2026-53614 exp:2026-11-17
-# The rest of the same util-linux batch (#291), against the same nine packages and
-# carrying the SAME fixed version as CVE-2026-53615 above — 2.41.5-0+deb13u1. One
-# Debian update clears all four, so they share its review date rather than getting
-# an arbitrary one of their own; splitting the dates would assert a distinction
-# that does not exist. Two TOCTOU races in mount(8) and a nosuid/noexec bypass via
-# LIBMOUNT_FORCE_MOUNT2 — all three need a local user invoking mount, and these
-# two images run one non-interactive process each and never mount anything.
-# Verified before suppressing rather than after: at the time of writing, neither
-# base had been rebuilt since the advisories landed (postgres:18.6 2026-08-15,
-# python:3.14-slim 2026-08-12), so re-running the job could not have cleared it.
+# --- OpenSSL, both base families (all four images) ---------------------------
+CVE-2026-14456 exp:2026-10-06
+# OpenSSL DoS through unbounded memory growth in the QUIC server listener.
+# Reported against libcrypto3/libssl3 3.5.7-r0 on alpine 3.24.1 (finance-app,
+# finance-migrate; fixed in 3.5.8-r0) and against libssl3t64/openssl/
+# openssl-provider-legacy 3.5.6-1~deb13u2 on debian 13.6 (finance-importer,
+# finance-backup; fixed in 3.5.7-1~deb13u2). It is the first entry in this file
+# that genuinely belongs in every image, so the widening the header warns about
+# does not apply here — all four report it, and all four are covered.
+#
+# WHY IT DOES NOT APPLY. The vulnerable code is the QUIC *server* path: an
+# application that builds a Listener SSL object and accepts inbound QUIC
+# connections with SSL_accept(). Initial packets for unknown connection IDs
+# allocate per-channel state and queue it, unbounded, when the application does
+# not accept fast enough. Reaching it requires *being* a QUIC server. These four
+# images run `node server.js`, `migrate-and-seed.sh`, `python poll.py` and
+# pg_dump/postgres — an HTTP/1.1 origin behind a reverse proxy, two psql clients
+# and a file poller. None opens a QUIC listener; OpenSSL is reached here for
+# client-side and TCP TLS only, and postgres has no QUIC support at all. (Node
+# also links its own OpenSSL statically, so the alpine packages flagged above
+# are the distro's, not the one node actually uses.) The single component in the
+# stack that could speak HTTP/3 is caddy — a stock caddy:2.11.4-alpine this repo
+# neither builds nor scans, started only under the `edge` profile, with no http3
+# directive anywhere in caddy/, terminating TLS with Go's crypto/tls rather than
+# OpenSSL.
+#
+# WHY NOT JUST REBUILD — checked before suppressing rather than after (#291).
+# For most entries this file has ever held, "wait for the base to be rebuilt" is
+# the whole fix, and #303 deleted eight of them on exactly that. Here it has
+# already been tried: all three bases were rebuilt within the last three days
+# (node:24-alpine and python:3.14-slim 2026-08-27, postgres:18.6 2026-08-26) and
+# the CI run on 2026-08-29 pulled them fresh and still found the vulnerable
+# versions. The fix exists in both distros' package databases — that is what
+# makes this a gating `fixed` finding rather than an unfixed one — but it had
+# not reached those rebuilds. Re-running the job cannot clear it today.
+#
+# THE DATE IS DELIBERATELY NOT THE 2026-11-17 the entries below share. Those are
+# what is left after #303 — bundled tooling waiting on a base rebuild that has
+# not come. This one clears on an OpenSSL update that is already published in
+# both distros and should arrive with the next base rebuild — weeks, not months —
+# so a short date forces the re-check instead of parking it for a quarter. If it survives to 2026-10-06, that is real
+# information: it means two distros' rebuilds have skipped a published fix
+# twice, and the header's "change the base image" advice starts to apply.
 
 # --- python:3.14-slim bundled packages (finance-importer) -------------------
 CVE-2025-47273 exp:2026-11-17
@@ -101,24 +127,24 @@ GHSA-6v7p-g79w-8964 exp:2026-11-17
 # in /usr/local/lib/node_modules/npm/node_modules/ and are fixed only when
 # node:24-alpine ships a newer bundled npm; no application-level bump reaches
 # them, and `npm update` inside the image would defeat the pinned build.
-CVE-2026-59873 exp:2026-11-17
-# tar 7.5.16 (CRITICAL), fixed in 7.5.19. npm-vendored, as above.
-CVE-2026-59874 exp:2026-11-17
-# tar 7.5.16, fixed in 7.5.18. npm-vendored, as above.
-CVE-2026-13149 exp:2026-11-17
-# brace-expansion 5.0.6, fixed in 5.0.7. npm-vendored, as above.
 CVE-2026-14257 exp:2026-11-17
-# brace-expansion 5.0.6, fixed in 5.0.8. npm-vendored, as above.
+# brace-expansion 5.0.7, fixed in 5.0.8. npm-vendored, as above.
 CVE-2026-69152 exp:2026-11-17
-# brace-expansion 5.0.6, fixed in 5.0.9. npm-vendored, as above.
-CVE-2026-12151 exp:2026-11-17
-# undici 6.26.0, fixed in 6.27.0. npm-vendored, as above.
+# brace-expansion 5.0.7, fixed in 5.0.9. npm-vendored, as above.
 CVE-2026-69192 exp:2026-11-17
 # ip-address 10.2.0, fixed in 10.3.1. npm-vendored, as above.
 CVE-2026-73566 exp:2026-11-17
-# tar 7.5.16, fixed in 7.5.21. npm-vendored, as above (#291) — the same 7.5.16 the
-# two tar entries at the top of this section already cover, so it clears with them
-# when node:24-alpine ships a newer bundled npm.
+# tar 7.5.19, fixed in 7.5.21. npm-vendored, as above (#291).
+#
+# The installed versions above are the point of this block after #303, and they
+# are why partial clears are the normal case rather than a curiosity. This
+# section held eight entries; node:24-alpine shipped npm 11.19.0, which moved
+# tar 7.5.16 → 7.5.19, brace-expansion 5.0.6 → 5.0.7 and undici 6.26.0 → 6.27.0,
+# and exactly the four entries whose fix version that reached went dead. These
+# four survive because their fix is still ahead of what npm bundles. A vendored
+# bump therefore clears *some* of a package's entries and leaves others, so
+# re-read the installed version here before assuming a comment is still true —
+# these three had drifted a full release behind the image within weeks.
 
 # Not listed here, and excluded at the scanner instead: the Go stdlib CVEs
 # reported against drizzle-kit's vendored `esbuild` and the postgres image's

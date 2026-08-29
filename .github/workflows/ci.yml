@@ -672,3 +672,118 @@ jobs:
         env:
           TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
         run: ./scripts/check-trivy-suppressions.sh
+
+  # Issue #141. The core money path through the browser: sign in, create an
+  # account, post a transaction, and assert the dashboard KPI moved by exactly
+  # the amount posted. Everything it touches is already covered in isolation by
+  # the `ci` job's suite — what nothing covered until now is the wiring between
+  # those pieces, which is where a regression can reach master looking green.
+  #
+  # Its own job, as the issue asks, and for the same reason the `image` job is
+  # one: it needs a Next build and a browser download that the database gates
+  # above have no use for, and a failure here should read as "the money path
+  # broke" rather than as one more red step in a job that checks fifteen other
+  # things.
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Same pin as the `ci` job and docker-compose.yml — bump the three
+        # together.
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # chromium only. A money-path gate answers "did the arithmetic survive",
+      # which is not a question a second rendering engine answers differently —
+      # and every extra browser is another download on every PR.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # The next three steps stand up Finances_Test exactly as the `ci` job
+      # does, from the same init-db/ files, so the E2E fixture is the same
+      # fixture. Deliberately *not* copied from that job: the service roles,
+      # the grant matrix and the negative checks. The app connects as postgres
+      # here, as the integration suite does and for the same reasons
+      # (docs/testing.md, "Database Role Gate"), and those gates are the `ci`
+      # job's business — their absence here is a decision, not an oversight.
+      #
+      # mb_password is empty here, where the `ci` job passes one: that job needs
+      # metabase_user to exist so the #239 attribute sweep has more than the
+      # three service roles to sweep. Nothing in this job touches Metabase, and
+      # 00-create-databases.sql skips the role and its database on an empty
+      # password by design.
+      - name: Create databases
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres \
+            -v app_db=Finances \
+            -v test_db=Finances_Test \
+            -v mb_user=metabase_user \
+            -v mb_dbname=metabase \
+            -v mb_password= \
+            -f ../init-db/roles/00-create-databases.sql
+
+      - name: Apply Drizzle migrations
+        env:
+          DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+        run: npm run db:migrate
+
+      - name: Seed test database
+        env:
+          PGPASSWORD: changeme
+        run: |
+          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/shared-lookups.sql
+          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/finances-test-mock-data.sql
+          psql -h localhost -U postgres -d "Finances_Test" -f ../init-db/seeds/rebuild-balance-history.sql
+
+      # playwright.config.ts builds the app and starts it on 3100 itself, so
+      # there is no separate build step here. AUTH_SECRET is a CI-only value and
+      # named as one (Issue #181); the E2E user's password is created and
+      # deleted by the suite's own global setup and teardown.
+      - name: E2E tests
+        env:
+          DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+          AUTH_SECRET: ci-only-e2e-test-secret
+        run: npm run test:e2e
+
+      # The report carries the trace and screenshot of the failing step, which
+      # is the only way to see what the browser saw after the runner is gone.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            app/playwright-report/
+            app/test-results/
+          retention-days: 7

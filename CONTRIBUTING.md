@@ -46,7 +46,8 @@ is tolerated by the release-notes generator but is not preferred — use the
 
 CI runs on every push to `master`/`test` and on all PRs. There are five gates
 that can fail a build before lint and tests even run, plus an image-scan gate
-that runs in a parallel job; all are fast to satisfy locally:
+and an end-to-end gate that each run in a parallel job; all are fast to satisfy
+locally:
 
 ### Schema-drift gate
 
@@ -404,24 +405,42 @@ npm run lint
 npm run test:coverage      # both projects; requires the Finances_Test database
 ```
 
+and, in a parallel `e2e` job:
+
+```sh
+npm run test:e2e           # Playwright; builds the app and drives it in Chromium
+```
+
 `test:coverage` rather than `test:unit` + `test:integration`: since Issue #142
 the suite runs once, merged, and **fails if coverage drops below the thresholds
 in `app/vitest.config.ts`**. Running the halves separately would check the
 thresholds against the wrong denominator — `lib/queries` and `lib/actions` are
 most of it and are covered by the integration project, not the unit one.
 
+`test:e2e` is the money-path gate added by
+[Issue #141](https://github.com/aellington89/finance-stack/issues/141): one
+Playwright spec that signs in, creates an account, posts a transaction and
+asserts the dashboard Net Worth KPI moved by exactly that amount. It is a
+separate job because it needs a Next build and a browser the database gates have
+no use for. It reports **no coverage** and is not meant to — `app/(app)/**` is
+out of the vitest denominator precisely because this suite is what covers it.
+First run locally needs `npx playwright install --with-deps chromium` (the
+`--with-deps` half needs sudo).
+
 See [docs/testing.md](docs/testing.md) for the unit/integration split and how
-to point integration tests at the right database, and
+to point integration tests at the right database,
 [docs/testing.md#coverage](docs/testing.md#coverage) for the thresholds, what
-the denominator includes, and how to raise them.
+the denominator includes, and how to raise them, and
+[docs/testing.md#end-to-end-tests](docs/testing.md#end-to-end-tests) for the E2E
+suite — including the one-line mutation that proves it can still fail.
 
 **`no-console` is enforced** over `app/`, `lib/`, `components/` and `hooks/`
 (Issue #129). Application code logs through `lib/log.ts`, which emits one line
 of JSON per record; a bare `console.*` is unparseable downstream and carries no
 route/action/user context. Use `log.info(...)`, `reportError(err, ctx)`, or —
 inside a server action's catch block — `actionFailure(name, err, message)`.
-`scripts/` and `tests/` are exempt: console output *is* the interface of a CLI
-like `check-changelog.ts`. Before adding a log call, read the redaction section
+`scripts/`, `tests/` and `e2e/` are exempt: console output *is* the interface of
+a CLI like `check-changelog.ts`. Before adding a log call, read the redaction section
 of [docs/observability.md](docs/observability.md) — drizzle puts every bound
 query parameter in the error message, so logging a raw error leaks the row.
 

@@ -44,3 +44,10 @@ importer/parsers/
 # Test output
 app/coverage
 app/.vitest
+
+# Playwright (Issue #141): the HTML report, the traces and screenshots kept on
+# a failed run, and the storage state the E2E suite signs in once to produce —
+# it holds a real session cookie for the test user.
+app/playwright-report
+app/test-results
+app/e2e/.auth

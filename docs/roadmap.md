@@ -196,6 +196,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#193](https://github.com/aellington89/finance-stack/issues/193) Adopt `react-hooks/set-state-in-effect`; drop the `eslint-plugin-react-hooks` pin *(new — from #131)*
 - [#195](https://github.com/aellington89/finance-stack/issues/195) Run `npm run typecheck` in CI *(new — from #131)*
 - [#296](https://github.com/aellington89/finance-stack/issues/296) React component coverage: add a jsdom vitest project *(new — from #142)*
+- [#301](https://github.com/aellington89/finance-stack/issues/301) `finance-app` image ships `app/tests/` and a local coverage report *(new — from #141)*
 - [#263](https://github.com/aellington89/finance-stack/issues/263) Bump to eslint 10 once `eslint-config-next` ships plugins that support it *(new — split from #194; blocked upstream)*
 - [#232](https://github.com/aellington89/finance-stack/issues/232) Wire an error-tracking backend into `reportError()` *(new — from #129)*
 - [#237](https://github.com/aellington89/finance-stack/issues/237) Nonce-based CSP: remove `'unsafe-inline'` from `script-src` and `style-src` *(new — from #182)*
