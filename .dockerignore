@@ -55,3 +55,7 @@ app/tests
 app/coverage
 app/.vitest
 app/vitest.config.ts
+app/e2e
+app/playwright.config.ts
+app/playwright-report
+app/test-results

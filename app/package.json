@@ -18,6 +18,8 @@
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "db:pull": "drizzle-kit pull",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
@@ -125,6 +127,7 @@
     "ignores the major in the meantime."
   ],
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^26",
     "@types/pg": "^8.21.0",

@@ -1,6 +1,6 @@
 # Testing
 
-Covers running unit and integration tests, the static lookup-table fixtures, and the database role gate.
+Covers running unit, integration and end-to-end tests, the static lookup-table fixtures, and the database role gate.
 
 ## Database Role Gate
 
@@ -36,6 +36,9 @@ Tests use [Vitest](https://vitest.dev/) and are split into two projects:
 |---|---|---|
 | Unit | `npm run test:unit` | No |
 | Integration | `npm run test:integration` | Yes (`Finances_Test`) |
+
+The [end-to-end suite](#end-to-end-tests) is Playwright rather than Vitest and
+runs separately — `npm run test:e2e`.
 
 **Unit tests** cover Zod validation schemas and pure utility functions. They run with no external dependencies.
 
@@ -100,7 +103,7 @@ Out, and why:
 | Excluded | Why |
 |---|---|
 | `**/*.tsx`, `hooks/**` | **Nothing here can render React.** Both projects are `environment: node` and collect `*.test.ts` only, so a component can be imported but never mounted. [#296](https://github.com/aellington89/finance-stack/issues/296) adds a jsdom project, which is what makes this removable. |
-| `app/(app)/**` | Next.js pages and layouts — same reason, plus they are the target of [#141](https://github.com/aellington89/finance-stack/issues/141)'s E2E suite rather than of unit tests. |
+| `app/(app)/**` | Next.js pages and layouts — same reason, plus they are covered by [#141](https://github.com/aellington89/finance-stack/issues/141)'s [E2E suite](#end-to-end-tests) rather than by unit tests. Playwright reports no coverage into this map and is not meant to. |
 | `auth.ts`, `proxy.ts` | Framework wiring the suite *replaces*: `vitest-setup.ts` mocks `@/auth` wholesale, so `auth.ts` can never report anything but 0% however well tested its dependents are. |
 | `lib/db/index.ts` | The `pg` Pool singleton — construction, no branches worth gating. |
 | The five `scripts/` entrypoints | argv-parsing and stdout shells. The logic each wraps lives in a sibling module (`check-changelog-core.ts`, `docs-index-check.ts`, `release-notes-core.ts`, `seed-reference-check.ts`) which stays in and sits near 100%. |
@@ -138,6 +141,165 @@ A fourth, now fixed: parentheses are extglob syntax, so the old
 `exclude: ["app/(app)/test-ui/**"]` matched **nothing** and the dev playground
 page was counted for as long as it existed. Escape them (`app/\(app\)/…`) or
 avoid path segments that need it.
+
+## End-to-End Tests
+
+One [Playwright](https://playwright.dev/) spec, driving one path through a real
+browser against the real build: sign in → create an account with an opening
+balance → post a transaction → assert the dashboard Net Worth KPI moved by
+exactly the amount posted ([Issue #141](https://github.com/aellington89/finance-stack/issues/141)).
+
+```bash
+cd app
+npm run test:e2e        # headless; builds the app and starts it on :3100
+npm run test:e2e:ui     # the Playwright UI runner, for writing or debugging one
+```
+
+**Every piece of that path is already covered in isolation — the wiring between
+them was not, and that is the whole reason this suite exists.**
+[`tests/integration/actions/transaction.test.ts`](../app/tests/integration/actions/transaction.test.ts)
+calls `submitTransaction()` with a hand-built `FormData` and a mocked session;
+[`tests/integration/queries/rebuild-balance.test.ts`](../app/tests/integration/queries/rebuild-balance.test.ts)
+checks the SQL. Neither can fail on a renamed form field, a page that stopped
+revalidating, a proxy redirect, or a KPI reading the wrong point of the series.
+So the spec asserts only on what a person can see, and it reaches the database
+directly in exactly two places — creating the sign-in user, and deleting what
+the run created.
+
+**It is one path on purpose.** The issue asked for one critical happy path
+rather than coverage, and the second E2E test is where the suite starts costing
+more maintenance than it catches regressions.
+
+### How it runs
+
+| | |
+|---|---|
+| Database | `Finances_Test`, seeded from `init-db/seeds/` — the same fixture the integration project uses |
+| App | The **production** build: `npm run build` then `next start` on port **3100** |
+| Auth | One real sign-in in [`e2e/auth.setup.ts`](../app/e2e/auth.setup.ts), saved as `storageState` and reused |
+| Isolation | One worker, no parallelism |
+| Cleanup | Global teardown deletes the run's accounts, transactions, balance rows and user |
+
+Four of those are decisions rather than defaults:
+
+- **`Finances_Test`, not a database of its own.** It is already "a fixture DB
+  seeded from `init-db/`", and a second provisioning path would be a second
+  thing to keep in step with `init-db/seeds/` and with
+  `app/scripts/migrate-and-seed.sh` (which hardcodes `Finances_Test`). The
+  guard that refuses to run against anything else is shared with the
+  integration project — [`tests/support/assert-test-database.ts`](../app/tests/support/assert-test-database.ts),
+  which is where it moved to so the two cannot drift.
+- **The production build, not `next dev`.** Turbopack compiles a route on first
+  hit, which is slower and flakier, and the dev CSP differs from the shipped one
+  (`'unsafe-eval'`, `ws:` in `next.config.ts`). `next start` prints a
+  `does not work with "output: standalone"` notice and then works — that notice
+  is deployment advice, not a failure.
+- **Port 3100.** 3001 is bound by the `start` script *and* by the `finance-app`
+  container, so a suite on that port either fights the running stack or passes
+  by testing it instead of the build under test. 3002 is the dev-verify port.
+- **The KPI assertion is a delta, not an absolute.** The mock seed generates
+  twelve months relative to `CURRENT_DATE`, so Net Worth has no fixed value; the
+  spec reads the headline before and after and asserts the difference. A broken
+  rebuild therefore fails as *"the KPI did not move"*.
+
+The account type the spec picks (`Checking Account`) matters more than it looks:
+it is in `account_type_category` 1, and `getCurrentNetWorth()` excludes category
+2 (Restricted Asset) from Net Worth. A restricted type would make the delta zero
+and the assertion vacuous.
+
+### Proving the gate can fail
+
+A test that has never failed is a claim, not a gate. Break the rebuild and watch
+it go red:
+
+```bash
+cd app
+# In lib/actions/transaction.ts, comment out the rebuildAccountBalance() call
+# inside submitTransaction's auditedTransaction block.
+npm run test:e2e
+```
+
+The transaction is still written and the toast still says it succeeded — what
+stops is the balance history behind it, so the account's own row never leaves
+the opening balance:
+
+```
+1) [chromium] › money-path.spec.ts › … › the rebuild reaches the account's own balance
+
+  Error: expect(locator).toContainText(expected) failed
+  Expected substring: "$913.11"
+  Received string:    "E2E Money Path 1788030328539Open$1,234.56"
+```
+
+That is the shape to expect: the failure lands on the *account row* step, one
+step before the KPI, because both read the same `account_balance_history` rows
+and the account page is checked first. Revert, re-run, confirm green. Do the
+same after any change to `lib/queries/rebuild-balance.ts` — this suite is the
+only thing that would notice the rebuild silently stopping.
+
+### Selectors, and the a11y fix underneath them
+
+The combobox and currency fields were built as a *hidden* input carrying the
+`name` plus a visible control carrying the value, and `<Label htmlFor={name}>`
+pointed at the hidden input's `name` — which is not an `id`, so those fields had
+no accessible label at all. #141 fixed that (`id` on the visible control) rather
+than working around it with structural locators, so the spec addresses them the
+way a screen reader does: `getByLabel("Account Type *")`.
+
+Two things follow for anyone editing those forms. The combobox list is rendered
+through a **portal**, so an option locator is page-level and not scoped inside
+the `<form>`. And `DatePicker` was deliberately left alone — its trigger is a
+button, needing a different fix, and no test drives it: the transaction form
+already defaults to today, which is also what puts the balance row at
+`CURRENT_DATE`.
+
+### When a local run fails in a way that makes no sense
+
+`reuseExistingServer` is on locally (and off in CI), which is what keeps
+`test:e2e:ui` iteration fast — but it means **anything already listening on 3100
+becomes the app under test**, including a `next start` left over from an earlier
+session. A stale server whose `.next` has since been rebuilt underneath it
+serves chunks that no longer exist, so every dynamic page renders the
+`app/(app)/error.tsx` boundary. The suite then fails on whichever locator came
+first, with a page snapshot reading `heading "Something went wrong"` — which
+looks like a broken selector and is not one.
+
+Check the port before believing the failure:
+
+```bash
+ss -lptn 'sport = :3100'    # expect no output between runs
+```
+
+### In CI
+
+A separate `e2e` job in [`ci.yml`](../.github/workflows/ci.yml), for the same
+reason the `image` job is separate: it needs a Next build and a browser download
+that the database gates have no use for, and a failure should read as "the money
+path broke" rather than as one more red step among fifteen. It stands
+`Finances_Test` up from the same `init-db/` files as the `ci` job, but skips the
+service roles and the grant matrix — the app connects as `postgres` here, as the
+integration suite does and for the reasons in [Database Role Gate](#database-role-gate)
+above. On failure it uploads the Playwright HTML report, with the trace and
+screenshot of the failing step.
+
+Locally the browser needs its system libraries once:
+
+```bash
+npx playwright install --with-deps chromium   # --with-deps needs sudo
+```
+
+If installing those system-wide is not an option, Playwright's own image already
+has them, and `--network host` lets it reach both Postgres on 5433 and the app
+it starts on 3100. Keep the tag in step with the `@playwright/test` version in
+`app/package.json` — a mismatch means the browser the image ships is not the one
+the client drives:
+
+```bash
+docker run --rm --network host --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -e DATABASE_URL -e AUTH_SECRET \
+  -v "$PWD:/work" -w /work/app \
+  mcr.microsoft.com/playwright:v1.62.1-noble npx playwright test
+```
 
 ## Authentication in Integration Tests
 

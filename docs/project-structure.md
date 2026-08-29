@@ -205,6 +205,8 @@ finance-stack/
 │   │   │       ├── log.test.ts           #     Structured logger (single-line output, LOG_LEVEL gate, hostile payloads)
 │   │   │       ├── report.test.ts        #     reportError() serialization + drizzle/pg redaction
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
+│   │   ├── support/                      # Shared by both suites and by e2e/
+│   │   │   └── assert-test-database.ts   #   The "never run this against Finances" guard (#141)
 │   │   └── integration/                  # Integration tests (requires Finances_Test DB)
 │   │       ├── setup.ts                  #   Global setup — asserts test DB URL
 │   │       ├── vitest-setup.ts           #   Per-test setup/teardown (mocks @/auth with a signed-in session, resets rate-limit counters)
@@ -212,6 +214,13 @@ finance-stack/
 │   │       ├── auth/                     #   Credential verification and sign-in rate limiting against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
 │   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance, drilldowns)
+│   ├── e2e/                              # Playwright end-to-end suite (#141)
+│   │   ├── money-path.spec.ts            #   The one spec: account → transaction → rebuild → dashboard KPI
+│   │   ├── auth.setup.ts                 #   Signs in once, saves the session as storageState
+│   │   ├── global-setup.ts               #   Test-DB guard + creates the user the suite signs in as
+│   │   ├── global-teardown.ts            #   Deletes every row and the user the run created
+│   │   └── fixtures/                     #   Names, amounts and the psql-level helpers the three share
+│   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
 │   ├── Dockerfile                         # finance-importer image — bakes poll.py + pinned deps, non-root (#224)
@@ -220,7 +229,7 @@ finance-stack/
 │   └── parsers/                           # One module per import type (gitignored, bind-mounted)
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
-├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests
+├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests, E2E job
 ├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
 ├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122); also the repo's shellcheck step
 ├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh install → failed upgrade → automatic rollback (#228)

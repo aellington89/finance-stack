@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Test output
     "coverage/**",
+    // Playwright's report and its traces/screenshots (Issue #141).
+    "playwright-report/**",
+    "test-results/**",
   ]),
   // Issue #129. Application code logs through lib/log.ts, which emits one line
   // of JSON per record; a bare console.* is unparseable by anything downstream
@@ -21,8 +24,11 @@ const eslintConfig = defineConfig([
   // true — it is the standing enforcement of the issue's third acceptance
   // criterion, not a style preference.
   //
-  // scripts/ and tests/ are deliberately out of scope: console output *is* the
-  // interface of a CLI like check-changelog.ts or create-user.ts.
+  // scripts/, tests/ and e2e/ are deliberately out of scope: console output
+  // *is* the interface of a CLI like check-changelog.ts or create-user.ts, and
+  // of a Playwright global setup. Note this is scoping by inclusion — the four
+  // globs below name the application tree, so a new directory outside it is
+  // exempt by construction rather than by an ignore entry.
   {
     files: ["app/**/*.{ts,tsx}", "lib/**/*.ts", "components/**/*.{ts,tsx}", "hooks/**/*.ts"],
     rules: { "no-console": "error" },
@@ -39,7 +45,7 @@ const eslintConfig = defineConfig([
   // opt-outs. Reaching for an eslint-disable here means the fragment being
   // built is the wrong shape; see docs/input-validation.md.
   //
-  // tests/ and scripts/ are out of scope, as with no-console above.
+  // tests/, scripts/ and e2e/ are out of scope, as with no-console above.
   {
     files: ["app/**/*.{ts,tsx}", "lib/**/*.ts", "components/**/*.{ts,tsx}", "hooks/**/*.ts"],
     rules: {
