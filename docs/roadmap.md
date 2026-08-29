@@ -1,6 +1,6 @@
 # Versioning Roadmap
 
-How Finance Stack's milestones map to release versions on the path to **v1.0.0**
+How Finance Stack's milestones map to release versions through **v1.0.0**
 and beyond. For the mechanics of *cutting* a release (tags, changelog, workflow),
 see [Releases & Tagging](releases.md).
 
@@ -44,22 +44,25 @@ target and building there, and the image that runs is not the image CI verified
 process that stops before producing a deployable artifact cannot make a promise
 about how the thing behaves once deployed.
 
-**v1.0.0 is cut once Phases 0–2.5 have shipped and stabilized in real use.** It
-is a commitment made *after* the risky auth work has proven stable, not the moment
-it merges. The security-epic condition that used to sit here
-([#100](https://github.com/aellington89/finance-stack/issues/100)) is closed; what
-remains is the **v1.0.0 — Stabilization** milestone, which exists so that "has
-stabilized" is a checkable condition rather than a feeling:
+**v1.0.0 was cut once Phases 0–2.5 had shipped and stabilized in real use** —
+released 2026-08-29. It is a commitment made *after* the risky auth work has
+proven stable, not the moment it merges. The security-epic condition that used to
+sit here ([#100](https://github.com/aellington89/finance-stack/issues/100)) is
+closed, and so is the **v1.0.0 — Stabilization** milestone, which existed so that
+"has stabilized" was a checkable condition rather than a feeling. All three gates
+were met before the tag:
 
-| Gate | Why it blocks the promise |
+| Gate | Why it blocked the promise |
 |---|---|
-| [#294](https://github.com/aellington89/finance-stack/issues/294) — run v0.4.0 on a real host, and a real upgrade | v0.4.0 is the *first tag that publishes anything*. Until a released bundle has actually installed and upgraded somewhere, "expose it safely" rests on a deployment path that has never deployed. |
-| [#141](https://github.com/aellington89/finance-stack/issues/141) — E2E tests | Nothing currently asserts the core money path end to end, so a regression in it can ship unseen. |
-| [#142](https://github.com/aellington89/finance-stack/issues/142) — coverage thresholds | Without a floor, coverage erodes silently between releases. |
+| ✅ [#294](https://github.com/aellington89/finance-stack/issues/294) — run v0.4.0 on a real host, and a real upgrade | v0.4.0 is the *first tag that publishes anything*. Until a released bundle has actually installed and upgraded somewhere, "expose it safely" rests on a deployment path that has never deployed. |
+| ✅ [#141](https://github.com/aellington89/finance-stack/issues/141) — E2E tests | Nothing currently asserts the core money path end to end, so a regression in it can ship unseen. |
+| ✅ [#142](https://github.com/aellington89/finance-stack/issues/142) — coverage thresholds | Without a floor, coverage erodes silently between releases. |
 
-v0.4.0 is the **release candidate**, and a candidate is the artifact you run in
+v0.4.0 was the **release candidate**, and a candidate is the artifact you run in
 order to find out what is wrong with it. Promoting it to 1.0 in the same breath
-would mean there was never a candidate period at all.
+would have meant there was never a candidate period at all — so the candidate was
+run, and v1.0.0 is the tree that came through it, tagged from the same code as
+v0.4.1 rather than newly assembled on top of it.
 
 ## The roadmap
 
@@ -69,7 +72,7 @@ would mean there was never a candidate period at all.
 | **v0.2.0** ✅ | Phase 1 — Pre-exposure gates | Auth + hardening + backup + observability + security close-out. First build safe beyond localhost — **released 2026-08-09** | Minor |
 | **v0.3.0** ✅ | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity — **released 2026-08-15** | Minor |
 | **v0.4.0** ✅ | Phase 2.5 — Deployment & upgrade | GHCR images + deploy bundle: a verified artifact and a backup-gated, health-checked upgrade. **This is the 1.0 release candidate** — **released 2026-08-22** | Minor |
-| **v1.0.0** | v1.0.0 — Stabilization | **The safety/stability commitment: trustworthy & exposable** — gated on #294, #141, #142 | **Major** |
+| **v1.0.0** ✅ | v1.0.0 — Stabilization | **The safety/stability commitment: trustworthy & exposable** — gates #294, #141 and #142 all met — **released 2026-08-29** | **Major** |
 | **v1.1.0** | Phase 3 — DX compounding | Importer hardening, E2E tests, tooling | Minor |
 | **v1.2.0** | Phase 4 — Performance polish | Caching, materialized views, chart consolidation | Minor |
 | **v1.3.0** | Phase 5 — Small UX fixes | Accessibility, mobile, UX debt | Minor |
@@ -181,12 +184,13 @@ The epic closed with #229; every child above shipped in this release.
 - [#288](https://github.com/aellington89/finance-stack/issues/288) Let the deployment bundle create the first user *(new — from #227)*
 
 ### v1.0.0 — Stabilization
-Not a phase of new work: the conditions under which the 1.0 promise can honestly
+**✅ Released 2026-08-29** — see [CHANGELOG](../CHANGELOG.md#100---2026-08-29).
+Not a phase of new work: the conditions under which the 1.0 promise could honestly
 be made. See [What v1.0.0 means here](#what-v100-means-here).
 
-- [#294](https://github.com/aellington89/finance-stack/issues/294) Run v0.4.0 on a real host, and a real upgrade, before cutting v1.0.0 *(new — from the v0.4.0 release review)*
-- [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(moved from Phase 3 — now required, not recommended)*
-- [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(moved from Phase 3 — now required, not recommended)*
+- [#294](https://github.com/aellington89/finance-stack/issues/294) Run v0.4.0 on a real host, and a real upgrade, before cutting v1.0.0 *(from the v0.4.0 release review)*
+- [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(moved from Phase 3 — required, not recommended)*
+- [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(moved from Phase 3 — required, not recommended)*
 
 ### v1.1.0 — Phase 3 (DX compounding)
 - [#124](https://github.com/aellington89/finance-stack/issues/124) Importer idempotency + dead-letter handling

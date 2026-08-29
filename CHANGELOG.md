@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-29
+
+**Migration:** none
+
+### Changed
+
+- **`1.0.0` is a safety and stability commitment, not a feature-completeness claim.** The promise is the one [`docs/roadmap.md`](docs/roadmap.md#what-v100-means-here) has carried since the line was drawn — *log in, don't lose your data, expose it safely* — and nothing more. Budgets, forecasting, search, receipts and the rest were never inside it; they are additive, and they land as ordinary `1.x` minors. What changes at this tag is not what the stack does but what it is willing to promise about doing it. Until v0.2.0 this thing had no authentication at all, and anyone who could reach the port could read and delete every record; 1.0 is the statement that the work which closed that has since been run, upgraded, and backed up somewhere real.
+
+- **The tree is identical to `v0.4.1` apart from the version stamp.** Upgrading `0.4.1 → 1.0.0` pulls four freshly built images carrying the same code and changes nothing else — no migration, no config change, no behavioural difference to plan around. That is deliberate rather than incidental. v0.4.0 was declared the release candidate, and a candidate is the artifact you run in order to find out what is wrong with it, so 1.0.0 had to be *the thing that was actually run* — not a new build assembled afterwards and promoted on the strength of its predecessor's testing.
+
+- **The three stabilization gates are closed, and the deployment path has now genuinely deployed.** ([Issue #294](https://github.com/aellington89/finance-stack/issues/294), [Issue #141](https://github.com/aellington89/finance-stack/issues/141), [Issue #142](https://github.com/aellington89/finance-stack/issues/142)) `v0.4.0` was the first tag that published anything: at the moment it was cut, no image had ever reached GHCR, no bundle had ever been unpacked on a host, and the deployment path the whole "expose it safely" claim rests on had never deployed. #294 existed to retire that gap by doing it for real rather than by arguing about it, and all six of its steps completed — the first publish landed all four images and the checksummed bundle; a host carrying only Docker installed from the published artifact following [`docs/deployment.md`](docs/deployment.md) alone, with no checkout and no build toolchain; the first user was created from the bundle and signed in; real data sat under it long enough for a scheduled backup cycle to complete with `pg-backup` healthy and dumps landing in `./backups/`; a real `v0.4.0 → v0.4.1` upgrade put the pre-upgrade backup gate and the health gate in front of data that actually mattered; and Metabase's `Finances` connection ran as `finance_bi` against the deployed instance with the existing questions intact. #141 and #142 closed alongside it in `v0.4.1`, so the money path is asserted end to end in a browser against the build that ships, and coverage has a floor that erodes loudly instead of silently.
+
+- **What 1.0 still does not cover is unchanged and still written down.** Off-site and encrypted backup storage and WAL archiving remain the separate concern [`docs/backups.md`](docs/backups.md) describes; exposure stops at the TLS termination `--profile edge` already ships; images are still `linux/amd64` only, because verifying an image means running it and an arm64 publish needs its own verified build. These are `1.x` work, not caveats hidden behind the version number.
+
 ## [0.4.1] - 2026-08-29
 
 **Migration:** none
@@ -315,7 +329,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/aellington89/finance-stack/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/aellington89/finance-stack/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/aellington89/finance-stack/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/aellington89/finance-stack/compare/v0.2.0...v0.3.0
