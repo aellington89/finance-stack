@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-29
+
+**Migration:** none
+
 ### Added
 
 - **The core money path is now tested end to end, in a browser, against the build that ships.** Every piece of it was already covered and the *wiring between the pieces* was not: `tests/integration/actions/transaction.test.ts` calls `submitTransaction()` with a hand-built `FormData` and a mocked session, and `tests/integration/queries/rebuild-balance.test.ts` checks the rebuild SQL — so a renamed form field, a page that stopped revalidating, a proxy redirect, or a KPI reading the wrong point of the series could all reach `master` with a green suite. One Playwright spec (`app/e2e/money-path.spec.ts`) now signs in, creates an account with an opening balance, posts a transaction against it, and asserts the dashboard Net Worth headline moved by **exactly** the amount posted. It runs as its own `e2e` job in `ci.yml`, for the same reason the `image` job is separate: it needs a Next build and a browser download the database gates have no use for, and a failure should read as "the money path broke" rather than as one more red step among fifteen.
@@ -311,7 +315,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/aellington89/finance-stack/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/aellington89/finance-stack/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/aellington89/finance-stack/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aellington89/finance-stack/compare/v0.1.5...v0.2.0
