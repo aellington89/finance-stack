@@ -204,6 +204,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#211](https://github.com/aellington89/finance-stack/issues/211) Re-take `node:26-alpine` once it reaches LTS *(after 2026-10-28; from #210)*
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#292](https://github.com/aellington89/finance-stack/issues/292) `.trivyignore`: split by source of finding, or move to `.trivyignore.yaml` *(new — from #291)*
+- [#304](https://github.com/aellington89/finance-stack/issues/304) Dependabot never sees `deploy/compose.yml`, so every image bump fails the parity gate *(new — from #298)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
 - [#271](https://github.com/aellington89/finance-stack/issues/271) `transaction_types` id 9 ships as `Accrued Amoritized Interest` — *amortized* is misspelled *(new — from #109)*
