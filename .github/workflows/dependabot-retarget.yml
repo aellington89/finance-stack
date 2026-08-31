@@ -1,0 +1,47 @@
+# Retargets Dependabot PRs onto the `patch` integration branch.
+#
+# `target-branch: patch` in .github/dependabot.yml only redirects Dependabot
+# *version* updates. Dependabot *security* updates (raised from Dependabot
+# alerts) always open against the default branch, and no config key changes
+# that. This workflow closes the gap: any Dependabot PR opened against `master`
+# is moved onto `patch`, so security updates land in the same batched, gated
+# flow as every other bump.
+#
+# `pull_request_target` — not `pull_request` — is required. Workflows that
+# Dependabot triggers on `pull_request` receive a read-only GITHUB_TOKEN and so
+# cannot change a PR's base; `pull_request_target` is not on that restricted
+# list and runs in the base-repo context with the token this file grants. It is
+# safe here because the job checks out no PR code and only calls the API — the
+# `pull_request_target` hazard (running untrusted PR code under a privileged
+# token) does not arise. The token is scoped to `pull-requests: write` and
+# nothing else.
+#
+# Like dependabot.yml, this only takes effect once it is on the default branch:
+# `pull_request_target` runs the workflow version from the PR's base branch, and
+# security PRs are based on the default branch. In steady state — dependabot.yml
+# already merged — the only Dependabot PRs reaching `master` are security
+# updates, which is exactly what this retargets.
+
+name: Retarget Dependabot PRs to patch
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  retarget:
+    # Only Dependabot's own PRs, and only those aimed at the default branch —
+    # never touch a base a human chose on purpose.
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Move base branch to patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr edit "$PR_URL" --base patch

@@ -10,6 +10,16 @@
 #
 # Deliberately not configured: auto-merge (out of scope per Issue #131).
 # Every bump gets reviewed and must pass the full gate suite.
+#
+# Every entry below sets `target-branch: patch`: version-update PRs open against
+# the long-lived `patch` integration branch instead of the default branch, so a
+# week's bumps collect there to be reviewed and gated together, then merged to
+# the default branch as one change. Dependabot still reads this config from the
+# default branch — `target-branch` only redirects where PRs are opened — so the
+# `patch` branch must exist (cut from the default branch) or Dependabot errors,
+# and this file must be on the default branch for the setting to take effect.
+# Note that Dependabot *security* updates ignore `target-branch` and still open
+# against the default branch.
 
 version: 2
 
@@ -18,6 +28,7 @@ updates:
   # package.json, no workspaces).
   - package-ecosystem: npm
     directory: /app
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -101,6 +112,7 @@ updates:
   # Importer service Python dependencies (importer/requirements.txt).
   - package-ecosystem: pip
     directory: /importer
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -114,6 +126,7 @@ updates:
   # different runtime than the image ships (Issue #210).
   - package-ecosystem: docker
     directory: /app
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -124,6 +137,7 @@ updates:
   # tracked.
   - package-ecosystem: docker
     directory: /importer
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -135,6 +149,7 @@ updates:
   # backup-smoke.yml. Do not merge it on its own — see scripts/Dockerfile.
   - package-ecosystem: docker
     directory: /scripts
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -148,6 +163,7 @@ updates:
   # separate ecosystem and will not group with this PR.
   - package-ecosystem: docker-compose
     directory: /
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -173,6 +189,7 @@ updates:
   # maintainable rather than a one-off snapshot.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: patch
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
