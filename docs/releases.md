@@ -239,6 +239,61 @@ ver=0.1.4
    Add `--prerelease` for `-alpha.N` tags. Verify with
    `gh release view "v$ver"`.
 
+## Maintenance releases (cutting from a tag)
+
+Sometimes a release should carry only part of what is on `master` — most often
+routine dependency bumps that want to reach a deployment without also taking on
+a feature and its migration. `v1.0.2` was cut this way: it shipped three bumps
+while [#124](https://github.com/aellington89/finance-stack/issues/124) stayed in
+`[Unreleased]`, so rolling back from it was an image re-pin against an unchanged
+schema rather than a dump restore.
+
+**The tag decides what ships, not the changelog.** `release.yml` builds the four
+images from whatever commit the tag points at, and it triggers on `tags: ['v*']`
+with no branch filter — so a maintenance release is simply a branch cut from the
+previous tag, tagged there, and merged back to `master` afterwards:
+
+```sh
+git switch -c release/X.Y.Z vX.Y.<prev>
+```
+
+Two things about this are easy to get wrong.
+
+**Do not merge Dependabot PRs into that branch — cherry-pick them.** Retargeting
+a Dependabot PR (`gh pr edit <n> --base release/X.Y.Z`) makes Dependabot rebase
+the branch onto its configured `target-branch` from `.github/dependabot.yml`,
+which is `patch` — *not* onto the new base the PR now points at. Because `patch`
+tracks `master`, the rebased commit's parent becomes a `master` commit, and
+merging it drags everything on `master` into the release branch, feature and
+migration included. This is not hypothetical: it happened while cutting `v1.0.2`
+and was caught only because a `git pull` printed files that had no business on
+that branch. Cherry-picking takes the diff without the ancestry and preserves
+Dependabot's authorship:
+
+```sh
+git cherry-pick <bump-commit>
+```
+
+Verify before tagging, against the specific thing being withheld — for `v1.0.2`
+that was the migration file, the table in `drizzle/schema.ts`, and
+`importer/tests/`:
+
+```sh
+git merge-base --is-ancestor <withheld-commit> HEAD && echo CONTAMINATED
+```
+
+**Merge `master` in only after the tag exists.** The merge-back has to resolve a
+`CHANGELOG.md` conflict — `master`'s `[Unreleased]` against the branch's new
+`[X.Y.Z]` section — and resolving it means pulling `master` into the branch,
+which brings the withheld work with it. Tag first and that is harmless, because
+the tag is already pinned to the clean commit; tag afterwards and the release
+ships what it was cut to avoid. Order is: cherry-pick, close the changelog, tag,
+push the tag, *then* merge `master` in and open the merge-back PR.
+
+A maintenance release is also a reminder that the version is not always the next
+patch. `v1.0.2` was a patch because it carried only dependency bumps; the work it
+deferred was `### Added`, which makes its own release a **minor**.
+
 ## One-time tag normalization (#167)
 
 The `0.1.3` release was originally tagged `v.0.1.3` (a stray dot — also a
