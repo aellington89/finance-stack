@@ -383,6 +383,7 @@ with. Editing any of these means rebuilding before the change takes effect:
 | `app/**` | `docker compose build finance-app` |
 | `init-db/roles/*.sql`, `init-db/seeds/*.sql`, `app/scripts/*.sh`, `scripts/verify-db-roles.sh` | `docker compose build migrate` |
 | `importer/poll.py`, `importer/requirements.txt` | `docker compose build importer` |
+| `importer/tests/**`, `importer/requirements-dev.txt` | no rebuild — excluded from the build context |
 | `scripts/backup.sh`, `scripts/restore.sh`, `scripts/update-account-balance-history.sql` | `docker compose build pg-backup` |
 
 `scripts/build.sh` with no arguments builds all four, which is the safe default.
@@ -403,6 +404,14 @@ After the gates pass, CI runs:
 ```sh
 npm run lint
 npm run test:coverage      # both projects; requires the Finances_Test database
+```
+
+The importer is Python and sits outside Vitest, so it runs as its own step in
+the same job — after the migrations and grants, because half the suite asserts
+them (see [docs/testing.md](docs/testing.md#importer-tests)):
+
+```sh
+cd importer && pytest tests   # unit always; import_log tests need IMPORTER_DATABASE_URL
 ```
 
 and, in a parallel `e2e` job:
@@ -479,7 +488,7 @@ weekly:
 | Ecosystem | Watches |
 | --- | --- |
 | `npm` | `app/package.json` |
-| `pip` | `importer/requirements.txt` |
+| `pip` | `importer/requirements.txt`, `importer/requirements-dev.txt` |
 | `docker` | base images in `app/Dockerfile`, `importer/Dockerfile`, `scripts/Dockerfile` (one entry per directory) |
 | `docker-compose` | service images in `docker-compose.yml` (`postgres`, `metabase`) |
 | `github-actions` | workflow actions (SHA pins) |

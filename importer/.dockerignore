@@ -5,6 +5,13 @@
 # the context keeps it out of the build cache as well as the image.
 parsers/
 
+# The test suite and its dependencies are build-time-only (#124). The Dockerfile
+# copies poll.py and requirements.txt by name so these would not reach the image
+# regardless, but keeping them out of the context keeps them out of the build
+# cache too — and stops a pytest pin from looking like a runtime dependency.
+tests/
+requirements-dev.txt
+
 __pycache__/
 *.pyc
 *.pyo

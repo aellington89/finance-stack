@@ -20,8 +20,9 @@
 --   finance_app       DML on every public table except users and audit_log
 --                     (SELECT only on both), SELECT on the views, USAGE on the
 --                     sequences.
---   finance_importer  SELECT+INSERT on transactions, SELECT on the three lookup
---                     tables it resolves FKs against, and nothing else.
+--   finance_importer  SELECT+INSERT on transactions and on import_log, SELECT
+--                     on the three lookup tables it resolves FKs against, and
+--                     nothing else.
 --   finance_bi        SELECT on the seven core base tables and the four views.
 --                     Nothing on users or audit_log — that exclusion is the
 --                     whole point of the role existing (#249).
@@ -111,14 +112,27 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"OWNER" IN SCHEMA public
 -- appends transactions and resolves FKs by name (importer/poll.py
 -- load_lookup_maps + parsers/*.process). It cannot UPDATE or DELETE anything,
 -- so a bad parser can only ever add rows — never rewrite history.
+--
+-- import_log (#124) is held to the same rule, which is why it is an append-only
+-- event log rather than a row per file mutated through a status column: the
+-- importer records what it did to a file by inserting, never by rewriting, so
+-- adding it here costs no new verb. The idempotency guarantee still holds
+-- without UPDATE, because it lives in the partial unique index on
+-- (sha256) WHERE status = 'imported' rather than in anything the role does.
 GRANT CONNECT ON DATABASE :"DBNAME" TO finance_importer;
 GRANT USAGE ON SCHEMA public TO finance_importer;
 GRANT SELECT, INSERT ON transactions TO finance_importer;
+GRANT SELECT, INSERT ON import_log TO finance_importer;
 GRANT SELECT ON accounts, transaction_categories, transaction_types TO finance_importer;
 
 -- Resolved rather than hardcoded, matching init-db/seeds/shared-lookups.sql.
+-- import_log uses a GENERATED ALWAYS AS IDENTITY column, so its sequence name is
+-- the database's to choose and pg_get_serial_sequence is the only honest way to
+-- name it here.
 SELECT format('GRANT USAGE, SELECT ON SEQUENCE %s TO finance_importer',
               pg_get_serial_sequence('transactions', 'transaction_id'))\gexec
+SELECT format('GRANT USAGE, SELECT ON SEQUENCE %s TO finance_importer',
+              pg_get_serial_sequence('import_log', 'import_id'))\gexec
 
 -- ── finance_bi — Metabase when questions are built on base tables ─────────
 -- The one role Metabase authenticates as against Finances. A stricter

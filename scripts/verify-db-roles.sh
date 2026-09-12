@@ -155,6 +155,12 @@ INSERT_TXN="INSERT INTO transactions
          (SELECT min(transaction_category_id) FROM transaction_categories)
   FROM accounts a"
 
+# The importer's own record of what it did (#124). A 64-character sha256 that no
+# real file will collide with, and a status the CHECK constraint accepts.
+INSERT_IMPORT_LOG="INSERT INTO import_log
+  (import_type, file_name, sha256, status)
+  VALUES ('privilege-smoke', 'smoke.pdf', repeat('0', 64), 'imported')"
+
 READ_VIEWS="SELECT (SELECT count(*) FROM v_transactions_full)
                  + (SELECT count(*) FROM v_account_balances_current)
                  + (SELECT count(*) FROM v_daily_totals)
@@ -186,8 +192,15 @@ expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "setval a sequence"        "
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "INSERT a transaction" "BEGIN; ${INSERT_TXN}; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "SELECT the lookup maps" \
   "SELECT (SELECT count(*) FROM accounts) + (SELECT count(*) FROM transaction_categories) + (SELECT count(*) FROM transaction_types)"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "INSERT an import_log row" "BEGIN; ${INSERT_IMPORT_LOG}; ROLLBACK"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "SELECT import_log"    "SELECT count(*) FROM import_log"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "UPDATE transactions"  "BEGIN; UPDATE transactions SET amount = 0; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "DELETE transactions"  "BEGIN; DELETE FROM transactions; ROLLBACK"
+# The pair that keeps import_log append-only. Without these, widening the grant in
+# 02-grants.sql to SELECT, INSERT, UPDATE — or to ON ALL TABLES — would pass CI
+# silently, and the importer would gain the power to rewrite its own history.
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "UPDATE import_log"    "BEGIN; UPDATE import_log SET status = 'imported'; ROLLBACK"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "DELETE import_log"    "BEGIN; DELETE FROM import_log; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT users"         "SELECT count(*) FROM users"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT audit_log"     "SELECT count(*) FROM audit_log"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT a view"        "SELECT count(*) FROM v_transactions_full"

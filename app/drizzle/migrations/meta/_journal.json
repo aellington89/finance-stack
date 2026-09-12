@@ -50,6 +50,13 @@
       "when": 1786832929042,
       "tag": "0006_add_users_role_check",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789095368373,
+      "tag": "0007_add_import_log",
+      "breakpoints": true
     }
   ]
 }
