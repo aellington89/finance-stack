@@ -127,7 +127,7 @@
     "ignores the major in the meantime."
   ],
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^26",
     "@types/pg": "^8.23.1",
@@ -137,10 +137,10 @@
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.9",
     "eslint": "^9",
-    "eslint-config-next": "16.3.3",
-    "shadcn": "^4.19.0",
+    "eslint-config-next": "16.3.4",
+    "shadcn": "^4.21.0",
     "tailwindcss": "^4",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "typescript": "~6.0",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.2"
