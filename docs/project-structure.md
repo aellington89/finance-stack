@@ -225,11 +225,13 @@ finance-stack/
 ├── importer/                              # File import service
 │   ├── Dockerfile                         # finance-importer image — bakes poll.py + pinned deps, non-root (#224)
 │   ├── requirements.txt                   # Pinned Python deps, installed at build time (Dependabot `pip`)
+│   ├── requirements-dev.txt               # Test-only deps (pytest) — excluded from the build context
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed, baked into the image)
+│   ├── tests/                             # pytest suite — dispatch loop + import_log constraints (#124)
 │   └── parsers/                           # One module per import type (gitignored, bind-mounted)
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
-├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests, E2E job
+├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration + importer tests, E2E job
 ├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
 ├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122); also the repo's shellcheck step
 ├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh install → failed upgrade → automatic rollback (#228)

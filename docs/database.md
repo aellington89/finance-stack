@@ -15,6 +15,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `account_balance_history` | Daily cumulative balance snapshots per account |
 | `users` | Sign-in accounts (see [Authentication](auth.md)) |
 | `audit_log` | Who changed what, with before/after row state. Written **only** by a database trigger, never by the app — see [Audit Log](audit-log.md) |
+| `import_log` | One row per file the importer has attempted, with its sha256 and outcome. Append-only; drives import idempotency and quarantine — see [Importer](importer.md#idempotency) |
 
 ## Views
 
@@ -217,7 +218,7 @@ The long-running services do **not** connect as the `postgres` superuser (Issue 
 | Role | Used by | Privileges |
 |---|---|---|
 | `finance_app` | `finance-app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table **except `users` and `audit_log`, which are `SELECT`-only**; `SELECT` on the views; `USAGE` on the sequences |
-| `finance_importer` | `importer` | `SELECT` + `INSERT` on `transactions`; `SELECT` on `accounts`, `transaction_categories`, `transaction_types`. No `UPDATE`, no `DELETE` |
+| `finance_importer` | `importer` | `SELECT` + `INSERT` on `transactions` and on `import_log`; `SELECT` on `accounts`, `transaction_categories`, `transaction_types`. No `UPDATE`, no `DELETE` |
 | `finance_bi` | Metabase's Finances connection | `SELECT` on the seven core base tables and the four views. **Nothing on `users` or `audit_log`**, and no write anywhere |
 
 **What `finance_bi` deliberately does *not* get is `users` and `audit_log`.** Reusing `finance_app` would have served the same questions — it already holds `SELECT` on everything — but it can read `users.password_hash`, and Metabase permits native SQL, so hiding a table in its admin UI is a display setting rather than a privilege boundary (Issue #249).

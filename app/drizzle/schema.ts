@@ -1,4 +1,4 @@
-import { pgTable, index, foreignKey, serial, text, date, integer, bigint, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, index, uniqueIndex, foreignKey, char, serial, text, date, integer, bigint, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -145,6 +145,58 @@ export const auditLog = pgTable("audit_log", {
 	index("idx_audit_log_table_row").using("btree", table.tableName.asc().nullsLast().op("text_ops"), table.rowPk.asc().nullsLast().op("text_ops"), table.occurredAt.asc().nullsLast().op("timestamptz_ops")),
 	check("audit_log_action_check", sql`action = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])`),
 	check("audit_log_actor_source_check", sql`actor_source = ANY (ARRAY['app'::text, 'database'::text])`),
+]);
+
+// One row per import *attempt* by importer/poll.py (issue #124). Append-only:
+// finance_importer holds SELECT and INSERT and nothing else, so the same
+// guarantee transactions has — a bad parser can add rows but never rewrite
+// history — covers the record of what it did. Rows are never updated, so a
+// file's history is the set of rows carrying its sha256, newest last.
+//
+// Two things this table does that are easy to undo by accident:
+//
+//   The partial unique index is the actual idempotency guarantee. poll.py also
+//   SELECTs before inserting, but that is check-then-act and races with itself;
+//   the index makes a second *successful* import of identical bytes impossible
+//   regardless. It is deliberately partial — repeated failures of the same file
+//   must be allowed to accumulate.
+//
+//   Quarantine is keyed on content, not on filename or path. A file that failed
+//   is skipped while its bytes are unchanged, and editing it changes the hash so
+//   it retries on the next poll with no manual un-quarantine step. This is why
+//   there is no `imports/.failed/` directory: see docs/importer.md.
+//
+// No audit_row_change trigger, unlike the six business tables — this is itself
+// an append-only log, and a trigger would double-write on every poll.
+export const importLog = pgTable("import_log", {
+	importId: bigint("import_id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+	// The drop-folder subdirectory, which is also the parser name: 'paystubs'
+	// resolves to parsers/paystubs.py. Hyphens are not converted here — this
+	// records the directory as it appeared.
+	importType: text("import_type").notNull(),
+	// Basename only. The full path is a container path (/input/...), which is a
+	// fact about the mount rather than about the file.
+	fileName: text("file_name").notNull(),
+	sha256: char({ length: 64 }).notNull(),
+	status: text().notNull(),
+	errorText: text("error_text"),
+	// NULL unless the parser's process() returned a count. The contract is
+	// `process(filepath, conn, lookup_maps) -> None`, and parsers/ is gitignored
+	// and user-maintained, so the count is an optional return rather than a
+	// breaking signature change.
+	rowCount: integer("row_count"),
+	importedAt: timestamp("imported_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	uniqueIndex("idx_import_log_sha256_imported").using("btree", table.sha256.asc().nullsLast().op("bpchar_ops")).where(sql`status = 'imported'`),
+	index("idx_import_log_sha256").using("btree", table.sha256.asc().nullsLast().op("bpchar_ops")),
+	// Declared ascending for the reason given on idx_audit_log_occurred_at above:
+	// a btree serves the newest-first read by scanning backwards.
+	index("idx_import_log_imported_at").using("btree", table.importedAt.asc().nullsLast().op("timestamptz_ops")),
+	check("import_log_status_check", sql`status = ANY (ARRAY['imported'::text, 'failed'::text])`),
+	// error_text is present exactly when the attempt failed. Written as an
+	// equality between two booleans so it rejects both halves: a failure with no
+	// explanation, and a success carrying one.
+	check("import_log_error_text_check", sql`(status = 'failed') = (error_text IS NOT NULL)`),
 ]);
 
 export const accountBalanceHistory = pgTable("account_balance_history", {

@@ -60,6 +60,55 @@ npm run test:integration
 npm run test:coverage
 ```
 
+## Importer Tests
+
+The importer is Python, so it sits outside Vitest entirely — a separate suite,
+a separate runner, and no part of the Node coverage thresholds below.
+
+```bash
+pip install -r importer/requirements-dev.txt
+cd importer
+pytest tests
+```
+
+| File | Covers | Requires DB? |
+|---|---|---|
+| `tests/test_poll.py` | The dispatch loop — dedup, quarantine, backoff, error classification | No |
+| `tests/test_import_log.py` | The `import_log` constraints and the importer's privileges | Yes (`Finances_Test`) |
+
+The integration half is **skipped, not failed**, when `IMPORTER_DATABASE_URL` is
+unset, so a bare `pytest tests` is always green and useful. To run it:
+
+```bash
+export IMPORTER_DATABASE_URL='postgresql://finance_importer:<pw>@localhost:5432/Finances_Test'
+export ADMIN_DATABASE_URL='postgresql://postgres:<pw>@localhost:5432/Finances_Test'
+pytest tests
+```
+
+It connects as `finance_importer` rather than as the superuser on purpose. The
+append-only guarantee on `import_log` is a *privilege*, so asserting it from a
+role that holds `UPDATE` anyway would prove nothing. `ADMIN_DATABASE_URL` is
+optional and used only to clean up the rows the two commit tests leave behind —
+`finance_importer` cannot `DELETE`, which is the point.
+
+Both halves run in CI's `ci` job, after the migrations, seed and grants have
+been applied — which is also what makes the integration half a live check that
+`init-db/roles/02-grants.sql` was applied correctly.
+
+### Proving these can fail
+
+The two behaviours most worth distrusting are invisible in a passing run, so
+both were checked by mutation rather than by inspection. In `importer/poll.py`:
+
+- Move the `record_failure(...)` call *above* the `conn.rollback()` in
+  `process_file` — `test_failure_is_recorded_only_after_the_rollback` goes red.
+  Without that ordering the quarantine row rolls away with the parser's work and
+  the file is retried on every poll forever.
+- Make `is_connection_error` return `False` unconditionally —
+  `test_connection_error_propagates_and_quarantines_nothing` goes red. Without
+  the distinction, a routine Postgres restart quarantines every good file in the
+  drop folder.
+
 ## Coverage
 
 `npm run test:coverage` runs both projects, merges the maps, and **fails if any

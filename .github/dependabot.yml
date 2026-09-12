@@ -109,7 +109,10 @@ updates:
         update-types:
           - "version-update:semver-major"
 
-  # Importer service Python dependencies (importer/requirements.txt).
+  # Importer service Python dependencies. Directory-scoped, so it covers both
+  # requirements.txt (runtime, baked into the image) and requirements-dev.txt
+  # (the pytest pins for importer/tests, kept out of the build context) — see
+  # CONTRIBUTING.md#dependabot-prs.
   - package-ecosystem: pip
     directory: /importer
     target-branch: patch
