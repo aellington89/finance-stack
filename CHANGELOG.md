@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-12
+
+**Migration:** none
+
+### Security
+
+- **Four HIGH advisories were published against packages the lockfile already resolved, and closed both dependency gates at once.** `browserslist` 4.28.1 → 4.28.9 ([CVE-2026-73088](https://github.com/advisories/GHSA-c83g-rgw3-j3cx)), `fast-uri` 3.1.5 → 3.1.7 ([CVE-2026-75899](https://github.com/advisories/GHSA-fph4-wmhf-6fwf)), `js-yaml` 4.3.1 → 4.3.2 ([CVE-2026-84375](https://github.com/advisories/GHSA-2883-xcg3-v3hh)) and `sharp` 0.35.3 → 0.35.4 ([GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c)).
+
+  **No dependency bump introduced them.** They were published against versions the tree was already sitting on, which is why every open Dependabot PR went red simultaneously rather than one of them carrying the fault — and why re-running a failed job could never clear it. That is the failure mode the build-time audit exists to catch and the reason [#194](https://github.com/aellington89/finance-stack/issues/194) closed the gate on the dev tree rather than leaving it `continue-on-error`.
+
+  **`sharp` is the one that ships**, lifted into the image by the existing `overrides` entry, and it had progressed far enough to fail the **runtime** audit (`--omit=dev`) and not merely the build-time one — so the finding had reached code that reaches users. The other three are build-time only. That split is exactly what keeping two audit steps buys: which of the two goes red is the diagnosis.
+
+  **Every fix resolved inside a range `app/package.json` already declared**, so this was a lockfile-only change — `npm audit fix` reached all four with no manifest edit and no pin to carry forward. The same four packages were independently flagged by the `image` job's Trivy scans of `finance-app` and `finance-migrate`, so one refresh cleared both jobs.
+
+  **The moderate `esbuild`/`drizzle-kit` chain is deliberately untouched.** Its only offered fix is `drizzle-kit` 0.18.1 — a downgrade across a breaking change — and it sits below the HIGH threshold both gates use. Carried forward as known and accepted rather than silently unaddressed.
+
+  Alongside, carried by the same refresh: `qs` 6.15.3 → 6.16.0, `hono` 4.12.32 → 4.13.7, `postcss-selector-parser` 7.1.1 → 7.1.6.
+
+### Changed
+
+- **Metabase moves to v0.58.32.2** (from v0.58.31). A patch on the 0.58 line, so it runs no one-way metadata migration — the concern that would make a Metabase *major* a `**Migration:** breaking` release does not arise here. `deploy/compose.yml` moved in lockstep with `docker-compose.yml`, which `check-deploy-parity` enforces and which Dependabot's `docker-compose` ecosystem cannot do unaided: it reads only the repo-root file, so the deploy copy is a manual half every time.
+
+- **Application dependencies took their routine minor and patch bumps.** `@base-ui/react` 1.7.0 → 1.8.0, `@tanstack/react-table` 9.1.2 → 9.2.4, `lucide-react` 1.33.0 → 1.43.0, `next` 16.3.1 → 16.3.4, `zod` 4.4.3 → 4.5.4. All are bundled into `finance-app`; none changes operator-visible behaviour, which is what keeps this release a patch.
+
+- **The dev tree moved too, including one major: `vitest` and `@vitest/coverage-v8` 4.1.11 → 5.0.0.** These are devDependencies and reach none of the four published images, so the dependency's major does not propagate to this repo's version — a dependency's semver level is a statement about that dependency, not about the release carrying it.
+
+  **The pair has to move in one commit.** `@vitest/coverage-v8@5.0.0` peer-depends on `vitest` at exactly `5.0.0`, so merging either alone leaves the other unsatisfiable; Dependabot raised them as two PRs because majors are ungrouped, and they were combined before merging. The upgrade was verified against a real postgres before it landed rather than on the strength of the majors being dev-only: 743 tests pass and coverage clears every floor at 87.51% statements / 77.26% branches / 85.12% functions / 88.03% lines, against 85 / 75 / 83 / 86.
+
+  Also: `@playwright/test` 1.62.1 → 1.63.0, `@types/node` 26.2.0 → 26.5.0, `@types/react-dom` 19.2.4 → 19.2.7, `eslint-config-next` 16.3.1 → 16.3.4, `shadcn` 4.18.0 → 4.21.0, `tsx` 4.23.12 → 4.23.13.
+
 ## [1.0.0] - 2026-08-29
 
 **Migration:** none
@@ -329,7 +359,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/aellington89/finance-stack/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/aellington89/finance-stack/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/aellington89/finance-stack/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/aellington89/finance-stack/compare/v0.3.0...v0.4.0
