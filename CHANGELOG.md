@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-12
+
+**Migration:** none
+
+### Changed
+
+- **Routine dependency bumps, carried on their own so the release holds no schema change.** `react` and `react-dom` 19.2.8 → 19.3.0 are the only two that ship — both are bundled into `finance-app` — and neither changes operator-visible behaviour, which is what keeps this a patch. `@types/node` 26.5.0 → 26.5.1 is a devDependency and reaches none of the four published images.
+
+  **No advisory prompted any of this.** Unlike [1.0.1], which closed four HIGH findings, nothing here is a security fix; both audit gates were already green. This release exists so the bumps reach a deployment without also taking on the importer work sitting in `[Unreleased]`, which adds a table and a migration and is therefore a *minor* rather than a patch. Keeping the two apart means a rollback from this version is an image re-pin against an unchanged schema.
+
+- **Metabase moves to v0.58.33.1** (from v0.58.32.2). A patch on the 0.58 line, so it runs no one-way metadata migration — the concern that would make a Metabase *major* a `**Migration:** breaking` release does not arise. `deploy/compose.yml` moved in lockstep with `docker-compose.yml`, which `check-deploy-parity` enforces and which Dependabot's `docker-compose` ecosystem cannot do unaided: it reads only the repo-root file, so the deploy copy is a manual half every time.
+
 ## [1.0.1] - 2026-09-12
 
 **Migration:** none
@@ -359,7 +371,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/aellington89/finance-stack/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/aellington89/finance-stack/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/aellington89/finance-stack/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/aellington89/finance-stack/compare/v0.4.0...v0.4.1
