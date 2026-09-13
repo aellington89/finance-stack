@@ -76,6 +76,16 @@ function formatProblem(p: ChangelogProblem): string {
         `not a recognized value — expected one of ${MIGRATION_KINDS.join(", ")} ` +
         `(exact, lower-case). See docs/releases.md.`
       );
+    case "breaking-not-major":
+      return (
+        `::error::Breaking release: [${p.version}] declares "**Migration:** breaking" but did ` +
+        `not increment the major version — the previous release is [${p.previous}]. Post-1.0, a ` +
+        `release that cannot be rolled back by re-pinning the previous image is a major: rename ` +
+        `the section to [${p.expected}], bump package.json to match, and tag v${p.expected}. If ` +
+        `the marker overstates the impact — the previous app version does still run against the ` +
+        `new schema — correct it to none or backward-compatible instead. Pre-1.0 releases are ` +
+        `exempt. See docs/releases.md.`
+      );
   }
 }
 
