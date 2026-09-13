@@ -8,4 +8,4 @@ pytest==8.4.2
 
 # The suite imports poll.py, which imports psycopg2 at module scope, and the
 # integration tests connect for real. Must match the pin in requirements.txt.
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
