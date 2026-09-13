@@ -209,6 +209,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#292](https://github.com/aellington89/finance-stack/issues/292) `.trivyignore`: split by source of finding, or move to `.trivyignore.yaml` *(new — from #291)*
 - [#304](https://github.com/aellington89/finance-stack/issues/304) Dependabot never sees `deploy/compose.yml`, so every image bump fails the parity gate *(new — from #298)*
+- [#315](https://github.com/aellington89/finance-stack/issues/315) `suggestBump()` cannot suggest a major; its pre-1.0 minor/patch assumption went stale at v1.0.0 *(new — from the v1.0.1 release)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
 - [#271](https://github.com/aellington89/finance-stack/issues/271) `transaction_types` id 9 ships as `Accrued Amoritized Interest` — *amortized* is misspelled *(new — from #109)*
@@ -234,6 +235,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#145](https://github.com/aellington89/finance-stack/issues/145) Mobile form layout
 - [#148](https://github.com/aellington89/finance-stack/issues/148) Replace window.confirm() in transaction-list.tsx
 - [#251](https://github.com/aellington89/finance-stack/issues/251) Debt Waterfall: axis scale dominated by total balance makes period changes unreadable
+- [#321](https://github.com/aellington89/finance-stack/issues/321) New Transaction form: long formatted dates overflow the Date input *(new)*
 
 ### v1.4.0 onward — Phase 6 (Features, one minor each)
 - [#136](https://github.com/aellington89/finance-stack/issues/136) Budgets + spending caps
