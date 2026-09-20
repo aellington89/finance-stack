@@ -117,11 +117,61 @@ The top-right cell is the one that matters. It is not a bucket you file things i
 | `account_type_categories` (6 rows) | App-owned reference | Seeded; health-checked |
 | `transaction_categories` id 6 `Other` | App-owned reference | The only category that ships — `createAccount()` writes it on every account opened with an initial balance |
 | `transaction_categories` — all other rows | Pure user data | Includes the ~15 the Liabilities drilldown reads, which opt in via `reporting_role` rather than by being named in code — see below |
+| `transaction_categories` / `accounts` rows an importer parser names | Pure user data | The parser resolves them **by name** at import time and fails loudly when one is absent. Not shipped, not protected, not id-pinned — see [the importer's lookup names](#the-importers-lookup-names) |
 | `account_types` rows | Pure user data | `liquidity_class` gets a seeded *default* per known name, via `UPDATE … WHERE liquidity_class IS NULL`, but the rows are yours |
 
 **The case that used to be unresolved.** The Liabilities drilldown filtered on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treated them as app-owned reference data, which put them squarely in the top-right cell. Shipping them was rejected: it would bake one person's loan portfolio into every install and still leave the set unextensible without a code change.
 
 **Issue #111 resolved it by moving the row down, not left.** `transaction_categories` now carries a nullable `reporting_role`, and the aggregates filter on that column instead of on a list of ids. The meaning is an application concept the code owns; *which* categories carry it is the user's answer, given in `/settings/categories` and read at query time. A category you add and tag today is counted today. A fresh install has none tagged and reports zeros — which is now correct rather than a symptom, because it has no debt categories either.
+
+### The importer's lookup names
+
+*Added in Issue [#273](https://github.com/aellington89/finance-stack/issues/273).*
+
+**The same case had a second instance, and it went unrecorded for longer.**
+`importer/parsers/paystubs.py` resolved every field by writing the primary key
+in: seventeen literals, of which twelve were `transaction_category_id` values
+and one an `account_id`. Those thirteen rows are the user's and ship nowhere, so
+they sat in the defect cell exactly as the liability pins did — but nothing
+named them anywhere a gate could look, so #109 protected them neither and #178
+classified them only as "everything else".
+
+The consequence was worse than the liability one. A fresh install reporting
+zeros is visible. Here, deleting a pinned category made the next import fail on
+a foreign key — loud, and fine — while deleting it and letting the id be
+**reused** filed federal income tax under whatever category then occupied that
+id, silently and permanently.
+
+**Resolved by moving the row down, like #111 — but only partway.** The parser
+resolves through the name → id maps the dispatcher already builds, so a
+reordered, deleted-and-reused or renumbered id cannot misfile anything, and a
+missing row raises `lookups.MappingError` naming it. What a name does **not**
+survive is a rename: renaming the category the parser calls "Federal Income Tax"
+stops the import until the parser agrees. That is the residual coupling, and it
+is deliberate — the honest trade for a mechanism the user can read.
+
+Going the whole way, as `reporting_role` did, was considered and rejected. A role
+answers *which categories are in this bucket*; a parser needs a 1:1 map from one
+document label to one category, so it would take about twelve `payroll_*` roles
+to say what twelve names already say — a CHECK constraint full of values no
+query reads, which
+[`reporting-roles.ts`](../app/lib/constants/reporting-roles.ts) rules out, and
+one person's benefits elections baked into every install, which is the objection
+that rejected shipping the rows in the first place.
+
+**The gate is the dispatcher, not CI.** `importer/parsers/` is gitignored, so no
+assertion in this repository can see which rows a parser depends on — there is
+nothing for a `findFixtureGaps`-style check to read. A parser instead declares
+`REQUIRED_LOOKUPS`, and `poll.py` resolves all of it against the live database
+before opening a document, which also catches the case no fixture gate could: a
+row deleted in production. What CI covers is the mechanism and one property of
+the reference data itself — that no two rows share a name, since a duplicate
+makes that name resolvable by nobody and no `UNIQUE` constraint prevents it. See
+[importer.md](importer.md#resolving-lookups) and
+`importer/tests/test_lookups_live.py`.
+
+The importer does not appear in the three-sources diagram below. It defines no
+rows; it reads names at runtime, which is the point.
 
 ### Reporting roles
 
