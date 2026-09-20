@@ -45,6 +45,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Issue #124. The importer is the one Python component in the stack, and
+      # until now nothing in CI ran it. Pinned by SHA like every other action
+      # here; Dependabot's github-actions ecosystem keeps it current.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: importer/requirements-dev.txt
+
+      - name: Install importer test dependencies
+        working-directory: importer
+        run: pip install -r requirements-dev.txt
+
       # Issue #131. Runtime dependencies: everything here ships inside the image.
       # `overrides` in package.json lift next's vendored postcss/sharp, which is
       # what keeps this green.
@@ -489,6 +502,24 @@ jobs:
       # as indexed.
       - name: Docs index gate
         run: npm run check:docs
+
+      # Issue #124. Two suites in one run: tests/test_poll.py is pure unit work
+      # over the dispatch loop, and tests/test_import_log.py needs the database
+      # — which is why this sits here rather than in a job of its own, after the
+      # migrations, the seed and the grants have all been applied above.
+      #
+      # It connects as finance_importer rather than postgres deliberately. The
+      # append-only guarantee on import_log is a *privilege*, so a suite running
+      # as the superuser would assert it against a role that cannot fail it and
+      # the UPDATE/DELETE denials would pass for the wrong reason.
+      # ADMIN_DATABASE_URL is used only to clean up the rows the two commit
+      # tests have to leave behind — finance_importer cannot DELETE, by design.
+      - name: Importer tests
+        working-directory: importer
+        env:
+          IMPORTER_DATABASE_URL: postgresql://finance_importer:ci-importer-pw@localhost:5432/Finances_Test
+          ADMIN_DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+        run: pytest tests -v
 
       - name: Lint
         run: npm run lint

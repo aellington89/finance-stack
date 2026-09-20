@@ -8,6 +8,42 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The release history lives in [`CHANGELOG.md`](../CHANGELOG.md) (Keep a Changelog
 format); each released version has its own `## [X.Y.Z] - YYYY-MM-DD` section.
 
+### Choosing the bump
+
+| Bump | When | Example |
+|---|---|---|
+| **major** | The release is breaking — most often `**Migration:** breaking`, meaning the previous app version does not run against the new schema and the upgrade is one-way. | `1.4.2` → `2.0.0` |
+| **minor** | New functionality, backward-compatible. | `1.0.2` → `1.1.0` |
+| **patch** | Fixes, chores, dependency bumps. | `1.0.2` → `1.0.3` |
+
+The release-notes generator derives this for you and prints it in the heading it
+drafts, keying a major off the `**Migration:**` marker already standing on
+`## [Unreleased]` — the one each PR sets or escalates as it lands
+([CONTRIBUTING.md](../CONTRIBUTING.md#changelog-entries-day-to-day)). Post-1.0, a
+`breaking` marker means the release is a major, and the changelog gate enforces
+that ([#315](https://github.com/aellington89/finance-stack/issues/315)).
+
+**The marker only sees the database.** It answers "can an operator roll back by
+re-pinning the previous image?", which is not the same question as "is this
+release backward-compatible?". A removed environment variable, a changed
+deployment contract, or any other broken published interface is a major that
+ships `**Migration:** none` — nothing derives that for you, so say so with
+`--bump=major`:
+
+```sh
+npm run release:notes -- <prev-tag>..HEAD --changelog --bump=major
+```
+
+The value attaches with `=`; a space-separated `--bump major` is rejected rather
+than being read as the git range. `--bump=` lowers as well as raises, for the
+case where a `breaking` marker overstates the impact — though if that marker
+still stands when the section is closed, the gate will reject the release, so
+correct the marker instead of overriding past it.
+
+Before `v1.0.0` a breaking change legitimately shipped as a minor, and the
+generator still applies that rule below `1.0.0`. Every release in this
+repository's history is past that boundary now.
+
 ## Tagging convention
 
 Release tags are the **only** legal tag shape:
@@ -143,8 +179,11 @@ The repeatable steps for cutting a new release `vX.Y.Z`. The CI changelog gate
 [#173](https://github.com/aellington89/finance-stack/issues/173)) enforces that
 `package.json` version == the newest `CHANGELOG.md` release, that the release
 carries a valid `**Migration:**` marker
-([#277](https://github.com/aellington89/finance-stack/issues/277)), and that a
-pushed tag is a well-formed `vX.Y.Z` matching that version.
+([#277](https://github.com/aellington89/finance-stack/issues/277)), that a
+release declaring `**Migration:** breaking` incremented its major
+([#315](https://github.com/aellington89/finance-stack/issues/315) — pre-1.0
+releases exempt), and that a pushed tag is a well-formed `vX.Y.Z` matching that
+version.
 
 Set the version once:
 
@@ -154,19 +193,24 @@ ver=0.1.4
 
 1. **Draft the changelog entries.** The release-notes generator
    ([#170](https://github.com/aellington89/finance-stack/issues/170)) reads the
-   commit range, fetches GitHub issue labels, and prints a draft Keep-a-Changelog
-   block with issue-linked bullets and a suggested semver bump to **stdout**
-   (it does not edit any files):
+   commit range, fetches GitHub issue labels, reads the `**Migration:**` marker on
+   `## [Unreleased]`, and prints a draft Keep-a-Changelog block with issue-linked
+   bullets and a suggested semver bump to **stdout** (it does not edit any files):
 
    ```sh
    cd app
    npm run release:notes -- <prev-tag>..HEAD --changelog
    ```
 
-   Review the output, confirm the suggested bump, and re-sort the bullets into the
-   correct `### Added`, `### Changed`, `### Fixed`, or `### Security` subsections
-   under `## [Unreleased]` in `CHANGELOG.md`. (`--release` mode emits a GitHub
-   Release body instead.)
+   Review the output, confirm the suggested bump — the heading comment says what
+   drove it, and [Choosing the bump](#choosing-the-bump) covers the case the
+   marker cannot see — and re-sort the bullets into the correct `### Added`,
+   `### Changed`, `### Fixed`, or `### Security` subsections under
+   `## [Unreleased]` in `CHANGELOG.md`. (`--release` mode emits a GitHub Release
+   body instead.)
+
+   The version in `app/package.json` is still the *previous* release at this
+   point; it is bumped in step 3, after the number is chosen.
 
 2. **Close the CHANGELOG section.** Rename `## [Unreleased]` to
    `## [X.Y.Z] - YYYY-MM-DD`, keeping the `### Added/Changed/Fixed/Security`
@@ -238,6 +282,69 @@ ver=0.1.4
 
    Add `--prerelease` for `-alpha.N` tags. Verify with
    `gh release view "v$ver"`.
+
+## Maintenance releases (cutting from a tag)
+
+Sometimes a release should carry only part of what is on `master` — most often
+routine dependency bumps that want to reach a deployment without also taking on
+a feature and its migration. `v1.0.2` was cut this way: it shipped three bumps
+while [#124](https://github.com/aellington89/finance-stack/issues/124) stayed in
+`[Unreleased]`, so rolling back from it was an image re-pin against an unchanged
+schema rather than a dump restore.
+
+**The tag decides what ships, not the changelog.** `release.yml` builds the four
+images from whatever commit the tag points at, and it triggers on `tags: ['v*']`
+with no branch filter — so a maintenance release is simply a branch cut from the
+previous tag, tagged there, and merged back to `master` afterwards:
+
+```sh
+git switch -c release/X.Y.Z vX.Y.<prev>
+```
+
+Two things about this are easy to get wrong.
+
+**Do not merge Dependabot PRs into that branch — cherry-pick them.** Retargeting
+a Dependabot PR (`gh pr edit <n> --base release/X.Y.Z`) makes Dependabot rebase
+the branch onto its configured `target-branch` from `.github/dependabot.yml`,
+which is `patch` — *not* onto the new base the PR now points at. Because `patch`
+tracks `master`, the rebased commit's parent becomes a `master` commit, and
+merging it drags everything on `master` into the release branch, feature and
+migration included. This is not hypothetical: it happened while cutting `v1.0.2`
+and was caught only because a `git pull` printed files that had no business on
+that branch. Cherry-picking takes the diff without the ancestry and preserves
+Dependabot's authorship:
+
+```sh
+git cherry-pick <bump-commit>
+```
+
+Verify before tagging, against the specific thing being withheld — for `v1.0.2`
+that was the migration file, the table in `drizzle/schema.ts`, and
+`importer/tests/`:
+
+```sh
+git merge-base --is-ancestor <withheld-commit> HEAD && echo CONTAMINATED
+```
+
+**Merge `master` in only after the tag exists.** The merge-back has to resolve a
+`CHANGELOG.md` conflict — `master`'s `[Unreleased]` against the branch's new
+`[X.Y.Z]` section — and resolving it means pulling `master` into the branch,
+which brings the withheld work with it. Tag first and that is harmless, because
+the tag is already pinned to the clean commit; tag afterwards and the release
+ships what it was cut to avoid. Order is: cherry-pick, close the changelog, tag,
+push the tag, *then* merge `master` in and open the merge-back PR.
+
+A maintenance release is also a reminder that the version is not always the next
+patch. `v1.0.2` was a patch because it carried only dependency bumps; the work it
+deferred was `### Added`, which makes its own release a **minor**.
+
+**Do not trust the derived bump on a maintenance release.** The generator reads
+`[Unreleased]` from the working tree, but a maintenance branch is cut from an
+older tag precisely so that some of `[Unreleased]` does *not* ship — so the
+marker can describe work the release withholds. Cutting `v1.0.2` from `v1.0.1`
+while [#124](https://github.com/aellington89/finance-stack/issues/124) stayed
+behind is exactly that shape. Choose the number against what the tag actually
+carries and pass it with `--bump=`.
 
 ## One-time tag normalization (#167)
 

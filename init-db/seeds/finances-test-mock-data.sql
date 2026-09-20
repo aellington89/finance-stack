@@ -49,13 +49,15 @@ ON CONFLICT (account_type_id) DO NOTHING;
 -- docs/database.md). The IDs here mirror one real Finances database so the
 -- Liabilities drilldown has something recognisable to aggregate.
 --
--- Every ID pinned by app/lib/queries/liability-categories.ts must appear below
--- with a matching name, and `npm run check:seed-references` now enforces that.
--- It did not until issue #178, and this block was missing four of them — 7, 8,
--- 75 and 76 — so the debt-service totals those tests asserted were quietly
--- computed over a short set. Integration tests still passed because
--- app/tests/integration/vitest-setup.ts upserts a superset at beforeAll, which
--- is exactly the kind of papering-over the gate now prevents.
+-- `npm run check:seed-references` asserts that every reporting role the query
+-- layer reads is carried by at least one row below, and that
+-- app/tests/integration/vitest-setup.ts is a subset of this block with matching
+-- names. Until issue #178 it checked neither: the ids the Liabilities drilldown
+-- then pinned by number were missing four of them — 7, 8, 75 and 76 — so the
+-- debt-service totals those tests asserted were quietly computed over a short
+-- set, and the integration suite still passed because vitest-setup.ts upserts a
+-- superset at beforeAll. Issue #111 deleted those pins in favour of
+-- reporting_role, and the gate follows what the queries now filter on.
 -- --------------------------------------------
 INSERT INTO transaction_categories (transaction_category_id, transaction_category)
 OVERRIDING SYSTEM VALUE VALUES

@@ -1,0 +1,11 @@
+# Test-only dependencies for importer/tests/ (issue #124). Pinned exactly, for
+# the same reason requirements.txt is — and kept separate so they never reach
+# the runtime image: importer/.dockerignore excludes this file and tests/.
+#
+# Tracked by Dependabot's `pip` ecosystem alongside requirements.txt; see
+# CONTRIBUTING.md#dependabot-prs.
+pytest==8.4.2
+
+# The suite imports poll.py, which imports psycopg2 at module scope, and the
+# integration tests connect for real. Must match the pin in requirements.txt.
+psycopg2-binary==2.9.12

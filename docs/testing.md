@@ -60,6 +60,73 @@ npm run test:integration
 npm run test:coverage
 ```
 
+## Importer Tests
+
+The importer is Python, so it sits outside Vitest entirely — a separate suite,
+a separate runner, and no part of the Node coverage thresholds below.
+
+```bash
+pip install -r importer/requirements-dev.txt
+cd importer
+pytest tests
+```
+
+| File | Covers | Requires DB? |
+|---|---|---|
+| `tests/test_poll.py` | The dispatch loop — dedup, quarantine, backoff, error classification, the lookup preflight | No |
+| `tests/test_lookups.py` | Name-based PK resolution — missing rows, ambiguous names, last-4 collisions | No |
+| `tests/test_import_log.py` | The `import_log` constraints and the importer's privileges | Yes (`Finances_Test`) |
+| `tests/test_lookups_live.py` | That the lookup maps match the schema, and that no two reference rows share a name | Yes (`Finances_Test`) |
+
+The integration half is **skipped, not failed**, when `IMPORTER_DATABASE_URL` is
+unset, so a bare `pytest tests` is always green and useful. To run it:
+
+```bash
+export IMPORTER_DATABASE_URL='postgresql://finance_importer:<pw>@localhost:5432/Finances_Test'
+export ADMIN_DATABASE_URL='postgresql://postgres:<pw>@localhost:5432/Finances_Test'
+pytest tests
+```
+
+It connects as `finance_importer` rather than as the superuser on purpose. The
+append-only guarantee on `import_log` is a *privilege*, so asserting it from a
+role that holds `UPDATE` anyway would prove nothing. `ADMIN_DATABASE_URL` is
+optional and used only to clean up the rows the two commit tests leave behind —
+`finance_importer` cannot `DELETE`, which is the point.
+
+Both halves run in CI's `ci` job, after the migrations, seed and grants have
+been applied — which is also what makes the integration half a live check that
+`init-db/roles/02-grants.sql` was applied correctly.
+
+### Proving these can fail
+
+The two behaviours most worth distrusting are invisible in a passing run, so
+both were checked by mutation rather than by inspection. In `importer/poll.py`:
+
+- Move the `record_failure(...)` call *above* the `conn.rollback()` in
+  `process_file` — `test_failure_is_recorded_only_after_the_rollback` goes red.
+  Without that ordering the quarantine row rolls away with the parser's work and
+  the file is retried on every poll forever.
+- Make `is_connection_error` return `False` unconditionally —
+  `test_connection_error_propagates_and_quarantines_nothing` goes red. Without
+  the distinction, a routine Postgres restart quarantines every good file in the
+  drop folder.
+
+Three more were added with the lookup resolution in Issue
+[#273](https://github.com/aellington89/finance-stack/issues/273), each of which
+removes a *silent* wrong answer rather than a crash:
+
+- Make `preflight_lookups` return `True` before it reads `REQUIRED_LOOKUPS` —
+  `test_a_missing_declared_row_skips_the_type_without_opening_a_file` and
+  `test_a_stale_map_is_reloaded_before_the_preflight_refuses` go red. Without the
+  check a missing category is found one document at a time, as a quarantine each.
+- Delete the ambiguity guard from `lookups.resolve` —
+  `test_resolve_refuses_an_ambiguous_name` goes red. None of these name columns
+  has a `UNIQUE` constraint, so without it a duplicated name resolves to
+  whichever row Postgres read last.
+- Make the `len(candidates) > 1` branch in `resolve_account_by_last4`
+  unreachable — three `test_last4_*` cases go red. That is the old behaviour
+  exactly: a replaced card silently redirects a net-pay distribution.
+
 ## Coverage
 
 `npm run test:coverage` runs both projects, merges the maps, and **fails if any
