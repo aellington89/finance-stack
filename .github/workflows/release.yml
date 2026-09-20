@@ -346,6 +346,22 @@ jobs:
               exit 1
             fi
 
+            # The nonce (#237). Worth asserting here rather than only in the unit
+            # tests because it is the one part of the policy that no static check
+            # can see: next.config.ts compiles a nonce-free floor, and proxy.ts
+            # overwrites it per request. A nonce missing here means that
+            # overwrite did not happen in the real image, which no amount of
+            # reading the config would reveal.
+            SCRIPT_SRC="$(tr ';' '\n' <<<"$CSP" | grep -i 'script-src' || true)"
+            if ! grep -q "nonce-" <<<"$SCRIPT_SRC"; then
+              echo "::error::no nonce in script-src on ${PATH_UNDER_TEST}: ${SCRIPT_SRC:-<missing>}"
+              exit 1
+            fi
+            if grep -q "unsafe-inline" <<<"$SCRIPT_SRC"; then
+              echo "::error::script-src still allows unsafe-inline on ${PATH_UNDER_TEST}: $SCRIPT_SRC"
+              exit 1
+            fi
+
             echo "✓ security headers on ${PATH_UNDER_TEST}"
           done
 

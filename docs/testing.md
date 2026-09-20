@@ -237,6 +237,29 @@ the run created.
 rather than coverage, and the second E2E test is where the suite starts costing
 more maintenance than it catches regressions.
 
+### The exception: `csp.spec.ts`
+
+[`e2e/csp.spec.ts`](../app/e2e/csp.spec.ts) is the one spec that bends the rule
+above, and it should stay the last one that does.
+
+The nonce-based CSP ([#237](https://github.com/aellington89/finance-stack/issues/237))
+has acceptance criteria that are facts about a browser and nothing else: whether
+Next stamped its nonce onto its own inline scripts, whether the theme script was
+refused, whether anything on the page reported a violation. A unit test can
+assert the policy *string* — and
+[`tests/unit/lib/security/csp.test.ts`](../app/tests/unit/lib/security/csp.test.ts)
+does — but getting this wrong produces a blank page in production, which is
+exactly the class of failure the E2E gate exists for.
+
+It also avoids the cost that made one path the rule. It writes nothing to the
+database, so it needs no teardown and cannot race the money path; it reuses the
+session `auth.setup.ts` already establishes; and it runs in about three seconds.
+
+The production build matters more here than anywhere else in the suite: **the
+nonce only exists in one.** `next dev` serves a policy with `'unsafe-inline'`
+instead (see [Security headers](deployment.md#security-headers)), so a spec run
+against a dev server would pass while testing the opposite of what ships.
+
 ### How it runs
 
 | | |
@@ -342,7 +365,8 @@ ss -lptn 'sport = :3100'    # expect no output between runs
 A separate `e2e` job in [`ci.yml`](../.github/workflows/ci.yml), for the same
 reason the `image` job is separate: it needs a Next build and a browser download
 that the database gates have no use for, and a failure should read as "the money
-path broke" rather than as one more red step among fifteen. It stands
+path broke" — or "the CSP broke" — rather than as one more red step among
+fifteen. It stands
 `Finances_Test` up from the same `init-db/` files as the `ci` job, but skips the
 service roles and the grant matrix — the app connects as `postgres` here, as the
 integration suite does and for the reasons in [Database Role Gate](#database-role-gate)
