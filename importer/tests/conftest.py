@@ -39,6 +39,14 @@ class FakeCursor:
         return self.conn.fetchone_result
 
     def fetchall(self):
+        # A queue when one is supplied, so load_lookup_maps() — which runs three
+        # SELECTs of different shapes against one cursor — can be handed a
+        # different result set per statement. Falls back to the single result,
+        # which is what every test that does not care about map contents uses.
+        if self.conn.fetchall_results is not None:
+            if not self.conn.fetchall_results:
+                return []
+            return self.conn.fetchall_results.pop(0)
         return self.conn.fetchall_result
 
 
@@ -49,12 +57,16 @@ class FakeConn:
     precedes the failure record rather than merely that both happened.
     """
 
-    def __init__(self, fetchone_result=None, fetchall_result=None):
+    def __init__(
+        self, fetchone_result=None, fetchall_result=None, fetchall_results=None
+    ):
         self.closed = 0
         self.calls = []
         self.executed = []
         self.fetchone_result = fetchone_result
         self.fetchall_result = fetchall_result or []
+        # Consumed one statement at a time when set — see FakeCursor.fetchall.
+        self.fetchall_results = fetchall_results
 
     def note(self, label):
         """Record a non-SQL event so it can be ordered against the statements."""
@@ -82,12 +94,19 @@ class FakeParser:
     """
     Stands in for a module in parsers/. `behaviour` maps a filename to either an
     exception instance to raise or the value process() should return.
+
+    `required_lookups` stands in for the module-level REQUIRED_LOOKUPS a parser
+    may declare (issue #273). It is only set when given, so the default parser
+    has no such attribute at all — which is the case the dispatcher must leave
+    alone.
     """
 
-    def __init__(self, behaviour=None, default=None):
+    def __init__(self, behaviour=None, default=None, required_lookups=None):
         self.behaviour = behaviour or {}
         self.default = default
         self.seen = []
+        if required_lookups is not None:
+            self.REQUIRED_LOOKUPS = required_lookups
 
     def process(self, filepath, conn, lookup_maps):
         name = os.path.basename(filepath)
@@ -96,6 +115,16 @@ class FakeParser:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
+
+
+def lookup_query_results(accounts=(), categories=(), types=()):
+    """
+    Result sets for the three SELECTs load_lookup_maps() issues, in order.
+
+    `accounts` rows are (id, name, account_identifier, closed_date); the other
+    two are (id, name). Pass as FakeConn(fetchall_results=...).
+    """
+    return [list(accounts), list(categories), list(types)]
 
 
 @pytest.fixture
