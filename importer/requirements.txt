@@ -10,5 +10,5 @@
 # user-specific — the dependency is pinned here anyway so the image has it ready
 # and parsers no longer need to self-install at import time.
 
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
 pdfplumber==0.11.10

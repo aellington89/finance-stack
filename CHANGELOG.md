@@ -55,6 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Note that the real parser cannot be a fixture — `importer/parsers/` is gitignored, so it is absent in CI and on any fresh clone — and the suite therefore runs entirely against a `FakeParser`. Python is excluded from the Vitest coverage thresholds; the two suites share a job, not a denominator.
 
+## [1.0.3] - 2026-09-20
+
+**Migration:** none
+
+### Changed
+
+- **Routine dependency bumps, carried on their own so the release holds no schema change.** `lucide-react` 1.43.0 → 1.44.0 and `zod` 4.5.4 → 4.6.2 are bundled into `finance-app`; `psycopg2-binary` 2.9.12 → 2.9.13 is pinned into `finance-importer`. All three are runtime dependencies that reach a published image, and none changes operator-visible behaviour, which is what keeps this a patch.
+
+  **No advisory prompted any of this.** Unlike [1.0.1], which closed four HIGH findings, nothing here is a security fix; both dependency gates were already green. This release exists so the bumps reach a deployment without also taking on the importer work sitting in `[Unreleased]`, which adds a table and a migration and is therefore a *minor* rather than a patch. Keeping the two apart means a rollback from this version is an image re-pin against an unchanged schema.
+
+  **A fourth open bump is deliberately not carried.** `pytest` 8.4.2 → 9.1.1 ([#328](https://github.com/aellington89/finance-stack/pull/328)) touches only `importer/requirements-dev.txt` — a file that does not exist at this tag, because it arrived with the importer test suite in [#124](https://github.com/aellington89/finance-stack/issues/124), which this release withholds. A test-runner pin has nothing to bind when the tests themselves are not shipping, so it stays on `patch` and lands with the minor that carries [#124](https://github.com/aellington89/finance-stack/issues/124).
+
 ## [1.0.2] - 2026-09-12
 
 **Migration:** none
@@ -419,7 +431,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/aellington89/finance-stack/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/aellington89/finance-stack/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/aellington89/finance-stack/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/aellington89/finance-stack/compare/v0.4.1...v1.0.0
