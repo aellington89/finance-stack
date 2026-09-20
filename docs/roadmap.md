@@ -219,8 +219,19 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 > the importer as a service to make idempotent and containerize; #273 is the data
 > coupling underneath it — a second, undocumented instance of the defect cell in
 > the [seed-data taxonomy](database.md#seed-data-taxonomy), left open when #109
-> closed the first. Worth sequencing before #124, since resolving it changes what
-> a retried import is keyed on.
+> closed the first. It was filed as something to sequence before #124; #124
+> shipped first, which cost nothing, because content-hash dedup turned out not to
+> depend on how a field resolves to a primary key.
+>
+> **It resolves in two halves, and only one of them is reviewable.** The
+> dispatcher half is in-repo: `load_lookup_maps()` carries `account_identifier`,
+> `importer/lookups.py` holds the resolution, and a parser's declared
+> `REQUIRED_LOOKUPS` is proved against the live database before any document is
+> opened. The parser half is not — `importer/parsers/` is gitignored, so the file
+> that actually held the seventeen ids is invisible to CI, to review and to any
+> gate this repository can write. That is why the check is a runtime preflight
+> rather than a fixture assertion, and why the pattern also has to land in the
+> skill that generates the parser: it is the only durable record of it.
 
 ### v1.2.0 — Phase 4 (Performance polish)
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx

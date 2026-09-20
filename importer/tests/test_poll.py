@@ -12,8 +12,9 @@ import hashlib
 import psycopg2
 import pytest
 
+import lookups
 import poll
-from conftest import FakeConn, FakeParser
+from conftest import FakeConn, FakeParser, lookup_query_results
 
 
 # ── hashing ───────────────────────────────────────────────────────────────
@@ -98,9 +99,14 @@ def has_run(verbs, pattern):
     )
 
 
-def run_sweep(monkeypatch, parser, input_dir, conn, retry_failed=False):
+def run_sweep(monkeypatch, parser, input_dir, conn, retry_failed=False, lookup_maps=None):
     monkeypatch.setattr(poll, "load_parser", lambda import_type: parser)
-    return poll.poll_once(conn, {}, input_dir, retry_failed=retry_failed)
+    return poll.poll_once(
+        conn,
+        {} if lookup_maps is None else lookup_maps,
+        input_dir,
+        retry_failed=retry_failed,
+    )
 
 
 def test_new_file_is_imported(monkeypatch, drop_folder):
@@ -392,7 +398,376 @@ def test_connect_releases_the_lookup_snapshot(monkeypatch):
     assert returned is conn
     assert set(lookup_maps) == {
         "accounts",
+        "account_identifiers",
         "transaction_categories",
+        # The table is transaction_types; the key is a misnomer that stays one,
+        # because parsers this repository cannot see already read it (#273).
         "transaction_category_types",
+        lookups.CLOSED_ACCOUNTS,
+        lookups.AMBIGUOUS,
     }
     assert conn.verbs[-1] == "rollback", conn.verbs
+
+
+# ── the lookup maps ───────────────────────────────────────────────────────
+
+
+def maps_from(accounts=(), categories=(), types=()):
+    """load_lookup_maps() against one set of rows, using the fake cursor queue."""
+    conn = FakeConn(
+        fetchall_results=lookup_query_results(accounts, categories, types)
+    )
+    return poll.load_lookup_maps(conn)
+
+
+def test_lookup_maps_key_names_by_id():
+    maps = maps_from(
+        accounts=[(27, "Epic Pay", "5550001111", None)],
+        categories=[(23, "Federal Income Tax")],
+        types=[(2, "Expense")],
+    )
+
+    assert maps["accounts"] == {"Epic Pay": 27}
+    assert maps["transaction_categories"] == {"Federal Income Tax": 23}
+    assert maps["transaction_category_types"] == {"Expense": 2}
+
+
+def test_lookup_maps_expose_account_identifiers():
+    # The one thing these maps could not do, and the whole stated reason
+    # paystubs.py discarded them and hardcoded twelve category ids (#273).
+    maps = maps_from(accounts=[(27, "Epic Pay", "5550001111", None)])
+
+    # Values are tuples, not bare ids: an identifier is not unique.
+    assert maps["account_identifiers"] == {"5550001111": (27,)}
+
+
+def test_lookup_maps_omit_null_identifiers():
+    # account_identifier is nullable. A NULL must not become a key, or every
+    # last-4 lookup would have a phantom candidate.
+    maps = maps_from(
+        accounts=[(1, "Checking", "9012343401", None), (2, "Cash", None, None)]
+    )
+
+    assert maps["account_identifiers"] == {"9012343401": (1,)}
+    assert maps["accounts"] == {"Checking": 1, "Cash": 2}
+
+
+def test_lookup_maps_keep_every_account_sharing_one_identifier():
+    # The collapse that hid a real misfiling for six months. One credit-union
+    # member number covers checking, savings and the HELOC, so a bare
+    # {identifier: id} map would keep one and resolve the last-4 to it silently.
+    maps = maps_from(
+        accounts=[
+            (1, "UWCU Checking", "9012343401", None),
+            (2, "UWCU Savings", "9012343401", None),
+            (3, "UWCU HELOC", "9012343401", None),
+        ]
+    )
+
+    assert maps["account_identifiers"] == {"9012343401": (1, 2, 3)}
+    # And resolution refuses rather than picking one.
+    with pytest.raises(lookups.MappingError) as caught:
+        lookups.resolve_account_by_last4(maps, "3401")
+    assert "3 accounts" in str(caught.value)
+
+
+def test_lookup_maps_record_which_accounts_are_closed():
+    maps = maps_from(
+        accounts=[
+            (1, "Checking", "9012343401", None),
+            (8, "Old Checking", "8877773401", "2026-01-31"),
+        ]
+    )
+
+    assert maps[lookups.CLOSED_ACCOUNTS] == {8}
+
+
+def test_lookup_maps_record_a_name_held_by_two_rows():
+    # transaction_category has no UNIQUE constraint, so the name -> id dict keeps
+    # only one of them. Recording the collision is what lets resolution refuse
+    # the name instead of silently returning whichever row was read last.
+    maps = maps_from(
+        categories=[(22, "Medicare Tax"), (99, "Medicare Tax"), (23, "Federal")]
+    )
+
+    assert maps[lookups.AMBIGUOUS] == {"transaction_categories": {"Medicare Tax"}}
+    assert lookups.is_ambiguous(maps, "transaction_categories", "Medicare Tax")
+    assert not lookups.is_ambiguous(maps, "transaction_categories", "Federal")
+
+
+def test_lookup_maps_warn_about_an_ambiguous_name(capsys):
+    # It is not an error on its own — nothing may resolve that name — but it is
+    # invisible in the data, so it has to be said out loud at load time.
+    maps_from(categories=[(22, "Medicare Tax"), (99, "Medicare Tax")])
+
+    out = capsys.readouterr().out
+    assert "'Medicare Tax'" in out
+    assert "transaction_categories" in out
+
+
+def test_lookup_maps_are_quiet_when_no_name_collides(capsys):
+    maps_from(categories=[(22, "Medicare Tax"), (23, "Federal")])
+    assert capsys.readouterr().out == ""
+
+
+def test_lookup_summary_counts_tables_only():
+    # The metadata keys are not tables, and counting them reports a row total
+    # that reconciles against nothing in the database.
+    maps = maps_from(
+        accounts=[(1, "Checking", "9012343401", None)],
+        categories=[(23, "Federal")],
+        types=[(2, "Expense")],
+    )
+
+    summary = poll.lookup_summary(maps)
+    # accounts 1 + account_identifiers 1 + categories 1 + types 1
+    assert summary == "4 reference rows across 4 tables"
+
+
+def test_reload_lookup_maps_refreshes_in_place():
+    # poll() and any parser already hold this dict, so a reload that rebinds a
+    # local would leave both looking at the stale copy.
+    maps = maps_from(categories=[(23, "Federal")])
+    original = maps
+    conn = FakeConn(
+        fetchall_results=lookup_query_results(categories=[(23, "Federal"), (24, "Food")])
+    )
+
+    poll.reload_lookup_maps(conn, maps)
+
+    assert maps is original
+    assert maps["transaction_categories"] == {"Federal": 23, "Food": 24}
+
+
+# ── the lookup preflight (#273) ───────────────────────────────────────────
+
+
+def paystub_maps(categories=(("23", 23),)):
+    """Minimal maps carrying the named categories."""
+    return {
+        "accounts": {"Epic Pay": 27},
+        "account_identifiers": {"5550001111": 27},
+        "transaction_categories": dict(categories),
+        "transaction_category_types": {"Expense": 2},
+        lookups.CLOSED_ACCOUNTS: set(),
+        lookups.AMBIGUOUS: {},
+    }
+
+
+def test_a_parser_declaring_nothing_is_not_preflighted(monkeypatch, drop_folder):
+    # REQUIRED_LOOKUPS is optional, like the process() return value: parsers this
+    # repository cannot see must keep working untouched.
+    parser = FakeParser()
+    conn = FakeConn(fetchone_result=None)
+    stats = run_sweep(monkeypatch, parser, drop_folder("march.pdf"), conn)
+
+    assert stats == {"imported": 1, "skipped": 0, "failed": 0}
+    assert not hasattr(parser, "REQUIRED_LOOKUPS")
+
+
+def test_declared_lookups_that_resolve_let_the_import_run(monkeypatch, drop_folder):
+    parser = FakeParser(
+        required_lookups={"transaction_categories": ("Federal Income Tax",)}
+    )
+    conn = FakeConn(fetchone_result=None)
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("march.pdf"),
+        conn,
+        lookup_maps=paystub_maps({"Federal Income Tax": 23}.items()),
+    )
+
+    assert stats == {"imported": 1, "skipped": 0, "failed": 0}
+    assert parser.seen == ["march.pdf"]
+
+
+def test_a_missing_declared_row_skips_the_type_without_opening_a_file(
+    monkeypatch, drop_folder, capsys
+):
+    # The gate this coupling cannot have in CI, because the parser is gitignored:
+    # the dispatcher proves the rows exist against the live database instead.
+    parser = FakeParser(
+        required_lookups={"transaction_categories": ("Federal Income Tax",)}
+    )
+    conn = FakeConn(fetchone_result=None)
+    monkeypatch.setattr(poll, "load_lookup_maps", lambda c: paystub_maps())
+
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("a.pdf", "b.pdf", "c.pdf"),
+        conn,
+        lookup_maps=paystub_maps(),
+    )
+
+    assert stats == {"imported": 0, "skipped": 3, "failed": 0}
+    # Not opened, so not hashed and not parsed.
+    assert parser.seen == []
+    # And nothing recorded: a missing row is a configuration fault, not three
+    # bad documents, so fixing it lifts this with no restart.
+    assert "INSERT" not in conn.verbs, conn.verbs
+
+
+def test_the_preflight_error_names_every_missing_row(
+    monkeypatch, drop_folder, capsys
+):
+    # Naming one of four means four rounds of fixing and re-polling.
+    parser = FakeParser(
+        required_lookups={
+            "transaction_categories": ("Delta Dental", "Delta Vision", "GHC HMO"),
+            "accounts": ("Payroll",),
+        }
+    )
+    conn = FakeConn(fetchone_result=None)
+    monkeypatch.setattr(poll, "load_lookup_maps", lambda c: paystub_maps())
+
+    run_sweep(
+        monkeypatch, parser, drop_folder("a.pdf"), conn, lookup_maps=paystub_maps()
+    )
+
+    err = capsys.readouterr().err
+    assert "4 unresolvable lookup(s)" in err
+    for name in ("Delta Dental", "Delta Vision", "GHC HMO", "Payroll"):
+        assert f"'{name}'" in err, err
+    assert "skipping 1 file(s)" in err
+
+
+def test_a_stale_map_is_reloaded_before_the_preflight_refuses(
+    monkeypatch, drop_folder
+):
+    # The maps load once per connection, so a category created through the UI
+    # minutes ago is not in them. A first miss proves nothing.
+    parser = FakeParser(
+        required_lookups={"transaction_categories": ("Federal Income Tax",)}
+    )
+    conn = FakeConn(fetchone_result=None)
+    reloads = []
+
+    def reload(c):
+        reloads.append(c)
+        return paystub_maps({"Federal Income Tax": 23}.items())
+
+    monkeypatch.setattr(poll, "load_lookup_maps", reload)
+
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("march.pdf"),
+        conn,
+        lookup_maps=paystub_maps(),
+    )
+
+    assert stats == {"imported": 1, "skipped": 0, "failed": 0}
+    assert len(reloads) == 1, "the reload must happen exactly once"
+
+
+def test_the_maps_are_reloaded_at_most_once_per_sweep(monkeypatch, tmp_path):
+    # If a row really is absent, every type misses on it. Re-reading three tables
+    # per failure would turn one mistake into a query storm on a 60s timer.
+    for subdir in ("paystubs", "bank-statements"):
+        target = tmp_path / subdir
+        target.mkdir()
+        (target / "a.pdf").write_text(subdir)
+
+    parser = FakeParser(
+        required_lookups={"transaction_categories": ("Nowhere",)}
+    )
+    conn = FakeConn(fetchone_result=None)
+    reloads = []
+    monkeypatch.setattr(
+        poll, "load_lookup_maps", lambda c: reloads.append(c) or paystub_maps()
+    )
+
+    stats = run_sweep(
+        monkeypatch, parser, str(tmp_path), conn, lookup_maps=paystub_maps()
+    )
+
+    assert stats == {"imported": 0, "skipped": 2, "failed": 0}
+    assert len(reloads) == 1, f"reloaded {len(reloads)} times"
+
+
+# ── the per-file lookup retry (#273) ──────────────────────────────────────
+
+
+def test_a_mapping_error_reloads_the_maps_and_retries_once(
+    monkeypatch, drop_folder
+):
+    # A parser may resolve a name it did not declare. Same reasoning as the
+    # preflight: a first miss may only mean the maps are older than the row.
+    attempts = []
+
+    class FlakyParser:
+        def process(self, filepath, conn, lookup_maps):
+            attempts.append(dict(lookup_maps).get("transaction_categories"))
+            if len(attempts) == 1:
+                raise lookups.MappingError("No transaction_categories row named 'Food'")
+            return 3
+
+    conn = FakeConn(fetchone_result=None)
+    monkeypatch.setattr(
+        poll, "load_lookup_maps", lambda c: paystub_maps({"Food": 24}.items())
+    )
+
+    stats = run_sweep(
+        monkeypatch,
+        FlakyParser(),
+        drop_folder("march.pdf"),
+        conn,
+        lookup_maps=paystub_maps(),
+    )
+
+    assert stats == {"imported": 1, "skipped": 0, "failed": 0}
+    assert len(attempts) == 2
+    # The retry saw the refreshed maps, not the stale ones it failed against.
+    assert "Food" in attempts[1]
+
+
+def test_a_genuinely_missing_row_is_quarantined_after_one_retry(
+    monkeypatch, drop_folder
+):
+    parser = FakeParser(
+        behaviour={
+            "march.pdf": lookups.MappingError(
+                "No transaction_categories row named 'Delta Dental'"
+            )
+        }
+    )
+    conn = FakeConn(fetchone_result=None)
+    monkeypatch.setattr(poll, "load_lookup_maps", lambda c: paystub_maps())
+
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("march.pdf"),
+        conn,
+        lookup_maps=paystub_maps(),
+    )
+
+    assert stats == {"imported": 0, "skipped": 0, "failed": 1}
+    # Retried once, then quarantined — not retried forever.
+    assert parser.seen == ["march.pdf", "march.pdf"]
+    # And the quarantine row still lands only after the rollback.
+    assert has_run(conn.verbs, ["rollback", "INSERT", "commit"]), conn.verbs
+
+
+def test_a_non_mapping_failure_is_not_retried(monkeypatch, drop_folder):
+    # An unparseable document does not get better by reloading reference data.
+    parser = FakeParser(behaviour={"march.pdf": ValueError("Could not find Pay Date")})
+    conn = FakeConn(fetchone_result=None)
+    reloads = []
+    monkeypatch.setattr(
+        poll, "load_lookup_maps", lambda c: reloads.append(c) or paystub_maps()
+    )
+
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("march.pdf"),
+        conn,
+        lookup_maps=paystub_maps(),
+    )
+
+    assert stats == {"imported": 0, "skipped": 0, "failed": 1}
+    assert parser.seen == ["march.pdf"]
+    assert reloads == []
