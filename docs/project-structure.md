@@ -245,6 +245,7 @@ finance-stack/
 │   │   ├── 01-create-roles.sql           # finance_app / finance_importer / finance_bi (cluster-global)
 │   │   ├── 02-grants.sql                 # Per-database grant matrix; revokes then grants, so it converges
 │   │   ├── 03-metabase-role.sql          # Converges the Metabase metadata role — attributes, ownership, password (#239, #189)
+│   │   ├── 04-glitchtip-role.sql         # Converges GlitchTip's role — same shape as 03, for the error-tracking DB (#232)
 │   │   └── assert-grants.sql             # Catalog assertions for the matrix — the CI grant gate
 │   └── seeds/                            # Applied by the `migrate` Compose service after migrations
 │       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs, every run — must stay additive, #187)

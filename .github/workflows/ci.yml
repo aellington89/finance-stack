@@ -108,6 +108,9 @@ jobs:
             -v mb_user=metabase_user \
             -v mb_dbname=metabase \
             -v mb_password=ci-metabase-meta-pw \
+            -v gt_user=glitchtip \
+            -v gt_dbname=glitchtip \
+            -v gt_password=ci-glitchtip-pw \
             -f ../init-db/roles/00-create-databases.sql
 
       - name: Apply Drizzle migrations
@@ -154,6 +157,20 @@ jobs:
             -v mb_user=metabase_user -v mb_password=ci-metabase-meta-pw \
             -f ../init-db/roles/03-metabase-role.sql
 
+      # Issue #232. The same convergence for GlitchTip's role, against the role
+      # and database the creation step stood up. A step of its own for the same
+      # reason the Metabase one is: that is the order migrate-and-seed.sh applies
+      # these files in, and this job exists to exercise the real files.
+      - name: Converge the GlitchTip role
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          psql -v ON_ERROR_STOP=1 -d glitchtip \
+            -v gt_user=glitchtip -v gt_password=ci-glitchtip-pw \
+            -f ../init-db/roles/04-glitchtip-role.sql
+
       # Asserts the grant matrix against the catalog, then connects as each role
       # and runs real statements (see scripts/verify-db-roles.sh). PGHOST is
       # localhost, which reaches the service container through Docker's port
@@ -170,6 +187,9 @@ jobs:
           MB_DB_USER: metabase_user
           MB_DB_DBNAME: metabase
           MB_DB_PASS: ci-metabase-meta-pw
+          GLITCHTIP_DB_USER: glitchtip
+          GLITCHTIP_DB_DBNAME: glitchtip
+          GLITCHTIP_DB_PASSWORD: ci-glitchtip-pw
           ROLES_DIR: ../init-db/roles
         run: bash ../scripts/verify-db-roles.sh Finances_Test
 
@@ -765,10 +785,11 @@ jobs:
       # (docs/testing.md, "Database Role Gate"), and those gates are the `ci`
       # job's business — their absence here is a decision, not an oversight.
       #
-      # mb_password is empty here, where the `ci` job passes one: that job needs
-      # metabase_user to exist so the #239 attribute sweep has more than the
-      # three service roles to sweep. Nothing in this job touches Metabase, and
-      # 00-create-databases.sql skips the role and its database on an empty
+      # mb_password and gt_password are empty here, where the `ci` job passes
+      # both: that job needs metabase_user and glitchtip to exist so the #239
+      # attribute sweep has more than the three service roles to sweep. Nothing
+      # in this job touches Metabase or error tracking, and
+      # 00-create-databases.sql skips each role and its database on an empty
       # password by design.
       - name: Create databases
         env:
@@ -782,6 +803,9 @@ jobs:
             -v mb_user=metabase_user \
             -v mb_dbname=metabase \
             -v mb_password= \
+            -v gt_user=glitchtip \
+            -v gt_dbname=glitchtip \
+            -v gt_password= \
             -f ../init-db/roles/00-create-databases.sql
 
       - name: Apply Drizzle migrations

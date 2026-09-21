@@ -4,9 +4,10 @@
  * Zero dependencies on purpose. There is no Redis in this stack, a Postgres
  * write per login attempt would make the limiter its own amplification vector,
  * and any new runtime dependency lands in the *blocking* `npm audit --omit=dev`
- * gate plus the Trivy image scan — the same reasoning `lib/report.ts` records
- * for why no error-tracking SDK ships. One container, one process, so an
- * in-memory counter is the honest fit.
+ * gate plus the Trivy image scan — the same reasoning `lib/error-tracking.ts`
+ * records for why error tracking speaks the Sentry protocol over `fetch` rather
+ * than shipping an SDK. One container, one process, so an in-memory counter is
+ * the honest fit, and that module's delivery breaker is the same bet.
  *
  * **Stated limitations**, documented in docs/deployment.md rather than glossed:
  * counters live in process memory, so they reset when the container restarts

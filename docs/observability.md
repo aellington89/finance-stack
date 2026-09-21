@@ -8,17 +8,21 @@ route or action it came from, and the user it belongs to. Added in
 docker compose logs finance-app | jq -c 'select(.level == "error")'
 ```
 
-## Why three capture points rather than one
+## Why several capture points rather than one
 
 The obvious design is a single wrapper around server actions. That would miss
-most of what goes wrong here, because the three ways this app fails are caught
-in three different places:
+most of what goes wrong here, because the ways this app fails are caught in
+different places:
 
 | What fails | Captured by | Fields it can supply |
 |---|---|---|
 | A server action's database write | [`lib/actions/failure.ts`](../app/lib/actions/failure.ts) | `action`, `user_id` |
 | Any unhandled server throw — page render, route handler, proxy, or an action throwing outside its `try` | [`instrumentation.ts`](../app/instrumentation.ts) | `route`, `route_type`, `method`, `path` |
 | A client-side render error | [`(app)/error.tsx`](<../app/app/(app)/error.tsx>), [`global-error.tsx`](../app/app/global-error.tsx) | `route`, `digest` |
+| The seed-reference drift check failing to run | [`api/health/seed-data/route.ts`](../app/app/api/health/seed-data/route.ts) | `route` |
+
+All of them call `reportError()`, which is the only thing that matters when
+adding a sink: there is one place to change, not five.
 
 The first two are **not** redundant. Every action in `lib/actions/` catches its
 own errors and returns an `ActionState` for the form to render — none of them
@@ -214,37 +218,160 @@ That last one is worth running after adding a dependency: Next itself, `pg`, and
 the Node runtime all write unstructured lines, and this separates ours from
 theirs.
 
-## Wiring an error-tracking backend
+## Error tracking
 
-Tracked by [Issue #232](https://github.com/aellington89/finance-stack/issues/232).
+`reportError()` has a second sink: any backend speaking the Sentry ingest
+protocol, configured with a single optional variable.
+Added in [Issue #232](https://github.com/aellington89/finance-stack/issues/232).
 
-**No SDK ships today, on purpose.** `@sentry/nextjs` pulls the OpenTelemetry
-package set into the *blocking* `npm audit --omit=dev` gate and the Trivy image
-scan ([CI gates](../CONTRIBUTING.md#ci-gates)), needs `withSentryConfig` wrapped
-around `next.config.ts`, and wants a `SENTRY_AUTH_TOKEN` build secret — all to
-ship pg error text off a stack the [README](../README.md#security) says to keep
-on a trusted network.
-
-The seam is built for it anyway. `reportError()` in
-[`lib/report.ts`](../app/lib/report.ts) is the single choke point every capture
-point already routes through, so adding a backend is one call in one file:
-
-```ts
-export function reportError(error: unknown, context: ReportContext = {}): void {
-  log.error(describe(context), { ...context, err: serializeError(error) });
-  Sentry.captureException(error, { extra: context });   // <- the whole change
-}
+```bash
+# .env — unset is a supported configuration and the default
+ERROR_DSN=http://yourpublickey@glitchtip:8000/1
 ```
 
-Two things to decide first:
+Unset, nothing changes: the structured logger stays the only sink, no outbound
+request is ever made, and the stack starts and runs exactly as before.
 
-- **Where it goes.** [GlitchTip](https://glitchtip.com/) speaks the Sentry DSN
-  protocol and self-hosts on Postgres + Redis, which keeps the data inside the
-  stack. Sentry SaaS is less work and more egress.
-- **What it sends.** The SDK captures the *raw* error, not the redacted copy
-  above — `DrizzleQueryError.message` and pg `detail` included. Route it through
-  `serializeError()` first, or set a `beforeSend` hook that applies the same
-  rules, or the redaction here is decorative.
+### What is sent, and why it cannot leak
+
+The transport is [`lib/error-tracking.ts`](../app/lib/error-tracking.ts), and the
+property that matters is a type signature:
+
+```ts
+export function captureEvent(err: LogFields, context: ReportContext = {}): void
+```
+
+**It takes the serialized error, not the error.** `reportError()` runs
+`serializeError()` once and hands the result to both sinks, so the backend
+receives exactly what the log line receives — the redaction documented above,
+already applied.
+
+That is deliberate, and it is the whole reason no SDK ships. The natural shape,
+`Sentry.captureException(error)` alongside the log call, hands the SDK the *raw*
+error: `DrizzleQueryError.params` (every bound value of the failing statement)
+and pg's `detail` included. It would ship the row this module exists to strip,
+and every redaction rule above would be decorative. An SDK can be told to behave
+with a `beforeSend` hook that re-applies the rules — but that is a second copy of
+the rules, free to drift from the first. Here there is nothing to keep in sync,
+because the raw error is never in scope.
+
+If you change this, keep that property: **nothing in the capture path may take
+`unknown`.**
+
+### Why no SDK
+
+Beyond the redaction argument, the cost is specific and local:
+
+- `@sentry/nextjs` pulls the OpenTelemetry package set into *production*
+  dependencies, and both `npm audit` gates block on HIGH with no per-advisory
+  allowlist ([CI gates](../CONTRIBUTING.md#ci-gates)). A HIGH anywhere in that
+  tree is a red gate with no escape hatch.
+- The same tree becomes Trivy-scannable surface in two images.
+- It needs a `register()` export `instrumentation.ts` does not have,
+  `withSentryConfig` around `next.config.ts`, and a `SENTRY_AUTH_TOKEN` build
+  secret — which [secrets](secrets.md) forbids by rule.
+
+What the hand-rolled transport gives up: breadcrumbs, source-mapped frames,
+automatic instrumentation, release health. Stack traces are sent as a string in
+`extra.stack` rather than parsed frames, so they are readable but not clickable.
+Grouping works on exception type and message regardless.
+
+### Server-side only
+
+The DSN has no `NEXT_PUBLIC_` prefix, so Next never inlines it and
+`process.env.ERROR_DSN` is `undefined` in a client bundle — the same mechanism
+`log.ts` relies on for `LOG_LEVEL`. Both client error boundaries therefore reach
+`captureEvent()` and return without doing anything, with no runtime check, and
+CSP's `connect-src 'self'` needs no exception.
+
+**The ceiling that buys: a genuine browser-side throw is not captured.** It still
+reaches the browser console via `reportError`, but no further. Server Component
+errors are unaffected — React redacts those to a bare digest before they cross
+the wire anyway, and `instrumentation.ts` captures the real one under the same
+digest ([Reading a client error](#reading-a-client-error)).
+
+Recovering browser errors means a same-origin ingest route, so the DSN stays
+server-side and the CSP stays closed. That is not built — tracked in
+[#339](https://github.com/aellington89/finance-stack/issues/339).
+
+### Self-hosting the backend
+
+`--profile errors` starts [GlitchTip](https://glitchtip.com/) inside this stack,
+so error history never leaves the host. Off by default, like `bi` and `edge`.
+
+```bash
+docker compose --profile errors up -d
+docker compose exec glitchtip ./manage.py createsuperuser   # the first user
+```
+
+Then open <http://127.0.0.1:8000>, create a project, and put the DSN it gives you
+in `.env` as `ERROR_DSN` — using the container name, `glitchtip`, not localhost,
+because finance-app resolves it over the Compose network.
+
+**It is one container, not the three a Sentry-compatible stack usually implies.**
+`SERVER_ROLE=all_in_one` runs the web process, the background worker and its own
+Django migrations together, and `VALKEY_URL=""` puts the task queue, cache and
+sessions on Postgres. That second setting is load-bearing beyond saving a
+container: `lib/security/rate-limit.ts` and [deployment](deployment.md) both
+state there is no Redis in this stack, and the in-process rate limiter is
+justified partly on that. Adding one here would have quietly reopened it.
+
+Its database rides the existing `postgres` service, owned by a role that holds
+nothing else in the cluster — the Metabase pattern exactly
+([`04-glitchtip-role.sql`](../init-db/roles/04-glitchtip-role.sql) mirrors
+`03-metabase-role.sql`). `assert-grants.sql` enforces the separation rather than
+trusting it: its sweep fails any undeclared login role that gains `CONNECT` on
+`Finances`, and `scripts/verify-db-roles.sh` additionally connects as the role
+and proves it is refused. Leaving `GLITCHTIP_DB_PASSWORD` empty skips
+provisioning entirely, the same way an empty `MB_DB_PASS` skips Metabase.
+
+It binds `127.0.0.1:8000` only. It holds every captured error message, so it has
+no more business on the LAN than Metabase does, and self-signup is closed by
+default — on a trusted network, open registration means anyone who can reach the
+port can create an account.
+
+The `glitchtip` database is in the default `BACKUP_DBS`, which is what actually
+closes the gap that motivated this: before it, error history lived only in
+Docker's `json-file` ring buffer, capped at 3 × 10 MB per service and in no
+backup at all.
+
+### Alerting is not configured by default
+
+Tracked in [#340](https://github.com/aellington89/finance-stack/issues/340).
+
+**Setting up the backend gives you durable, queryable, backed-up history. It
+does not give you an alert.** GlitchTip notifies by email only — there is no
+webhook, Slack or Discord option — and the shipped `EMAIL_URL` is
+`consolemail://`, which writes notification mail to the glitchtip container's
+log instead of sending it. An alert is therefore still a log line, just in a
+different container.
+
+Point `GLITCHTIP_EMAIL_URL` at a real relay to change that:
+
+```bash
+GLITCHTIP_EMAIL_URL=smtp://user:password@smtp.example.com:587
+GLITCHTIP_FROM_EMAIL=glitchtip@example.com
+```
+
+That is opt-in rather than the default because it means a real SMTP credential
+in `.env` and an outbound mail dependency on a stack the README says to keep on
+a trusted network — a trade worth making deliberately rather than by default.
+
+### When the backend is down
+
+Delivery is fire-and-forget: `reportError()` stays synchronous and returns
+`void`, and a send that fails can never throw over the top of the error being
+reported. Sends are bounded by a 2-second timeout, and after five consecutive
+failures a breaker opens for a minute — a backend that is down must not turn
+every application error into an outbound request that also fails.
+
+The breaker logs one `warn` when it opens and one when delivery recovers, never
+one per dropped event. It is `log.warn` and not `log.error` for a structural
+reason: `reportError()` is what called the transport, so reporting a capture
+failure through it would recurse.
+
+Counters are in process memory, like the rate limiter's. One container, one
+process, and losing the count on restart costs nothing.
 
 ## Testing log output
 
@@ -265,10 +392,31 @@ foreign-key violation through `createAccount` so the model cannot drift away
 from what the driver actually throws. If you change `serializeError()`, the
 integration test is the one that tells you the truth.
 
+**Both files assert the same rules twice again — once against the log line, once
+against the captured request body.** A sink that leaked the bound row while the
+log stayed clean is exactly the regression #232 was written to prevent, so the
+backend half is asserted on the wire, with `fetch` stubbed:
+
+```ts
+const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+const body = init.body as string;
+expect(body).not.toContain(ACCOUNT_NAME);    // the bound parameter
+expect(body).not.toContain("params:");
+expect(body).not.toContain("Key (account_type_id)");   // pg detail
+expect(body).toContain("$1");                // the diagnosis survives
+```
+
+`tests/unit/lib/error-tracking.test.ts` covers the transport itself — DSN
+parsing, envelope framing, and the failure handling — and deliberately asserts
+nothing about redaction, because `captureEvent()` has no ability to redact: it
+never receives a raw error.
+
 ## Out of scope
 
 No log shipper is configured — records go to stdout/stderr and Docker's
-`json-file` driver, capped at 3 × 10 MB per service. Pointing Loki, Vector or
+`json-file` driver, capped at 3 × 10 MB per service. Errors are the exception:
+those have a durable home once `ERROR_DSN` is set, which is the gap that
+motivated [#232](https://github.com/aellington89/finance-stack/issues/232). Pointing Loki, Vector or
 Promtail at the stack is deliberately left for later; the JSON format is what
 makes it a configuration change rather than a code change.
 

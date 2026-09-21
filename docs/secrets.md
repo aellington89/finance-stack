@@ -6,7 +6,7 @@ keeps it out of the repository and out of the images. Added in
 
 ## The inventory
 
-Seven values. Nothing else in the stack is secret.
+Nine values. Nothing else in the stack is secret.
 
 | Variable | Lives in | Consumed by | Generate with |
 |---|---|---|---|
@@ -16,11 +16,25 @@ Seven values. Nothing else in the stack is secret.
 | `FINANCE_IMPORTER_DB_PASSWORD` | root `.env` | `migrate`, `importer` inside `DATABASE_URL` | any generator; URL-safe |
 | `FINANCE_BI_DB_PASSWORD` | root `.env` | `migrate` only — then entered by hand in the Metabase admin UI (#249) | any generator; URL-safe |
 | `AUTH_SECRET` | root `.env` (Docker), `app/.env.local` (dev) | `finance-app` — signs and encrypts the session JWT | `openssl rand -base64 33` |
+| `GLITCHTIP_DB_PASSWORD` | root `.env` | `migrate` (creates the role and its database, then syncs the password — an empty value skips both), `glitchtip` | any generator; URL-safe |
+| `GLITCHTIP_SECRET_KEY` | root `.env` | `glitchtip` — signs its own sessions | `openssl rand -base64 33` |
 | `DATABASE_URL` | `app/.env.local` | local `npm run dev` and the test suites only | n/a — embeds a password |
 
 `CREATE_USER_PASSWORD` is an eighth, but only ever transiently: it exists so
 `npm run auth:create-user` can run non-interactively ([Authentication](auth.md)).
 Set it for one command, do not put it in a file.
+
+`ERROR_DSN` ([#232](https://github.com/aellington89/finance-stack/issues/232)) is
+deliberately **not** on the list, and the reason is worth stating so nobody adds
+it in a panic or dismisses it too quickly. A Sentry-protocol DSN embeds a
+*public* key — the ingest protocol is designed for the value to sit in a browser
+bundle, and holding one grants only the ability to submit events to that project.
+It is not a credential. It is still not something to publish: it names an
+internal host, and someone who has it can fill the error backend with noise. Keep
+it in `.env` with everything else, and treat leaking one as a nuisance to rotate
+at leisure rather than an incident. Note that this stack does not put it in the
+bundle — see [Observability](observability.md#server-side-only) for why the
+variable has no `NEXT_PUBLIC_` prefix.
 
 **Four of these go into URL-form connection strings**, so a literal `@ : / ? #`
 in the value breaks the URL. Keep them URL-safe or percent-encode them.
@@ -165,7 +179,7 @@ carry its evidence.
 | Surface | Result |
 |---|---|
 | `.env.example`, `app/.env.local.example` | Every credential is `changeme` or `changeme-generate-with-openssl-rand-base64-33` — unusable by construction |
-| `docker-compose.yml` | Every credential is `${VAR}`, with no `:-default` fallback anywhere |
+| `docker-compose.yml` | Every credential is `${VAR}`. No `:-default` fallback on any credential consumed by a default-profile service; the profile-gated services use `${VAR:-}` — see below |
 | `init-db/`, `caddy/`, `importer/`, `scripts/` | No credential literals |
 | `.github/workflows/` | CI-only values, named as such (`ci-app-pw`, `release-smoke-test-only-secret`) |
 | Full git history | `.env` and `app/.env.local` were never tracked. No API keys, tokens, or private keys in any commit |
@@ -185,6 +199,18 @@ and fixed there — the role is de-privileged, the sweep now covers every login
 role in the cluster, and CI asserts the gate fails when one is widened.
 
 Two more:
+
+**The profile-gated services take a `:-` fallback, and that is not a loosening.**
+`caddy` has done this since #182 and `glitchtip` does it as of #232
+([observability](observability.md)). The reason is mechanical: Compose
+interpolates *every* service before it selects profiles, so a bare
+`${GLITCHTIP_SECRET_KEY}` makes `docker compose` warn on every invocation by
+everyone who never enables error tracking, and a `:?` required-marker breaks
+`up` for them outright. An empty value still fails — inside that one container,
+which never starts — so the property the no-default rule exists to protect
+(no credential silently defaults to something usable) is intact. The rule as
+stated in the table above is therefore scoped to default-profile services, which
+is where it can be enforced without breaking everyone else.
 
 **The ignore rules were narrower than they read.** The root `.gitignore` listed
 `.env` and `app/.env.local` literally, so `.env.production`, `.env.local` and
