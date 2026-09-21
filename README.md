@@ -178,7 +178,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Audit Log](docs/audit-log.md) — how mutations are recorded, who gets attributed, reading the log, and retention
 - [Input Validation & Error Messages](docs/input-validation.md) — the per-action validation checklist, the SQL parameterization rule, and what a user is allowed to see
 - [Backups](docs/backups.md) — the scheduled backup service, retention, and disaster recovery
-- [Observability](docs/observability.md) — structured JSON logs, where errors are captured, redaction, and wiring an error-tracking backend
+- [Observability](docs/observability.md) — structured JSON logs, where errors are captured, redaction, and the error-tracking backend
 - [Schema Changes](docs/schema-changes.md) — making schema changes and adopting migrations on existing databases
 - [Testing](docs/testing.md) — running tests and the static lookup-table fixtures
 - [Importer](docs/importer.md) — the importer service and adding new import types

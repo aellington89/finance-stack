@@ -32,6 +32,9 @@
 #   MB_DB_PASS                       Metabase metadata role pw  (optional — the
 #                                    metadata-role cases are skipped without it)
 #   MB_DB_USER / MB_DB_DBNAME        metadata role + database   (defaulted)
+#   GLITCHTIP_DB_PASSWORD            GlitchTip's role password  (optional — the
+#                                    GlitchTip cases are skipped without it)
+#   GLITCHTIP_DB_USER / _DBNAME      GlitchTip role + database  (defaulted)
 #   ROLES_DIR                        location of the roles SQL  (default: /roles)
 #
 # Note: connections must NOT arrive over a pg_hba `trust` rule or the password
@@ -44,6 +47,8 @@ DB="${1:-Finances_Test}"
 ROLES_DIR="${ROLES_DIR:-/roles}"
 MB_DB_USER="${MB_DB_USER:-metabase_user}"
 MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
+GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
+GLITCHTIP_DB_DBNAME="${GLITCHTIP_DB_DBNAME:-glitchtip}"
 
 : "${FINANCE_APP_DB_PASSWORD:?must be set}"
 : "${FINANCE_IMPORTER_DB_PASSWORD:?must be set}"
@@ -246,6 +251,31 @@ else
   expect "$MB_DB_USER" "$MB_DB_PASS" deny  "CREATE DATABASE" \
     "CREATE DATABASE mb_privilege_smoke_escalation" "$MB_DB_DBNAME"
   expect_no_connect "$MB_DB_USER" "$MB_DB_PASS" "$DB"
+fi
+
+# ── GLITCHTIP_DB_USER — owns its own DB, and is nothing on the cluster ────
+# Error tracking's role (#232). Structurally identical to the Metabase block
+# above, and deliberately so: GlitchTip runs Django migrations against its own
+# database on every start, so the positive case is the load-bearing one for the
+# same reason — a role that cannot create a table there leaves the container
+# crash-looping on a cluster the catalog reports as healthy.
+#
+# The negative case that matters most is the last one. This role exists to
+# receive error reports from finance-app; it has no business reaching the
+# financial data those reports are about, and `expect_no_connect` is what proves
+# the separation rather than assuming it.
+echo
+if [ -z "${GLITCHTIP_DB_PASSWORD:-}" ]; then
+  echo "skip  ${GLITCHTIP_DB_USER}: GLITCHTIP_DB_PASSWORD not set (catalog gate still covers its attributes)"
+else
+  expect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" allow "create+drop a table in ${GLITCHTIP_DB_DBNAME}" \
+    "BEGIN; CREATE TABLE gt_privilege_smoke (id int); DROP TABLE gt_privilege_smoke; ROLLBACK" \
+    "$GLITCHTIP_DB_DBNAME"
+  expect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" deny  "CREATE ROLE" \
+    "CREATE ROLE gt_privilege_smoke_escalation LOGIN" "$GLITCHTIP_DB_DBNAME"
+  expect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" deny  "CREATE DATABASE" \
+    "CREATE DATABASE gt_privilege_smoke_escalation" "$GLITCHTIP_DB_DBNAME"
+  expect_no_connect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" "$DB"
 fi
 
 echo
