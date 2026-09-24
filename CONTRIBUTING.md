@@ -596,8 +596,10 @@ detail, including the one-time visibility step on first publish, is in
 
    The script prints a draft Keep-a-Changelog block (issue-linked bullets and a
    suggested major/minor/patch bump) to **stdout** — it does not edit any files.
-   The suggestion keys a major off the `**Migration:**` marker on `[Unreleased]`;
-   pass `--bump=major` for a breaking change that ships no migration. See
+   The suggestion keys a major off a `breaking` `**Migration:**` marker on
+   `[Unreleased]`, and a minor off an `### Added` entry there or an `enhancement`
+   label on any issue or PR in the range; pass `--bump=major` for a breaking
+   change that ships no migration. See
    [docs/releases.md](docs/releases.md#choosing-the-bump).
    Re-sort the bullets into the correct `Added`/`Changed`/`Fixed`/`Security`
    subsections under `## [Unreleased]` in `CHANGELOG.md`.

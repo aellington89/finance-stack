@@ -88,6 +88,27 @@ export function groupCommits(commits: ParsedCommit[]): {
   return { issues, other };
 }
 
+// Every issue *and* PR number a range references, for label lookup. GitHub's
+// issues endpoint answers for both, so the wrapper needs no second API.
+//
+// Before this, only `Issue #N - ` commits had their labels read. That missed
+// the two other shapes master actually carries: a PR merged under a freeform
+// title — "Nonce-based CSP: … (#237) (#333)", whose issue and PR were both
+// labelled `enhancement` and which the generator filed under Other, unlabelled —
+// and the PR half of an issue commit ("Issue #296 - … (#343)"), whose labels
+// can differ from the issue's. Every `(#N)` in a subject counts, because a
+// squash title carries the issue ref before the PR ref and neither is reliably
+// the one that was labelled.
+export function labelRefs(commits: ParsedCommit[]): number[] {
+  const refs = new Set<number>();
+  for (const commit of commits) {
+    if (commit.issueNumber !== null) refs.add(commit.issueNumber);
+    if (commit.prRef !== null) refs.add(commit.prRef);
+    for (const m of commit.subject.matchAll(/\(#(\d+)\)/g)) refs.add(Number(m[1]));
+  }
+  return [...refs];
+}
+
 // A suggested bump, and the reason for it. `source` is rendered into the output
 // so a drafter confirming the heading sees what drove the number rather than
 // rubber-stamping it. Issue #315.
@@ -97,6 +118,7 @@ export const BUMP_KINDS = ["major", "minor", "patch"] as const;
 export type BumpSource =
   | "override"
   | "breaking-migration"
+  | "added-section"
   | "enhancement-label"
   | "default";
 
@@ -113,12 +135,23 @@ export function isBumpKind(value: string): value is BumpKind {
 }
 
 // Suggest the next semver string from the current version, a map of
-// issue-number -> label-names, and the `**Migration:**` marker standing on
-// [Unreleased].
+// issue-or-PR-number -> label-names, the `**Migration:**` marker standing on
+// [Unreleased], and whether [Unreleased] carries an `### Added` entry.
 //
 // The rule: a breaking migration escalates the bump — to a major at >= 1.0, to a
 // minor below it, where a breaking change legitimately ships as a minor.
-// Otherwise any `enhancement` label is a minor and everything else a patch.
+// Otherwise an `### Added` entry or any `enhancement` label is a minor, and
+// everything else a patch.
+//
+// `### Added` outranks the label because it is the more reliable of the two.
+// Keep a Changelog defines it as "new features", which is semver's minor word
+// for word, and every PR writes its own entry as it lands. Labels are chosen on
+// the issue, often before the work is understood: #124 added a table, a
+// migration and an import log under `bug`, and #232 added error tracking under
+// `infrastructure,backend` — neither carried `enhancement`, and [Unreleased]
+// holding both drafted as a patch. A backward-compatible migration is
+// deliberately *not* a minor signal on its own: an index-only migration can ship
+// in a fix, and by definition it still rolls back by re-pinning the image.
 // Before Issue #315 there was no major path at all, and the comment here claimed
 // pre-1.0 `0.MINOR.PATCH` versioning — an assumption that went stale at v1.0.0
 // and would have proposed 1.0.1 for a release that ought to be 2.0.0.
@@ -143,12 +176,14 @@ export function isBumpKind(value: string): value is BumpKind {
 // creates such a label for an unrelated reason. See docs/releases.md.
 //
 // Both new parameters are optional so that every pre-#315 call — and every test
-// written against it — keeps its exact previous meaning.
+// written against it — keeps its exact previous meaning. `unreleasedAdded`
+// follows the same rule.
 export function suggestBump(
   currentVersion: string,
   labelsByIssue: Map<number, string[]>,
   unreleasedMigration?: MigrationKind | null,
   override?: BumpKind | null,
+  unreleasedAdded?: boolean,
 ): BumpSuggestion {
   // VERSION_RE rather than a part count: "1.0.x" also splits into three, and
   // would otherwise reach the arithmetic as [1, 0, NaN] and print "1.0.NaN".
@@ -166,6 +201,9 @@ export function suggestBump(
   } else if (unreleasedMigration === "breaking") {
     bump = major >= 1 ? "major" : "minor";
     source = "breaking-migration";
+  } else if (unreleasedAdded === true) {
+    bump = "minor";
+    source = "added-section";
   } else if (allLabels.some((l) => l === "enhancement")) {
     bump = "minor";
     source = "enhancement-label";
@@ -191,10 +229,12 @@ function sourceNote(source: BumpSource): string {
       return "--bump=";
     case "breaking-migration":
       return "[Unreleased] declares Migration: breaking";
+    case "added-section":
+      return "[Unreleased] has an ### Added entry";
     case "enhancement-label":
       return "enhancement label";
     case "default":
-      return "no enhancement label, no breaking migration";
+      return "no ### Added entry, no enhancement label, no breaking migration";
   }
 }
 
