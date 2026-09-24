@@ -407,7 +407,7 @@ After the gates pass, CI runs:
 
 ```sh
 npm run lint
-npm run test:coverage      # both projects; requires the Finances_Test database
+npm run test:coverage      # all three projects; requires the Finances_Test database
 ```
 
 The importer is Python and sits outside Vitest, so it runs as its own step in
@@ -424,11 +424,13 @@ and, in a parallel `e2e` job:
 npm run test:e2e           # Playwright; builds the app and drives it in Chromium
 ```
 
-`test:coverage` rather than `test:unit` + `test:integration`: since Issue #142
-the suite runs once, merged, and **fails if coverage drops below the thresholds
-in `app/vitest.config.ts`**. Running the halves separately would check the
-thresholds against the wrong denominator — `lib/queries` and `lib/actions` are
-most of it and are covered by the integration project, not the unit one.
+`test:coverage` rather than `test:unit` + `test:jsdom` + `test:integration`:
+since Issue #142 the suite runs once, merged, and **fails if coverage drops
+below the thresholds in `app/vitest.config.ts`**. Running the projects
+separately would check the thresholds against the wrong denominator —
+`lib/queries` and `lib/actions` are covered by the integration project, and
+since [Issue #296](https://github.com/aellington89/finance-stack/issues/296) the
+41 files under `components/` are covered by the jsdom one.
 
 `test:e2e` is the money-path gate added by
 [Issue #141](https://github.com/aellington89/finance-stack/issues/141): one
@@ -440,8 +442,8 @@ out of the vitest denominator precisely because this suite is what covers it.
 First run locally needs `npx playwright install --with-deps chromium` (the
 `--with-deps` half needs sudo).
 
-See [docs/testing.md](docs/testing.md) for the unit/integration split and how
-to point integration tests at the right database,
+See [docs/testing.md](docs/testing.md) for the unit/jsdom/integration split and
+how to point integration tests at the right database,
 [docs/testing.md#coverage](docs/testing.md#coverage) for the thresholds, what
 the denominator includes, and how to raise them, and
 [docs/testing.md#end-to-end-tests](docs/testing.md#end-to-end-tests) for the E2E

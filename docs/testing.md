@@ -30,17 +30,30 @@ The two are covered by [`tests/integration/api/health.test.ts`](../app/tests/int
 
 ## Running Tests
 
-Tests use [Vitest](https://vitest.dev/) and are split into two projects:
+Tests use [Vitest](https://vitest.dev/) and are split into three projects,
+divided by what each one *needs* rather than by what it covers — no DOM, a DOM,
+a database:
 
-| Project | Command | Requires DB? |
-|---|---|---|
-| Unit | `npm run test:unit` | No |
-| Integration | `npm run test:integration` | Yes (`Finances_Test`) |
+| Project | Collects | Environment | Command | Requires DB? |
+|---|---|---|---|---|
+| Unit | `tests/unit/**/*.test.ts` | node | `npm run test:unit` | No |
+| jsdom | `tests/unit/**/*.test.tsx` | jsdom | `npm run test:jsdom` | No |
+| Integration | `tests/integration/**/*.test.ts` | node | `npm run test:integration` | Yes (`Finances_Test`) |
+
+The unit and jsdom projects are split **by file extension, not by directory** —
+both collect from `tests/unit/`. That is deliberate: the two globs are disjoint
+by construction, so no file can be picked up by two projects, and a component
+test lives next to the transform test for the same feature.
 
 The [end-to-end suite](#end-to-end-tests) is Playwright rather than Vitest and
 runs separately — `npm run test:e2e`.
 
 **Unit tests** cover Zod validation schemas and pure utility functions. They run with no external dependencies.
+
+**jsdom tests** mount React components and hooks with
+[Testing Library](https://testing-library.com/docs/react-testing-library/intro/).
+See [The jsdom project](#the-jsdom-project) for what the setup file stubs and
+the one teardown rule that will bite you.
 
 **Integration tests** run server actions against `Finances_Test`. Ensure `DATABASE_URL` in `app/.env.local` points to `Finances_Test` before running them. The integration test global setup will throw if it detects a non-test URL.
 
@@ -53,12 +66,58 @@ npm test
 # Run only unit tests (no DB needed)
 npm run test:unit
 
+# Run only component/hook tests (no DB needed)
+npm run test:jsdom
+
 # Run only integration tests (requires Finances_Test DB)
 npm run test:integration
 
 # Generate coverage report
 npm run test:coverage
 ```
+
+### The jsdom project
+
+Added by Issue [#296](https://github.com/aellington89/finance-stack/issues/296).
+Four devDependencies (`jsdom`, `@testing-library/react`,
+`@testing-library/jest-dom`, `@testing-library/user-event`) and no React plugin
+— `app/tsconfig.json` sets `"jsx": "react-jsx"`, so Vite's esbuild transforms
+`.tsx` on its own and `@vitejs/plugin-react` would only add Fast Refresh, which
+tests do not use.
+
+[`app/tests/jsdom/vitest-setup.ts`](../app/tests/jsdom/vitest-setup.ts) does four
+things, and three of them are there because a render throws without them:
+
+| | Why |
+|---|---|
+| `afterEach(cleanup)` | **The one to know about.** Testing Library registers its own cleanup through the global `afterEach`, but *only* under `globals: true` — and this suite imports `describe`/`it`/`expect` from `"vitest"` instead. Without the explicit call the previous test's tree stays mounted, and the *second* render of a component in any one file starts failing with "found multiple elements". That reads as a bad selector, not a missing teardown. If a test passes alone and fails in a file, start here. |
+| `window.matchMedia` stub | jsdom does not implement it, and [`hooks/use-mobile.ts`](../app/hooks/use-mobile.ts) calls it on mount — as does anything reaching it through `useSidebar`. |
+| `ResizeObserver` stub | Same, for the `@base-ui/react` primitives. |
+| `vi.mock("next/navigation")` | The Next.js runtime the suite replaces rather than exercises, mirroring what [`tests/integration/vitest-setup.ts`](../app/tests/integration/vitest-setup.ts) does with `@/auth`. `usePathname` defaults to `/dashboard`; a test driving a route-dependent branch overrides per call with `vi.mocked(usePathname).mockReturnValue(...)`. |
+
+Two things are **not** rendered, on purpose:
+
+- **The eleven recharts wrappers (`components/charts/*-chart.tsx`).** Not
+  because rendering them is hard — they mount fine — but because a mounted
+  chart renders *nothing*. `ResponsiveContainer` has no layout under jsdom, so
+  the DOM comes back as `{svg: 0, rect: 0, text: 0}`: the container element and
+  no chart inside it. A test can therefore assert only the card title, while the
+  coverage report credits 41% of the file. They are excluded from the
+  denominator instead, and their logic lives in tested `.ts` siblings —
+  `waterfall-bars.ts`, `debt-waterfall-bars.ts`, `timeseries-pivot.ts`,
+  `accounting-axis.ts`. `gauge-badge.tsx`, the one hand-rolled SVG in that
+  directory, *is* rendered and tested.
+- **Anything reaching `next-auth`.** It does not resolve under vitest's jsdom
+  environment (`Cannot find module 'next/server'`). Components whose children
+  import a server action cut the chain with a `vi.mock` of the action module —
+  see [`transaction-list.test.tsx`](../app/tests/unit/components/transaction-list.test.tsx).
+
+One convenience worth knowing: every `next/navigation` export is a `vi.fn()`,
+so a test steers `usePathname` with
+`vi.mocked(usePathname).mockReturnValue("/dashboard/assets")` and asserts on
+navigation by reading back the router the component itself received —
+`vi.mocked(useRouter).mock.results.at(-1)!.value.push`. Calling `useRouter()`
+from the test body instead is a `react-hooks/rules-of-hooks` lint error.
 
 ## Importer Tests
 
@@ -129,60 +188,93 @@ removes a *silent* wrong answer rather than a crash:
 
 ## Coverage
 
-`npm run test:coverage` runs both projects, merges the maps, and **fails if any
-threshold is missed** (Issue [#142](https://github.com/aellington89/finance-stack/issues/142)).
+`npm run test:coverage` runs all three projects, merges the maps, and **fails if
+any threshold is missed** (Issue [#142](https://github.com/aellington89/finance-stack/issues/142)).
 CI runs exactly this command, as a single `Tests (with coverage)` step — the
-unit and integration halves are not run separately there, because a threshold
-over either half alone measures the wrong thing: `lib/queries` and `lib/actions`
-are ~840 of the 1518 statements in the denominator and sit near 5% until the
-integration project runs.
+halves are not run separately there, because a threshold over any one alone
+measures the wrong thing: `lib/queries` and `lib/actions` are ~840 statements
+that sit near 5% until the integration project runs, and the 41 component files
+sit near 0% until the jsdom project does.
 
 Thresholds are the measured baseline minus two points, rounded down. Two points
 absorbs ordinary jitter; anything larger absorbs a regression.
 
 | Scope | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|
-| Global | 85 | 75 | 83 | 86 |
+| Global | 84 | 73 | 77 | 84 |
 | `lib/**/*.ts` | 83 | 71 | 80 | 84 |
 | `scripts/**/*.ts` | 97 | 90 | 98 | 97 |
-| `components/**/*.ts` | 78 | 85 | 82 | 78 |
+| `components/**/*.ts` | 97 | 94 | 98 | 97 |
+| `components/**/*.tsx` | 74 | 63 | 66 | 76 |
+| `hooks/**/*.ts` | 98 | 98 | 98 | 98 |
 
-Baseline they were derived from, measured 2026-08-23 over the merged run (743
-tests): **87.5 / 77.3 / 85.4 / 88.1**. Branches is the weak metric across every
-scope and the one to watch. To raise a threshold, run the merged suite, take the
-new number, subtract two, and update `app/vitest.config.ts` **and this table** in
-the same commit — `thresholds.autoUpdate` is deliberately off, because it
-rewrites the config from inside a CI run and the resulting diff has no author
-and no reason.
+Baseline they were derived from, measured 2026-09-23 over the merged run (1066
+tests, 93 files, 2677 statements): **86.1 / 75.1 / 79.9 / 86.8**. Branches is
+the weak metric across every scope and the one to watch. To raise a threshold,
+run the merged suite, take the new number, subtract two, and update
+`app/vitest.config.ts` **and this table** in the same commit —
+`thresholds.autoUpdate` is deliberately off, because it rewrites the config from
+inside a CI run and the resulting diff has no author and no reason.
+
+> **The denominator grew 62% and the number held.** Issue
+> [#296](https://github.com/aellington89/finance-stack/issues/296) brought the
+> React tree into the map — 1649 → 2677 statements — and the global went
+> 88.3 → 86.1. That is the point of the exercise: the old figure was high partly
+> because it was not asking the components anything. `lib/**/*.ts` and
+> `scripts/**/*.ts` are untouched by #296 and still hold at their #142 values;
+> raising them to what they now measure belongs in its own diff.
 
 ### What is measured, and what is not
 
-The denominator is *the surface a `*.test.ts` running in a node environment can
-actually reach* — not "all source". Padding it with files no test can execute
-makes the percentage a constant rather than a gate, and a constant cannot detect
-a regression.
+The denominator is *the surface the suite can actually reach* — not "all
+source". Padding it with files no test can execute makes the percentage a
+constant rather than a gate, and a constant cannot detect a regression.
 
 In: `lib/**/*.ts`, `app/api/health/**/*.ts`, `components/**/*.ts`,
-`scripts/**/*.ts`, `instrumentation.ts` — 51 files, 1518 statements.
+`components/**/*.tsx`, `scripts/**/*.ts`, `hooks/**/*.ts`, `instrumentation.ts`
+— **93 files, 2677 statements**.
 
 Out, and why:
 
 | Excluded | Why |
 |---|---|
-| `**/*.tsx`, `hooks/**` | **Nothing here can render React.** Both projects are `environment: node` and collect `*.test.ts` only, so a component can be imported but never mounted. [#296](https://github.com/aellington89/finance-stack/issues/296) adds a jsdom project, which is what makes this removable. |
-| `app/(app)/**` | Next.js pages and layouts — same reason, plus they are covered by [#141](https://github.com/aellington89/finance-stack/issues/141)'s [E2E suite](#end-to-end-tests) rather than by unit tests. Playwright reports no coverage into this map and is not meant to. |
+| `components/ui/**/*.tsx` | **Generated, not authored.** `npx shadcn add <name>` rewrites these 24 files wholesale — `ui/chart.tsx` even carries a "DIVERGES FROM UPSTREAM" notice for the one place we edited it — so gating them would turn a routine re-generation into a CI failure with no bug behind it. They still *execute*, inside the components that are gated; they are simply not held to a number. The one thing this would have dropped is `chartColorVars`, whose key filter is the security half of [#237](https://github.com/aellington89/finance-stack/issues/237); it now lives in the sibling `ui/chart-colors.ts` and stays in the denominator. |
+| `app/(app)/**` | Next.js pages and layouts — not in `include` at all, and covered by [#141](https://github.com/aellington89/finance-stack/issues/141)'s [E2E suite](#end-to-end-tests) rather than by unit tests. Playwright reports no coverage into this map and is not meant to. |
 | `auth.ts`, `proxy.ts` | Framework wiring the suite *replaces*: `vitest-setup.ts` mocks `@/auth` wholesale, so `auth.ts` can never report anything but 0% however well tested its dependents are. |
 | `lib/db/index.ts` | The `pg` Pool singleton — construction, no branches worth gating. |
 | The five `scripts/` entrypoints | argv-parsing and stdout shells. The logic each wraps lives in a sibling module (`check-changelog-core.ts`, `docs-index-check.ts`, `release-notes-core.ts`, `seed-reference-check.ts`) which stays in and sits near 100%. |
+| `**/*.test.ts`, `**/*.test.tsx` | Belt-and-braces rather than load-bearing, and worth saying so: `tests/` is not in `include` and anchored globs cannot reach it. Verified by removing them and re-measuring — 2677 statements either way. Kept because vitest 4's substring matching *did* pull them in (see [trap 2](#three-glob-traps)). |
 
-Note that `components/**/*.ts` therefore covers only the two genuinely non-React
-modules under `components/` (`ui/date-range-macros.ts`,
-`transactions/transaction-columns.ts`). #142 asked for ~70% across all of
-`components/`; that needs the renderer #296 adds. The visible cost today is that
-the five `tests/unit/components/*.test.ts` files exercise pure transforms which
-happen to be exported *from* `.tsx` components — those tests still run and still
-gate behaviour, but their coverage is not counted until #296 moves the
-transforms into sibling `.ts` modules.
+| `components/charts/*-chart.tsx` | **The eleven recharts wrappers, because a test of one cannot assert anything.** They render through `ChartContainer` → `ResponsiveContainer`, which has no layout under jsdom: a mounted chart produces `{svg: 0, rect: 0, text: 0}` — the container element and nothing inside it. Measured, not assumed. A render test therefore buys 41% of the file's statements, 2 of its 8 functions and **0% of its branches** while asserting only the card title. The `-chart.tsx` suffix is load-bearing: it keeps `gauge-badge.tsx`, the one hand-rolled SVG here, *in* the denominator, where it renders fully and is tested. |
+
+**What Issue [#296](https://github.com/aellington89/finance-stack/issues/296)
+changed here.** `**/*.tsx` and `hooks/**` used to head this table, on the
+grounds that nothing could render React. The jsdom project can, so both came
+in:
+
+- `components/**/*.tsx` — 30 files at **77.0%**, which is #142's deferred
+  "~70% for components" criterion, met. It first entered the denominator at
+  28.8%; what moved it was emptying the chart files of logic (below) and
+  writing render tests for everything else. Every file but `app-sidebar.tsx`
+  now has one.
+- `hooks/**/*.ts` — note the old `hooks/**` exclusion was itself
+  belt-and-braces, since no `include` glob ever reached it. Measuring it meant
+  *adding* `hooks/**/*.ts` to `include`, not just deleting an exclude entry.
+- `components/**/*.ts` went from two incidental helpers to nine modules, all of
+  them logic lifted out of `.tsx` components: the tile and bar builders
+  (`debt-mix-tiles.ts`, `liquidity-tiles.ts`, `waterfall-bars.ts`,
+  `debt-waterfall-bars.ts`), the shared timeseries pivots
+  (`timeseries-pivot.ts`), the accounting axis formatters
+  (`accounting-axis.ts`) and `chart-colors.ts`. Its threshold rose from
+  78/85/82/78 to 97/94/98/97.
+
+**Excluding the charts is what made the rest honest, and the order matters.**
+The chart files were emptied *first*: eleven grouping arms of axis formatting,
+three timeseries pivots and two bar builders moved into tested `.ts` siblings,
+and eighteen byte-identical copies of `formatCurrency` / `formatCurrencyCompact`
+/ `formatDate` / `parseDate` were consolidated into `lib/format/`. What is
+excluded now is declarative recharts markup with no logic left in it. Excluding
+them before that work would have hidden real code behind a plausible reason.
 
 ### Three glob traps
 
@@ -193,16 +285,31 @@ silent misconfiguration, and the comments there restate them. In short:
    means `app/app/api/health/` on disk. Getting it backwards matches nothing,
    which reads in a report as "that code is uncovered" rather than as a broken
    pattern.
-2. **`coverage.include` is matched with picomatch's `contains: true`** — against
-   any *substring* of the absolute path. So `components/**/*.ts` matches
-   `card.tsx`, because `components/ui/card.ts` is a substring of
-   `.../components/ui/card.tsx`. The explicit `**/*.tsx` exclusion is the only
-   thing holding the React tree out of the report.
-3. **Threshold globs behave the opposite way** — anchored, no `contains`, matched
-   against the path relative to `app/`. And the global block is not "everything
-   the globs did not match": vitest evaluates it over every file in the map,
-   glob-matched ones included, so those four numbers are additional assertions
-   rather than a partition.
+2. **`coverage.include` globs are anchored and mean exactly what they say — but
+   they did not always.** Under vitest 4 they were applied with picomatch's
+   `contains: true`, matching against any *substring* of the absolute path, so
+   `components/**/*.ts` also matched `card.tsx` (because
+   `components/ui/card.ts` is a substring of `.../components/ui/card.tsx`) and a
+   blanket `**/*.tsx` exclusion was the only thing holding the React tree out of
+   the report. **vitest 5 dropped that behaviour.** Issue #296 found out the
+   hard way: removing the blanket exclusion moved the denominator by 11
+   statements, and the 41 component files only appeared once
+   `components/**/*.tsx` was added to `include` explicitly. If a `.tsx` file
+   looks uncovered but is absent from the report altogether, this is why.
+   — The same change made `coverageConfigDefaults.exclude` an empty array
+   (it used to hold `**/node_modules/**` and `**/[.]**`). Nothing relies on it
+   now: what keeps `node_modules` and `.next/standalone` — which contains a
+   full second copy of `components/` — out of the map is simply that every
+   `include` glob is anchored.
+3. **Threshold globs are anchored too**, matched against the path relative to
+   `app/`. This used to be the *opposite* of how `include` behaved and is now
+   the same rule, so the two halves of the config finally agree. It still means
+   `components/**/*.ts` gates the `.ts` helpers only and never the `.tsx`
+   components. And the global block is not "everything the globs did not
+   match": vitest evaluates it over every file in the map, glob-matched ones
+   included, so those four numbers are additional assertions rather than a
+   partition — which is why the global sits far below every per-glob figure now
+   that 41 low-coverage component files are in there.
 
 A fourth, now fixed: parentheses are extglob syntax, so the old
 `exclude: ["app/(app)/test-ui/**"]` matched **nothing** and the dev playground
