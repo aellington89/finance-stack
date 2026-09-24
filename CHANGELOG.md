@@ -127,6 +127,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The proxy's matcher widened from those four trees to everything except `/_next/static`, `/_next/image`, `/favicon.ico` and `/api/health`. The last exclusion is the deliberate one: matching it would have made the Docker healthcheck and the release smoke test depend on Auth.js decoding a session, a coupling that did not exist before and has no reason to start.
 
+## [1.0.4] - 2026-09-23
+
+**Migration:** none
+
+### Changed
+
+- **Routine dependency bumps, carried on their own so the release holds no schema change.** Into `finance-app`: `next` 16.3.4 → 16.3.5, `lucide-react` 1.44.0 → 1.47.0, `tailwind-merge` 3.6.0 → 3.7.0 and `zod` 4.6.2 → 4.6.5 ([#337](https://github.com/aellington89/finance-stack/pull/337)). The deploy bundle and the dev compose file both pin `metabase/metabase` v0.58.33.1 → v0.58.34, a patch on the 0.58 LTS line ([#335](https://github.com/aellington89/finance-stack/pull/335)). `dotenv` 17.4.2 → 18.0.1 ([#338](https://github.com/aellington89/finance-stack/pull/338)) and the dev-dependencies group — `@types/node` 26.6.2, `vitest` and `@vitest/coverage-v8` 5.0.1, `eslint-config-next` 16.3.5, `tsx` 4.23.15 ([#344](https://github.com/aellington89/finance-stack/pull/344)) — are devDependencies and reach none of the four published images. None changes operator-visible behaviour, which is what keeps this a patch.
+
+  **No advisory prompted any of this**, and nothing here is a security fix. As with [1.0.2] and [1.0.3], the release exists so the bumps reach a deployment without taking on `[Unreleased]` — [#124](https://github.com/aellington89/finance-stack/issues/124), [#232](https://github.com/aellington89/finance-stack/issues/232), [#237](https://github.com/aellington89/finance-stack/issues/237), [#273](https://github.com/aellington89/finance-stack/issues/273), [#296](https://github.com/aellington89/finance-stack/issues/296) and [#315](https://github.com/aellington89/finance-stack/issues/315) — which adds a table and a migration and is therefore a *minor*. A rollback from this version is an image re-pin against an unchanged schema.
+
+  **Two of the bumps needed repair to land on this tag.** Dependabot's metabase PR edited `docker-compose.yml` alone, which `check-deploy-parity.sh` rejects; `deploy/compose.yml` now carries the same pin. The dev-dependencies PR was generated against `patch`, whose manifest already holds `jsdom` from the withheld [#296](https://github.com/aellington89/finance-stack/issues/296), so it was reapplied to this tag's manifest rather than cherry-picked verbatim — `jsdom` does not ship.
+
+  **The Node base-image bump is deliberately not carried.** `node` 24-alpine → 25-alpine ([#334](https://github.com/aellington89/finance-stack/pull/334)) fails the image scan: `node:25-alpine` ships an older `libcrypto3` (CVE-2026-45447, HIGH) and older npm-vendored `tar` and `brace-expansion` (one CRITICAL). Node 25 is an odd-numbered, non-LTS line that reached end-of-life in June 2026, so its image is no longer refreshed. `finance-app` stays on Node 24, the active LTS.
+
 ## [1.0.3] - 2026-09-20
 
 **Migration:** none
@@ -503,7 +517,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/aellington89/finance-stack/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/aellington89/finance-stack/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/aellington89/finance-stack/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/aellington89/finance-stack/compare/v1.0.0...v1.0.1
