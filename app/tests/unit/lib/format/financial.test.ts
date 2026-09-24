@@ -85,14 +85,15 @@ describe("formatCurrencyCompact", () => {
     expect(formatCurrencyCompact(1_500_000)).toBe("$1.5M");
   });
 
-  // Below 1000 compact notation still emits the one fraction digit that
-  // maximumFractionDigits allows, so small axis ticks read "$12.0" rather than
-  // "$12". Pinned as the behaviour that shipped, not endorsed — every existing
-  // caller was byte-identical to this before #296 consolidated them, so the
-  // refactor had to preserve it exactly.
-  it("emits one fraction digit below the compaction threshold", () => {
-    expect(formatCurrencyCompact(12)).toBe("$12.0");
-    expect(formatCurrencyCompact(999)).toBe("$999.0");
+  // Below the compaction threshold the trailing fraction digit is ICU's call,
+  // not ours, and it moved between Node versions: 22 (ICU 78) renders "$12.0",
+  // 24 renders "$12". An exact assertion here pinned the local Node and went
+  // red in CI. What this function actually owns is the currency and the
+  // magnitude, so that is what is asserted; the compacted cases above are
+  // stable across both and stay exact.
+  it("leaves values below the compaction threshold uncompacted", () => {
+    expect(formatCurrencyCompact(12)).toMatch(/^\$12(\.0)?$/);
+    expect(formatCurrencyCompact(999)).toMatch(/^\$999(\.0)?$/);
   });
 
   it("carries the sign", () => {
