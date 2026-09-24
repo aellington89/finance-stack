@@ -5,64 +5,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-// Deterministic palette for type tiles. Indexed by `account_type_id` so the
-// same type always renders in the same color across loads, without
-// hard-coding any specific type id.
-const PALETTE = [
-  "#e23670",
-  "#f97316",
-  "#eab308",
-  "#2eb88a",
-  "#2662d9",
-  "#8b5cf6",
-  "#06b6d4",
-  "#a16207",
-];
-
-const colorForType = (typeId: number): string =>
-  PALETTE[typeId % PALETTE.length];
-
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-
-export interface DebtMixTile {
-  accountTypeId: number;
-  accountTypeName: string;
-  categoryId: number;
-  color: string;
-  value: number;
-  percent: number;
-}
-
-/**
- * Flattens the allocation tree to one tile per account type with a
- * non-zero balance. Sorted from largest debt magnitude to smallest.
- */
-export function buildDebtMixTiles(data: LiabilityAllocationData): DebtMixTile[] {
-  const tiles: DebtMixTile[] = [];
-  for (const cat of data.byCategory) {
-    for (const child of cat.children) {
-      if (child.value === 0) continue;
-      tiles.push({
-        accountTypeId: child.accountTypeId,
-        accountTypeName: child.accountTypeName,
-        categoryId: cat.categoryId,
-        color: colorForType(child.accountTypeId),
-        value: child.value,
-        percent: child.percentOfTotal,
-      });
-    }
-  }
-  // Largest magnitude first.
-  tiles.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-  return tiles;
-}
+import { buildDebtMixTiles } from "@/components/dashboard/debt-mix-tiles";
+import { formatCurrency } from "@/lib/format/financial";
 
 interface DebtMixBreakdownProps {
   data: LiabilityAllocationData;

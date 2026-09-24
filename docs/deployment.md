@@ -520,9 +520,32 @@ not need to add any.
 
 ## Security headers
 
-Set in [`app/next.config.ts`](../app/next.config.ts) rather than in the proxy, so
-they are present in every posture — including plain localhost — and do not depend
-on a particular proxy being configured correctly.
+Set by the app rather than by the reverse proxy, so they are present in every
+posture — including plain localhost — and do not depend on a particular proxy
+being configured correctly.
+
+Everything except the CSP is compiled into the routes-manifest by
+[`app/next.config.ts`](../app/next.config.ts). The CSP is emitted twice, because
+it carries a per-request nonce that a build-time config cannot mint:
+
+| Layer | Covers | CSP it sets |
+|---|---|---|
+| [`app/next.config.ts`](../app/next.config.ts) | every response | the nonce-free **floor** |
+| [`app/proxy.ts`](../app/proxy.ts) | everything except `/_next/static`, `/_next/image`, `/favicon.ico` and `/api/health` | the same policy **plus a nonce**, overwriting the floor |
+
+"Proxy" here means Next's own `proxy.ts` (the file formerly called
+`middleware.ts`), not the reverse proxy in front of the app — that one still
+needs to add nothing. Its header replaces the floor rather than joining it:
+Next applies the routes-manifest headers first and `proxy.ts`'s second, into the
+same map, so exactly one `Content-Security-Policy` header ships. That matters:
+a browser enforces *every* policy it is sent, so two headers would intersect
+into something nobody wrote.
+
+The floor omits `'unsafe-inline'` from `script-src` even though nothing it
+covers runs an inline script. That is deliberate, and makes the arrangement fail
+closed: if the overwrite ever stopped happening, Next's own inline bootstrap
+scripts would be blocked and the app would fail to hydrate visibly, rather than
+quietly serving a weaker policy that still looks right in `curl -I`.
 
 | Header | Value | What it stops |
 |---|---|---|
@@ -539,19 +562,53 @@ so it costs nothing on a LAN and starts applying the day TLS is in front. It doe
 not offer `preload`: submission is effectively irreversible and the hostname
 belongs to whoever deploys this.
 
-The CSP keeps `'unsafe-inline'` on `script-src` and `style-src`, which is an
-honest limitation rather than an oversight. Two things need it: `next-themes`
-injects an inline script to set the theme before first paint, and
-`components/ui/chart.tsx` injects a `<style>` element carrying each chart's
-colour variables. Removing it means threading a per-request nonce through both,
-tracked as a follow-up.
+### The nonce, and why `style-src` is different
 
-What the rest of the policy still buys, despite that: the app loads no
-third-party scripts at all, so `default-src 'self'` and `connect-src 'self'`
-mean injected script has nowhere to send data; `form-action 'self'` stops the
-sign-in form being retargeted at someone else's server; `base-uri 'self'` stops
-`<base>` rewriting every relative URL on the page; and `object-src 'none'`
-removes the plugin surface.
+`script-src` carries no `'unsafe-inline'` ([#237](https://github.com/aellington89/finance-stack/issues/237)).
+`proxy.ts` mints 128 bits of CSPRNG per request and puts it on both the response
+header and the forwarded request header; Next reads the latter and stamps the
+nonce onto its own bootstrap and flight-data scripts, and the root layout passes
+it to `next-themes` for the script that sets the theme before first paint. This
+is what makes the policy an XSS control rather than only an exfiltration
+control — injected script can no longer execute at all.
+
+Two consequences worth knowing before you debug something:
+
+- **Every route is rendered per request.** Reading the nonce in the root layout
+  opts the whole app into dynamic rendering, which is required rather than
+  incidental: a prerendered page's inline scripts are baked in at build time
+  with no nonce, so serving one under this policy means it never hydrates. Only
+  `/` and the 404 page changed — the dashboard already rendered dynamically.
+- **There is no nonce in development.** `next dev` serves the floor, with
+  `'unsafe-inline'` and `'unsafe-eval'` for Turbopack. A nonce makes browsers
+  ignore `'unsafe-inline'` entirely, which would break HMR and the error
+  overlay. The nonce path is covered by `app/e2e/csp.spec.ts`, which runs
+  against a production build.
+
+`style-src` **does** keep `'unsafe-inline'`, and that is an upstream constraint
+rather than unfinished work. Two things inject a `<style>` element with no nonce
+and no way to accept one:
+
+- `sonner` builds the whole of a toast's styling in JavaScript — 109 rules,
+  `position: fixed` among them — and nothing else styles a toast. A nonce here
+  turns every save and delete confirmation into unstyled text in the document
+  flow.
+- Next does the same in its own 404 fallback
+  (`next/dist/client/components/http-access-fallback/error-fallback.js`).
+
+Both must ship nonce support before this can change. `'unsafe-inline'` on
+`style-src` also covers React's `style={{…}}` attributes, which
+[`app/global-error.tsx`](../app/app/global-error.tsx) depends on entirely by
+design — inline styles are the only styling a last-resort boundary can trust.
+The residual risk is CSS-based exfiltration, which needs an injection point the
+app does not have, and which `img-src 'self' data:` already constrains.
+
+What the rest of the policy buys: the app loads no third-party scripts at all,
+so `default-src 'self'` and `connect-src 'self'` mean injected script has
+nowhere to send data; `form-action 'self'` stops the sign-in form being
+retargeted at someone else's server; `base-uri 'self'` stops `<base>` rewriting
+every relative URL on the page; and `object-src 'none'` removes the plugin
+surface.
 
 ### Verifying
 
@@ -559,14 +616,27 @@ removes the plugin surface.
 curl -sI http://localhost:3001/ | grep -iE \
   'content-security-policy|strict-transport|x-frame|x-content-type|referrer-policy|permissions-policy|cross-origin-opener'
 
-# Also covered — these sit outside the proxy's matcher
 curl -sI http://localhost:3001/login
-curl -sI http://localhost:3001/api/health          # public liveness probe
-curl -sI http://localhost:3001/api/health/seed-data # outside the matcher, but 401 without a session
+
+# The floor, not the nonce-bearing policy: both sit outside the proxy's matcher
+# so the healthcheck never depends on Auth.js decoding a session.
+curl -sI http://localhost:3001/api/health           # public liveness probe
+curl -sI http://localhost:3001/api/health/seed-data # 401 without a session
+
+# The nonce (#237). Must print a different value each time — a nonce that
+# repeats is a guessable constant and no better than 'unsafe-inline'.
+curl -sI http://localhost:3001/ | grep -io "nonce-[A-Za-z0-9+/=]*"
+curl -sI http://localhost:3001/ | grep -io "nonce-[A-Za-z0-9+/=]*"
+
+# Should print nothing: script-src no longer allows inline script
+curl -sI http://localhost:3001/ | tr ';' '\n' | grep -i script-src | grep unsafe-inline
 
 # Should print nothing: poweredByHeader is off
 curl -sI http://localhost:3001/ | grep -i x-powered-by
 ```
+
+Note that `style-src 'self' 'unsafe-inline'` is expected — see above. Grep for
+`script-src` specifically rather than for `unsafe-inline` anywhere in the header.
 
 The header set is asserted in CI by `tests/unit/next-config-headers.test.ts`, and
 again against a running container by the release smoke test in
@@ -627,9 +697,11 @@ docker compose logs finance-app | jq -c 'select(.scope=="action")'
 
 ## Out of scope
 
-- **Nonce-based CSP.** Removing `'unsafe-inline'` needs a per-request nonce
-  threaded through `proxy.ts`, the root layout, `next-themes`, and a refactor of
-  `components/ui/chart.tsx` away from `dangerouslySetInnerHTML`.
+- **`'unsafe-inline'` on `style-src`.** `script-src` is nonce-based as of
+  [#237](https://github.com/aellington89/finance-stack/issues/237); `style-src`
+  cannot follow until `sonner` and Next's own 404 fallback stop injecting
+  nonce-less `<style>` elements. Blocked upstream, not deferred by choice — see
+  [The nonce, and why `style-src` is different](#the-nonce-and-why-style-src-is-different).
 - **IP-based rate limiting and durable lockouts.** Both become worth doing if the
   reverse proxy becomes the standard front door, since the proxy can supply a
   trustworthy client address.

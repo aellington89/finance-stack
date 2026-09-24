@@ -58,6 +58,9 @@
 #   FINANCE_APP_DB_PASSWORD etc.  (the service-role passwords, #130)
 #   FINANCE_BI_DB_PASSWORD        (the read-only BI role, #249)
 #   MB_DB_USER, MB_DB_DBNAME      (the metadata role + its database)
+#   GLITCHTIP_DB_USER, GLITCHTIP_DB_DBNAME  (GlitchTip's role + its database)
+#   GLITCHTIP_DB_PASSWORD         (empty skips GlitchTip provisioning entirely,
+#                                  exactly as MB_DB_PASS does for Metabase, #232)
 #   MB_DB_PASS                    (empty skips Metabase provisioning entirely;
 #                                  required once that database exists, #189/#225)
 # ------------------------------------------------------------
@@ -71,6 +74,8 @@ TEST_DB="Finances_Test"
 # the defaults match .env.example.
 MB_DB_USER="${MB_DB_USER:-metabase_user}"
 MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
+GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
+GLITCHTIP_DB_DBNAME="${GLITCHTIP_DB_DBNAME:-glitchtip}"
 
 # Fail fast and loudly on a missing role password. Compose substitutes an unset
 # variable with the empty string rather than leaving it unset, so without these
@@ -146,6 +151,9 @@ psql -v ON_ERROR_STOP=1 -d postgres \
     -v mb_user="${MB_DB_USER}" \
     -v mb_dbname="${MB_DB_DBNAME}" \
     -v mb_password="${MB_DB_PASS:-}" \
+    -v gt_user="${GLITCHTIP_DB_USER}" \
+    -v gt_dbname="${GLITCHTIP_DB_DBNAME}" \
+    -v gt_password="${GLITCHTIP_DB_PASSWORD:-}" \
     -f /roles/00-create-databases.sql
 
 # Roles are cluster-global, so create them once, before the per-database loop.
@@ -175,6 +183,26 @@ if [ -n "$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${MB_DB_DBNAME}
         -f /roles/03-metabase-role.sql
 else
     echo ">>> No ${MB_DB_DBNAME} database — skipping."
+fi
+
+# GlitchTip's role (#232). Same shape and same reasoning as the Metabase block
+# above: run against GlitchTip's own database because it issues a schema-level
+# GRANT, and skip rather than fail when that database is absent — a cluster that
+# has never enabled error tracking is a valid configuration, and step 0 creates
+# the database and the role together, so neither exists without the other.
+echo ">>> Converging the GlitchTip role..."
+if [ -n "$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${GLITCHTIP_DB_DBNAME}'" -d postgres)" ]; then
+    # Scoped to this branch, like MB_DB_PASS above. A stack that never enabled
+    # the errors profile must not be forced to carry the variable; one that HAS
+    # the database also has the role, and an empty value there would quietly set
+    # a blank password on it.
+    : "${GLITCHTIP_DB_PASSWORD:?must be set — the ${GLITCHTIP_DB_DBNAME} database exists, so migrate syncs its role password from .env (issue #232)}"
+    psql -v ON_ERROR_STOP=1 -d "${GLITCHTIP_DB_DBNAME}" \
+        -v gt_user="${GLITCHTIP_DB_USER}" \
+        -v gt_password="${GLITCHTIP_DB_PASSWORD}" \
+        -f /roles/04-glitchtip-role.sql
+else
+    echo ">>> No ${GLITCHTIP_DB_DBNAME} database — skipping."
 fi
 
 for db in "${FINANCE_APP_DB}" "${TEST_DB}"; do

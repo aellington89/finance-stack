@@ -1,19 +1,28 @@
+import { captureEvent } from "@/lib/error-tracking";
 import { log, type LogFields } from "@/lib/log";
 
 /**
  * The single choke point for exceptional events (Issue #129).
  *
- * **This is where an error-tracking backend gets wired** (Issue #232). Today the
- * only sink is the structured logger; adding Sentry (or self-hosted GlitchTip,
- * which speaks the same DSN protocol) means adding one call inside `reportError`
- * and touching nothing else in the codebase. No SDK ships today on purpose:
- * `@sentry/nextjs` pulls the OpenTelemetry package set into the *blocking*
- * `npm audit --omit=dev` gate and the Trivy image scan, and this stack is
- * self-hosted and meant to stay on a trusted network — see docs/observability.md.
+ * Two sinks, both fed the *same serialized value*: the structured logger, and
+ * whatever error-tracking backend `ERROR_DSN` points at (Issue #232). Every
+ * capture path in the app routes through here — instrumentation.ts,
+ * lib/actions/failure.ts, the two client error boundaries, and the seed-data
+ * health route — so this is the only place either sink needs wiring.
  *
- * Note when doing so: an SDK captures the *raw* error, so it bypasses the
- * redaction below unless it is given the serialized form or a matching
- * `beforeSend` hook.
+ * **`serializeError()` runs once and both sinks receive its output.** That is the
+ * load-bearing detail, not a tidiness one. The obvious shape —
+ * `Sentry.captureException(error)` alongside the log call — hands the backend the
+ * *raw* error, which still carries `DrizzleQueryError.params` (every bound value
+ * of the failing statement) and pg's `detail`. It would ship the row the
+ * redaction below exists to strip, and the redaction would be decorative. No
+ * error-tracking code in this module or in lib/error-tracking.ts may take
+ * `unknown`; both take the serialized form, so the leak is unreachable rather
+ * than guarded against.
+ *
+ * No SDK ships, and lib/error-tracking.ts records why at length: the blocking
+ * `npm audit` gates have no per-advisory allowlist, so an OpenTelemetry tree in
+ * production dependencies is an unfixable CI failure mode waiting to happen.
  *
  * Kept separate from `log.ts` so the distinction survives: `log.info` is
  * routine, `reportError` is a failure someone may need to answer for. It is
@@ -163,9 +172,13 @@ function errorDigest(error: unknown): string | undefined {
 }
 
 export function reportError(error: unknown, context: ReportContext = {}): void {
-  log.error(describe(context), {
+  // Serialized once, then shared. `error` itself goes no further than this line.
+  const err = serializeError(error);
+  const resolved: ReportContext = {
     ...context,
     digest: context.digest ?? errorDigest(error),
-    err: serializeError(error),
-  });
+  };
+
+  log.error(describe(resolved), { ...resolved, err });
+  captureEvent(err, resolved);
 }

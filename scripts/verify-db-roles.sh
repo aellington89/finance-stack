@@ -32,6 +32,9 @@
 #   MB_DB_PASS                       Metabase metadata role pw  (optional — the
 #                                    metadata-role cases are skipped without it)
 #   MB_DB_USER / MB_DB_DBNAME        metadata role + database   (defaulted)
+#   GLITCHTIP_DB_PASSWORD            GlitchTip's role password  (optional — the
+#                                    GlitchTip cases are skipped without it)
+#   GLITCHTIP_DB_USER / _DBNAME      GlitchTip role + database  (defaulted)
 #   ROLES_DIR                        location of the roles SQL  (default: /roles)
 #
 # Note: connections must NOT arrive over a pg_hba `trust` rule or the password
@@ -44,6 +47,8 @@ DB="${1:-Finances_Test}"
 ROLES_DIR="${ROLES_DIR:-/roles}"
 MB_DB_USER="${MB_DB_USER:-metabase_user}"
 MB_DB_DBNAME="${MB_DB_DBNAME:-metabase}"
+GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
+GLITCHTIP_DB_DBNAME="${GLITCHTIP_DB_DBNAME:-glitchtip}"
 
 : "${FINANCE_APP_DB_PASSWORD:?must be set}"
 : "${FINANCE_IMPORTER_DB_PASSWORD:?must be set}"
@@ -155,6 +160,12 @@ INSERT_TXN="INSERT INTO transactions
          (SELECT min(transaction_category_id) FROM transaction_categories)
   FROM accounts a"
 
+# The importer's own record of what it did (#124). A 64-character sha256 that no
+# real file will collide with, and a status the CHECK constraint accepts.
+INSERT_IMPORT_LOG="INSERT INTO import_log
+  (import_type, file_name, sha256, status)
+  VALUES ('privilege-smoke', 'smoke.pdf', repeat('0', 64), 'imported')"
+
 READ_VIEWS="SELECT (SELECT count(*) FROM v_transactions_full)
                  + (SELECT count(*) FROM v_account_balances_current)
                  + (SELECT count(*) FROM v_daily_totals)
@@ -186,8 +197,15 @@ expect finance_app "$FINANCE_APP_DB_PASSWORD" deny  "setval a sequence"        "
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "INSERT a transaction" "BEGIN; ${INSERT_TXN}; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "SELECT the lookup maps" \
   "SELECT (SELECT count(*) FROM accounts) + (SELECT count(*) FROM transaction_categories) + (SELECT count(*) FROM transaction_types)"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "INSERT an import_log row" "BEGIN; ${INSERT_IMPORT_LOG}; ROLLBACK"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" allow "SELECT import_log"    "SELECT count(*) FROM import_log"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "UPDATE transactions"  "BEGIN; UPDATE transactions SET amount = 0; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "DELETE transactions"  "BEGIN; DELETE FROM transactions; ROLLBACK"
+# The pair that keeps import_log append-only. Without these, widening the grant in
+# 02-grants.sql to SELECT, INSERT, UPDATE — or to ON ALL TABLES — would pass CI
+# silently, and the importer would gain the power to rewrite its own history.
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "UPDATE import_log"    "BEGIN; UPDATE import_log SET status = 'imported'; ROLLBACK"
+expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "DELETE import_log"    "BEGIN; DELETE FROM import_log; ROLLBACK"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT users"         "SELECT count(*) FROM users"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT audit_log"     "SELECT count(*) FROM audit_log"
 expect finance_importer "$FINANCE_IMPORTER_DB_PASSWORD" deny  "SELECT a view"        "SELECT count(*) FROM v_transactions_full"
@@ -233,6 +251,31 @@ else
   expect "$MB_DB_USER" "$MB_DB_PASS" deny  "CREATE DATABASE" \
     "CREATE DATABASE mb_privilege_smoke_escalation" "$MB_DB_DBNAME"
   expect_no_connect "$MB_DB_USER" "$MB_DB_PASS" "$DB"
+fi
+
+# ── GLITCHTIP_DB_USER — owns its own DB, and is nothing on the cluster ────
+# Error tracking's role (#232). Structurally identical to the Metabase block
+# above, and deliberately so: GlitchTip runs Django migrations against its own
+# database on every start, so the positive case is the load-bearing one for the
+# same reason — a role that cannot create a table there leaves the container
+# crash-looping on a cluster the catalog reports as healthy.
+#
+# The negative case that matters most is the last one. This role exists to
+# receive error reports from finance-app; it has no business reaching the
+# financial data those reports are about, and `expect_no_connect` is what proves
+# the separation rather than assuming it.
+echo
+if [ -z "${GLITCHTIP_DB_PASSWORD:-}" ]; then
+  echo "skip  ${GLITCHTIP_DB_USER}: GLITCHTIP_DB_PASSWORD not set (catalog gate still covers its attributes)"
+else
+  expect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" allow "create+drop a table in ${GLITCHTIP_DB_DBNAME}" \
+    "BEGIN; CREATE TABLE gt_privilege_smoke (id int); DROP TABLE gt_privilege_smoke; ROLLBACK" \
+    "$GLITCHTIP_DB_DBNAME"
+  expect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" deny  "CREATE ROLE" \
+    "CREATE ROLE gt_privilege_smoke_escalation LOGIN" "$GLITCHTIP_DB_DBNAME"
+  expect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" deny  "CREATE DATABASE" \
+    "CREATE DATABASE gt_privilege_smoke_escalation" "$GLITCHTIP_DB_DBNAME"
+  expect_no_connect "$GLITCHTIP_DB_USER" "$GLITCHTIP_DB_PASSWORD" "$DB"
 fi
 
 echo

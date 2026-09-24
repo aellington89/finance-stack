@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/format/financial";
 
 // Distinct palette for up to 12 slices + an "Other" gray
 const SLICE_COLORS = [
@@ -32,14 +33,6 @@ const SLICE_COLORS = [
   "#f43f5e",
 ];
 const OTHER_COLOR = "#6b7280";
-
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
 
 interface ExpensesCategoryChartProps {
   data: CategoryBreakdown[];
@@ -90,7 +83,7 @@ export function ExpensesCategoryChart({ data, title = "Total Expenses by Categor
                     <div className="flex flex-1 justify-between gap-4">
                       <span className="font-bold">{name}:</span>
                       <span className="tabular-nums">
-                        {formatCurrencyFull(value as number)}
+                        {formatCurrency(value as number)}
                       </span>
                     </div>
                   )}
@@ -130,7 +123,7 @@ export function ExpensesCategoryChart({ data, title = "Total Expenses by Categor
                           y={(viewBox.cy ?? 0) - 12}
                           className="fill-foreground text-3xl font-bold"
                         >
-                          {formatCurrencyFull(grandTotal)}
+                          {formatCurrency(grandTotal)}
                         </tspan>
                         <tspan
                           x={viewBox.cx}

@@ -4,18 +4,36 @@ import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
+import { chartColorVars } from "@/components/ui/chart-colors"
 
-// Format: { THEME_NAME: CSS_SELECTOR }
-const THEMES = { light: "", dark: ".dark" } as const
-
+/**
+ * DIVERGES FROM UPSTREAM SHADCN (#237) — `npx shadcn add chart` will clobber
+ * this file and reintroduce what was removed. Read this before accepting it.
+ *
+ * Upstream lets an entry carry either a single `color` or a
+ * `theme: { light, dark }` pair, and renders a `<style>` element via
+ * dangerouslySetInnerHTML to emit both as `--color-*` declarations under `:root`
+ * and `.dark`. That was the only dangerouslySetInnerHTML in the app, and the
+ * only reason `script-src`'s sibling directive needed watching.
+ *
+ * The `theme` variant is gone rather than merely unused. No config in this app
+ * ever set one — all ten pass a single `color`, which made the `.dark` half of
+ * the generated CSS a byte-identical duplicate of the light half — and the
+ * replacement mechanism, a `style` attribute on the container, cannot express
+ * two theme scopes at all. Keeping the type would mean accepting a per-theme
+ * colour at compile time and silently dropping half of it at runtime, so the
+ * compiler rejects it instead.
+ *
+ * If per-theme chart colours are ever genuinely wanted, the shape to reach for
+ * is a pair of variables resolved by the existing `@custom-variant dark`
+ * selector in globals.css — not a return to the injected stylesheet.
+ */
 export type ChartConfig = {
   [k in string]: {
     label?: React.ReactNode
     icon?: React.ComponentType
-  } & (
-    | { color?: string; theme?: never }
-    | { color?: never; theme: Record<keyof typeof THEMES, string> }
-  )
+    color?: string
+  }
 }
 
 type ChartContextProps = {
@@ -39,6 +57,7 @@ function ChartContainer({
   className,
   children,
   config,
+  style,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig
@@ -58,47 +77,14 @@ function ChartContainer({
           "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className
         )}
+        style={{ ...chartColorVars(config), ...style }}
         {...props}
       >
-        <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer>
           {children}
         </RechartsPrimitive.ResponsiveContainer>
       </div>
     </ChartContext.Provider>
-  )
-}
-
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(
-    ([, config]) => config.theme || config.color
-  )
-
-  if (!colorConfig.length) {
-    return null
-  }
-
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
-  })
-  .join("\n")}
-}
-`
-          )
-          .join("\n"),
-      }}
-    />
   )
 }
 
@@ -385,5 +371,4 @@ export {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
-  ChartStyle,
 }

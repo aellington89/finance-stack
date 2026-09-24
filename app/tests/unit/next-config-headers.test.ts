@@ -74,7 +74,7 @@ describe("security headers", () => {
 });
 
 describe("content security policy", () => {
-  it("locks down the directives that still bite despite unsafe-inline", async () => {
+  it("locks down the directives that carry the policy's real value", async () => {
     const csp = directives((await headersFor("production")).get("Content-Security-Policy"));
 
     expect(csp).toContain("default-src 'self'");
@@ -92,7 +92,7 @@ describe("content security policy", () => {
     // Turbopack needs both; the standalone server needs neither.
     expect(csp).not.toContain("unsafe-eval");
     expect(csp).not.toContain("ws:");
-    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).toContain("script-src 'self'");
     expect(csp).toContain("connect-src 'self'");
   });
 
@@ -103,13 +103,43 @@ describe("content security policy", () => {
     expect(csp).toContain("connect-src 'self' ws:");
   });
 
-  it("still carries unsafe-inline, which the nonce follow-up removes", async () => {
-    // next-themes' FOUC script and the <style> injected by components/ui/chart.tsx
-    // both require it. Asserted so that dropping it is a deliberate change with a
-    // failing test attached, not an accident.
+  it("carries no unsafe-inline on script-src, and no nonce either", async () => {
+    // #237. This file can only ever see the *floor*: next.config.ts compiles one
+    // header into the routes-manifest at build time and a nonce has to change
+    // per request, so the policy most responses actually carry is set by
+    // proxy.ts and overwrites this one. What is asserted here is that the floor
+    // is strict enough to fail closed — if that overwrite ever stopped
+    // happening, Next's own inline bootstrap scripts would be blocked and the
+    // app would fail to hydrate visibly, rather than quietly serving a weaker
+    // policy that still looks right to `curl -I`.
+    //
+    // The nonce-bearing shape is asserted in tests/unit/lib/security/csp.test.ts,
+    // and that it reaches the wire in e2e/csp.spec.ts.
     const csp = (await headersFor("production")).get("Content-Security-Policy") ?? "";
 
-    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).toContain("script-src 'self';");
+    expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).not.toContain("nonce-");
+  });
+
+  it("still carries unsafe-inline on style-src, for two upstream reasons", async () => {
+    // Neither is fixable from this repository, and both must ship a nonce
+    // before this line changes:
+    //
+    //   - sonner builds a <style> element in JS (__insertCSS in
+    //     sonner/dist/index.mjs) carrying the whole of a toast's styling — 109
+    //     rules, position: fixed among them — and accepts no nonce. Nothing else
+    //     styles a toast. A nonce here unstyles every save and delete
+    //     confirmation in the app.
+    //   - Next renders <style dangerouslySetInnerHTML> with no nonce prop in
+    //     next/dist/client/components/http-access-fallback/error-fallback.js,
+    //     which is what styles its built-in 404.
+    //
+    // Asserted rather than merely commented so that dropping it is a deliberate
+    // change with a failing test attached, not an accident — the same reason the
+    // script-src half was asserted here before #237 removed it.
+    const csp = (await headersFor("production")).get("Content-Security-Policy") ?? "";
+
     expect(csp).toContain("style-src 'self' 'unsafe-inline'");
   });
 });

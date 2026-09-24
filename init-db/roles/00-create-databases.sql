@@ -1,12 +1,14 @@
 -- ==============================================
 -- Database creation (Issue #225).
 --
--- Creates the databases the stack runs on, plus the role that owns Metabase's
--- metadata database:
+-- Creates the databases the stack runs on, plus the roles that own the two
+-- self-contained services' databases (Metabase's metadata DB, GlitchTip's):
 --   :app_db     the main application database  (FINANCE_APP_DB, default Finances)
 --   :test_db    the test database              (Finances_Test)
 --   :mb_user    Metabase's metadata-DB role    (MB_DB_USER)
 --   :mb_dbname  its metadata database          (MB_DB_DBNAME)
+--   :gt_user    GlitchTip's role               (GLITCHTIP_DB_USER)
+--   :gt_dbname  its database                   (GLITCHTIP_DB_DBNAME)
 --
 -- Applied by the `migrate` Compose service (app/scripts/migrate-and-seed.sh) as
 -- step 0, before anything else touches a database. It used to be
@@ -32,7 +34,8 @@
 -- 03-metabase-role.sql work around.
 --
 -- Required psql variables (passed with -v by the caller):
---   app_db, test_db, mb_user, mb_dbname, mb_password
+--   app_db, test_db, mb_user, mb_dbname, mb_password,
+--   gt_user, gt_dbname, gt_password
 -- ==============================================
 
 \set ON_ERROR_STOP on
@@ -80,6 +83,33 @@ SELECT format('CREATE DATABASE %I OWNER %I', :'mb_dbname', :'mb_user')
 WHERE :'mb_password' <> ''
   AND NOT EXISTS (SELECT FROM pg_database WHERE datname = :'mb_dbname')\gexec
 
+-- ── GlitchTip's role and database ─────────────────────────────────────────
+-- Error tracking (#232), and structurally the same shape as Metabase above: a
+-- self-contained web application that runs its own schema migrations against
+-- its own database at startup, so it owns that database and holds nothing else.
+-- It reaches Finances not at all.
+--
+-- Gated on GLITCHTIP_DB_PASSWORD for the same reason MB_DB_PASS gates the pair
+-- above: error tracking is optional, the service is behind `--profile errors`,
+-- and a stack that never wants it must not be forced to carry the credential.
+-- An empty value means "do not provision GlitchTip", not "use a blank password".
+--
+-- The attribute list is spelled out rather than inherited from the CREATE ROLE
+-- defaults, for the reason #239 established: a reader has to be able to see the
+-- intended privilege level here without knowing the defaults by heart.
+--
+-- Nothing else is granted here. init-db/roles/04-glitchtip-role.sql is the
+-- declared authority on what this role may do and runs moments later in the same
+-- job.
+SELECT format('CREATE ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE'
+              ' NOREPLICATION NOBYPASSRLS PASSWORD %L', :'gt_user', :'gt_password')
+WHERE :'gt_password' <> ''
+  AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'gt_user')\gexec
+
+SELECT format('CREATE DATABASE %I OWNER %I', :'gt_dbname', :'gt_user')
+WHERE :'gt_password' <> ''
+  AND NOT EXISTS (SELECT FROM pg_database WHERE datname = :'gt_dbname')\gexec
+
 -- Says what the run left in place, since every statement above is silent both
 -- when its guard is false and when the object already exists.
 SELECT format('%s, %s', quote_ident(:'app_db'), quote_ident(:'test_db'))
@@ -89,4 +119,10 @@ SELECT format('%s, %s', quote_ident(:'app_db'), quote_ident(:'test_db'))
                THEN 'skipped — MB_DB_PASS is empty'
            ELSE format('%s owned by %s',
                        quote_ident(:'mb_dbname'), quote_ident(:'mb_user'))
-       END AS "metabase";
+       END AS "metabase",
+       CASE
+           WHEN :'gt_password' = ''
+               THEN 'skipped — GLITCHTIP_DB_PASSWORD is empty'
+           ELSE format('%s owned by %s',
+                       quote_ident(:'gt_dbname'), quote_ident(:'gt_user'))
+       END AS "glitchtip";

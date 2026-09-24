@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseChangelog } from "@/lib/changelog";
 import {
+  checkBreakingIsMajor,
   checkChangelog,
   checkMigrationMarkers,
   checkTag,
@@ -247,5 +248,83 @@ describe("checkTag", () => {
     const problems = checkTag("v0.1.4", "0.1.3");
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatchObject({ kind: "tag-mismatch", tag: "v0.1.4", expected: "v0.1.3" });
+  });
+});
+
+// Issue #315. package.json, the newest changelog heading and the tag can all
+// agree on an understated number; this is the only check that compares the
+// version against what the release actually says it does.
+describe("checkBreakingIsMajor", () => {
+  const md = (...sections: string[]): string => sections.join("\n\n");
+  const release = (version: string, migration: string): string =>
+    `## [${version}] - 2026-09-12\n\n**Migration:** ${migration}\n\n### Changed\n\n- A change.`;
+
+  it("returns [] when a breaking release incremented the major", () => {
+    const releases = parseChangelog(md(release("2.0.0", "breaking"), release("1.4.2", "none")));
+    expect(checkBreakingIsMajor(releases)).toEqual([]);
+  });
+
+  it("flags a breaking release that only bumped the patch", () => {
+    const releases = parseChangelog(md(release("1.0.3", "breaking"), release("1.0.2", "none")));
+    expect(checkBreakingIsMajor(releases)).toMatchObject([
+      { kind: "breaking-not-major", version: "1.0.3", previous: "1.0.2", expected: "2.0.0" },
+    ]);
+  });
+
+  it("flags a breaking release that only bumped the minor", () => {
+    const releases = parseChangelog(md(release("1.1.0", "breaking"), release("1.0.2", "none")));
+    expect(checkBreakingIsMajor(releases)).toMatchObject([
+      { kind: "breaking-not-major", expected: "2.0.0" },
+    ]);
+  });
+
+  it("exempts a pre-1.0 breaking release", () => {
+    const releases = parseChangelog(md(release("0.3.0", "breaking"), release("0.2.0", "none")));
+    expect(checkBreakingIsMajor(releases)).toEqual([]);
+  });
+
+  it("exempts the 0.x to 1.0.0 cut", () => {
+    const releases = parseChangelog(md(release("1.0.0", "breaking"), release("0.4.1", "none")));
+    expect(checkBreakingIsMajor(releases)).toEqual([]);
+  });
+
+  it("exempts the oldest release in the file, which has nothing to increment from", () => {
+    expect(checkBreakingIsMajor(parseChangelog(release("1.0.0", "breaking")))).toEqual([]);
+  });
+
+  it("ignores [Unreleased] when finding the previous release", () => {
+    const releases = parseChangelog(
+      md("## [Unreleased]\n\n**Migration:** breaking", release("1.0.3", "breaking"), release("1.0.2", "none")),
+    );
+    expect(checkBreakingIsMajor(releases)).toMatchObject([{ version: "1.0.3", previous: "1.0.2" }]);
+  });
+
+  it("ignores a malformed marker rather than reading it as breaking", () => {
+    const releases = parseChangelog(md(release("1.0.3", "Breaking"), release("1.0.2", "none")));
+    expect(checkBreakingIsMajor(releases)).toEqual([]);
+  });
+
+  it("does not object to a major bump that declares Migration: none — the v1.0.0 shape", () => {
+    const releases = parseChangelog(md(release("2.0.0", "none"), release("1.4.2", "none")));
+    expect(checkBreakingIsMajor(releases)).toEqual([]);
+  });
+
+  it("allows a breaking release that skips a major", () => {
+    const releases = parseChangelog(md(release("3.0.0", "breaking"), release("1.4.2", "none")));
+    expect(checkBreakingIsMajor(releases)).toEqual([]);
+  });
+
+  it("returns [] for an empty releases array", () => {
+    expect(checkBreakingIsMajor([])).toEqual([]);
+  });
+
+  it("surfaces the problem through checkChangelog once the version agrees", () => {
+    const releases = parseChangelog(md(release("1.0.3", "breaking"), release("1.0.2", "none")));
+    expect(checkChangelog("1.0.3", releases)).toMatchObject([{ kind: "breaking-not-major" }]);
+  });
+
+  it("suppresses the problem while the package.json version still mismatches", () => {
+    const releases = parseChangelog(md(release("1.0.3", "breaking"), release("1.0.2", "none")));
+    expect(checkChangelog("9.9.9", releases)).toMatchObject([{ kind: "version-mismatch" }]);
   });
 });

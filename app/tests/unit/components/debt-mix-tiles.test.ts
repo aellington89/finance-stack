@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildDebtMixTiles } from "@/components/dashboard/debt-mix-breakdown";
+import { buildDebtMixTiles } from "@/components/dashboard/debt-mix-tiles";
 import type { LiabilityAllocationData } from "@/lib/queries/liabilities-drilldown";
 
 const makeData = (

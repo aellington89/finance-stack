@@ -8,7 +8,7 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 |---|---|---|
 | PostgreSQL 18 | Primary database | 5433 (loopback only) |
 | Next.js 16 | Custom finance application | 3001 |
-| importer | File ingestion (polls `imports/` subfolders) | — |
+| importer | File ingestion (polls `imports/` subfolders, skips what it has already imported) | — |
 | Metabase | BI dashboards and analytics (`--profile bi`) | 3000 (loopback only) |
 | Caddy | TLS termination for exposed deployments (`--profile edge`) | 80, 443 |
 
@@ -25,7 +25,7 @@ On a deployment there is no checkout to run that from, so the same CLI ships in 
 
 Sign in at http://localhost:3001/login and sign out from the sidebar footer. See [docs/auth.md](docs/auth.md) for the full model, the `AUTH_SECRET` requirement, and password resets.
 
-At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append transactions, and Metabase reads through a role that cannot touch `users` or `audit_log` and cannot write. Exactly one login role in the cluster is a superuser — the maintenance identity the one-shot jobs run as — and CI asserts that for *every* role, not a list of the expected ones. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.
+At the data tier, Postgres and Metabase publish their host ports on **loopback only**, and each service connects as its own **least-privilege role** rather than the `postgres` superuser: the app has no DDL and is read-only on `users`, the importer can only append — transactions and its own import log, never an `UPDATE` or a `DELETE` anywhere — and Metabase reads through a role that cannot touch `users` or `audit_log` and cannot write. Exactly one login role in the cluster is a superuser — the maintenance identity the one-shot jobs run as — and CI asserts that for *every* role, not a list of the expected ones. See [docs/database.md](docs/database.md#roles--privileges) for the grant matrix and how to verify it.
 
 At the edge, every response carries a **content security policy** and the usual hardening headers (HSTS, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`), sign-ins are **rate limited** to five failures per username per 15 minutes, and server actions to 120 per user per minute.
 
@@ -178,7 +178,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Audit Log](docs/audit-log.md) — how mutations are recorded, who gets attributed, reading the log, and retention
 - [Input Validation & Error Messages](docs/input-validation.md) — the per-action validation checklist, the SQL parameterization rule, and what a user is allowed to see
 - [Backups](docs/backups.md) — the scheduled backup service, retention, and disaster recovery
-- [Observability](docs/observability.md) — structured JSON logs, where errors are captured, redaction, and wiring an error-tracking backend
+- [Observability](docs/observability.md) — structured JSON logs, where errors are captured, redaction, and the error-tracking backend
 - [Schema Changes](docs/schema-changes.md) — making schema changes and adopting migrations on existing databases
 - [Testing](docs/testing.md) — running tests and the static lookup-table fixtures
 - [Importer](docs/importer.md) — the importer service and adding new import types

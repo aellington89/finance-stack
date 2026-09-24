@@ -17,6 +17,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
+import { formatAxisDate } from "@/lib/format/dates";
+import {
+  pivotDecomposition,
+  type PivotedRow,
+} from "@/components/charts/timeseries-pivot";
 
 const NET_WORTH_COLOR = "#2eb88a";
 
@@ -26,87 +35,8 @@ const PALETTE = [
   "#84cc16", "#6366f1", "#14b8a6", "#f43f5e",
 ];
 
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
-const formatDate = (dateStr: string) => {
-  const d = new Date(dateStr + "T00:00:00");
-  return format(d, "MMM d");
-};
-
 type Mode = "net-worth" | "category" | "account-type" | "account";
 
-interface SeriesInfo {
-  key: string;
-  label: string;
-  color: string;
-}
-
-interface PivotedRow {
-  date: string;
-  [seriesKey: string]: number | string;
-}
-
-function pivotDecomposition(
-  points: DecompositionPoint[],
-  mode: "category" | "account-type" | "account"
-): { rows: PivotedRow[]; series: SeriesInfo[] } {
-  const keyFor = (p: DecompositionPoint) => {
-    if (mode === "category") return `cat_${p.categoryId}`;
-    if (mode === "account-type") return `type_${p.accountTypeId}`;
-    return `acct_${p.accountId}`;
-  };
-  const labelFor = (p: DecompositionPoint) => {
-    if (mode === "category") return p.categoryName;
-    if (mode === "account-type") return p.accountTypeName;
-    return p.accountName;
-  };
-
-  const seriesMap = new Map<string, string>();
-  for (const p of points) {
-    const key = keyFor(p);
-    if (!seriesMap.has(key)) seriesMap.set(key, labelFor(p));
-  }
-
-  const series: SeriesInfo[] = Array.from(seriesMap.entries()).map(
-    ([key, label], i) => ({
-      key,
-      label,
-      color: PALETTE[i % PALETTE.length],
-    })
-  );
-
-  const dateMap = new Map<string, PivotedRow>();
-  for (const p of points) {
-    if (!dateMap.has(p.date)) {
-      const row: PivotedRow = { date: p.date };
-      for (const s of series) row[s.key] = 0;
-      dateMap.set(p.date, row);
-    }
-    const row = dateMap.get(p.date)!;
-    const key = keyFor(p);
-    row[key] = ((row[key] as number) || 0) + p.cumulativeBalance;
-  }
-
-  const rows = Array.from(dateMap.values()).sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
-
-  return { rows, series };
-}
 
 interface NetWorthTimeSeriesChartProps {
   timeSeries: TimeSeriesPoint[];
@@ -130,7 +60,7 @@ export function NetWorthTimeSeriesChart({
   const decomposed = useMemo(
     () =>
       mode !== "net-worth"
-        ? pivotDecomposition(decomposition, mode)
+        ? pivotDecomposition(decomposition, mode, PALETTE)
         : { rows: [], series: [] },
     [decomposition, mode]
   );
@@ -202,7 +132,7 @@ export function NetWorthTimeSeriesChart({
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={formatDate}
+              tickFormatter={formatAxisDate}
               tickLine={false}
               axisLine={false}
               tickMargin={8}
@@ -228,7 +158,7 @@ export function NetWorthTimeSeriesChart({
                   }}
                   formatter={(value, name) => {
                     if (mode === "net-worth") {
-                      return formatCurrencyFull(value as number);
+                      return formatCurrency(value as number);
                     }
                     return (
                       <div className="flex flex-1 justify-between gap-4">
@@ -236,7 +166,7 @@ export function NetWorthTimeSeriesChart({
                           {chartConfig[name as string]?.label ?? name}:
                         </span>
                         <span className="tabular-nums">
-                          {formatCurrencyFull(value as number)}
+                          {formatCurrency(value as number)}
                         </span>
                       </div>
                     );

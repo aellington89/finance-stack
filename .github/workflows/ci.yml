@@ -45,6 +45,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Issue #124. The importer is the one Python component in the stack, and
+      # until now nothing in CI ran it. Pinned by SHA like every other action
+      # here; Dependabot's github-actions ecosystem keeps it current.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: importer/requirements-dev.txt
+
+      - name: Install importer test dependencies
+        working-directory: importer
+        run: pip install -r requirements-dev.txt
+
       # Issue #131. Runtime dependencies: everything here ships inside the image.
       # `overrides` in package.json lift next's vendored postcss/sharp, which is
       # what keeps this green.
@@ -95,6 +108,9 @@ jobs:
             -v mb_user=metabase_user \
             -v mb_dbname=metabase \
             -v mb_password=ci-metabase-meta-pw \
+            -v gt_user=glitchtip \
+            -v gt_dbname=glitchtip \
+            -v gt_password=ci-glitchtip-pw \
             -f ../init-db/roles/00-create-databases.sql
 
       - name: Apply Drizzle migrations
@@ -141,6 +157,20 @@ jobs:
             -v mb_user=metabase_user -v mb_password=ci-metabase-meta-pw \
             -f ../init-db/roles/03-metabase-role.sql
 
+      # Issue #232. The same convergence for GlitchTip's role, against the role
+      # and database the creation step stood up. A step of its own for the same
+      # reason the Metabase one is: that is the order migrate-and-seed.sh applies
+      # these files in, and this job exists to exercise the real files.
+      - name: Converge the GlitchTip role
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: changeme
+        run: |
+          psql -v ON_ERROR_STOP=1 -d glitchtip \
+            -v gt_user=glitchtip -v gt_password=ci-glitchtip-pw \
+            -f ../init-db/roles/04-glitchtip-role.sql
+
       # Asserts the grant matrix against the catalog, then connects as each role
       # and runs real statements (see scripts/verify-db-roles.sh). PGHOST is
       # localhost, which reaches the service container through Docker's port
@@ -157,6 +187,9 @@ jobs:
           MB_DB_USER: metabase_user
           MB_DB_DBNAME: metabase
           MB_DB_PASS: ci-metabase-meta-pw
+          GLITCHTIP_DB_USER: glitchtip
+          GLITCHTIP_DB_DBNAME: glitchtip
+          GLITCHTIP_DB_PASSWORD: ci-glitchtip-pw
           ROLES_DIR: ../init-db/roles
         run: bash ../scripts/verify-db-roles.sh Finances_Test
 
@@ -490,17 +523,37 @@ jobs:
       - name: Docs index gate
         run: npm run check:docs
 
+      # Issue #124. Two suites in one run: tests/test_poll.py is pure unit work
+      # over the dispatch loop, and tests/test_import_log.py needs the database
+      # — which is why this sits here rather than in a job of its own, after the
+      # migrations, the seed and the grants have all been applied above.
+      #
+      # It connects as finance_importer rather than postgres deliberately. The
+      # append-only guarantee on import_log is a *privilege*, so a suite running
+      # as the superuser would assert it against a role that cannot fail it and
+      # the UPDATE/DELETE denials would pass for the wrong reason.
+      # ADMIN_DATABASE_URL is used only to clean up the rows the two commit
+      # tests have to leave behind — finance_importer cannot DELETE, by design.
+      - name: Importer tests
+        working-directory: importer
+        env:
+          IMPORTER_DATABASE_URL: postgresql://finance_importer:ci-importer-pw@localhost:5432/Finances_Test
+          ADMIN_DATABASE_URL: postgresql://postgres:changeme@localhost:5432/Finances_Test
+        run: pytest tests -v
+
       - name: Lint
         run: npm run lint
 
-      # Issue #142. One step rather than the `test:unit` + `test:integration`
-      # pair this replaces, because a coverage threshold is only meaningful over
-      # the merged map. lib/queries and lib/actions are ~840 of the 1518
-      # statements in the denominator and sit near 5% on a unit-only run — they
-      # are almost entirely the integration project's work — so thresholds
-      # checked against either half alone would be measuring the wrong thing,
-      # and running both halves separately *and* a coverage pass would run the
-      # whole suite twice on every PR.
+      # Issue #142. One step rather than the `test:unit` + `test:jsdom` +
+      # `test:integration` trio this replaces, because a coverage threshold is
+      # only meaningful over the merged map. lib/queries and lib/actions are
+      # ~840 of the 2992 statements in the denominator and sit near 5% on a
+      # unit-only run — they are almost entirely the integration project's work
+      # — and since Issue #296 the 41 files under components/ sit near 0%
+      # without the jsdom project. Thresholds checked against any one project
+      # alone would be measuring the wrong thing, and running the projects
+      # separately *and* a coverage pass would run the whole suite twice on
+      # every PR.
       #
       # The split is not lost: vitest prefixes every failure with its project
       # name, so "which suite went red" is still the first thing in the log.
@@ -734,10 +787,11 @@ jobs:
       # (docs/testing.md, "Database Role Gate"), and those gates are the `ci`
       # job's business — their absence here is a decision, not an oversight.
       #
-      # mb_password is empty here, where the `ci` job passes one: that job needs
-      # metabase_user to exist so the #239 attribute sweep has more than the
-      # three service roles to sweep. Nothing in this job touches Metabase, and
-      # 00-create-databases.sql skips the role and its database on an empty
+      # mb_password and gt_password are empty here, where the `ci` job passes
+      # both: that job needs metabase_user and glitchtip to exist so the #239
+      # attribute sweep has more than the three service roles to sweep. Nothing
+      # in this job touches Metabase or error tracking, and
+      # 00-create-databases.sql skips each role and its database on an empty
       # password by design.
       - name: Create databases
         env:
@@ -751,6 +805,9 @@ jobs:
             -v mb_user=metabase_user \
             -v mb_dbname=metabase \
             -v mb_password= \
+            -v gt_user=glitchtip \
+            -v gt_dbname=glitchtip \
+            -v gt_password= \
             -f ../init-db/roles/00-create-databases.sql
 
       - name: Apply Drizzle migrations

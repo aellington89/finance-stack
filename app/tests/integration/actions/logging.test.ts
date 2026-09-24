@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { accounts } from "@/drizzle/schema";
 import { createAccount } from "@/lib/actions/account";
+import { __resetErrorTracking } from "@/lib/error-tracking";
 
 /**
  * End-to-end proof of the structured error logging in Issue #129, against a
@@ -147,5 +148,91 @@ describe("server action failure logging", () => {
 
     expect(result.success).toBe(true);
     expect(consoleError).not.toHaveBeenCalled();
+  });
+});
+
+describe("server action failure capture", () => {
+  /**
+   * Issue #232's second acceptance criterion, verified the same way the log-line
+   * redaction above is: against a real drizzle + pg failure, not a fixture.
+   *
+   * The reason this belongs in *this* file rather than beside the transport unit
+   * tests is the reason the file exists at all — the unit tests model what
+   * DrizzleQueryError looks like, and this is what stops the model drifting away
+   * from what the driver actually throws. A backend sink that leaked the bound
+   * row would be invisible to a model-based test that leaked it too.
+   */
+  const DSN = "http://publickey123@glitchtip:8000/1";
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let realFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    __resetErrorTracking();
+    realFetch = globalThis.fetch;
+    fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("ERROR_DSN", DSN);
+  });
+
+  afterEach(() => {
+    // Restored explicitly rather than left to unstubAllGlobals: the integration
+    // project shares a process across files, and a leaked fetch stub would
+    // poison anything that runs after this one.
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    globalThis.fetch = realFetch;
+  });
+
+  async function provokeFailure() {
+    await createAccount(
+      emptyState,
+      makeFormData({
+        accountName: ACCOUNT_NAME,
+        accountTypeId: MISSING_ACCOUNT_TYPE_ID,
+      })
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    return init.body as string;
+  }
+
+  it("sends the failure to the configured backend", async () => {
+    const body = await provokeFailure();
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://glitchtip:8000/api/1/envelope/");
+    expect(body).toContain("createAccount");
+  });
+
+  it("leaves no row value anywhere in what is sent", async () => {
+    const body = await provokeFailure();
+
+    // The same four assertions made against the log line above, against the
+    // request body. If serializeError() ever stops being the only thing the
+    // backend sees, these are what go red.
+    expect(body).not.toContain(ACCOUNT_NAME);
+    expect(body).not.toContain("params:");
+    expect(body).not.toContain("is not present in table");
+    expect(body).not.toContain("Key (account_type_id)");
+  });
+
+  it("still sends enough to diagnose the failure", async () => {
+    const body = await provokeFailure();
+
+    expect(body).toContain("$1");
+    expect(body).toContain("23503");
+    expect(body).toContain("accounts_account_type_id_fkey");
+  });
+
+  it("sends nothing on the success path", async () => {
+    const result = await createAccount(
+      emptyState,
+      makeFormData({ accountName: ACCOUNT_NAME, accountTypeId: "1" })
+    );
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

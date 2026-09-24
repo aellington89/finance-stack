@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { reportError } from "@/lib/report";
+import { __resetErrorTracking } from "@/lib/error-tracking";
 
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -267,5 +268,104 @@ describe("context", () => {
   it("falls back to a generic msg with no context at all", () => {
     reportError(new Error("x"));
     expect(parsed().msg).toBe("Unhandled error");
+  });
+});
+
+describe("error-tracking sink", () => {
+  /**
+   * The same redaction assertions as above, made against what goes over the wire
+   * (Issue #232). The log line and the captured event are two sinks fed one
+   * serialized value, and asserting only the first would let a regression ship
+   * the row to the backend while the log stayed clean — which is precisely the
+   * failure mode #232 calls "the trap".
+   */
+  const DSN = "http://publickey123@glitchtip:8000/1";
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    __resetErrorTracking();
+    fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("ERROR_DSN", DSN);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  /** The whole request body, which is what an operator's backend receives. */
+  function captured(): string {
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    return init.body as string;
+  }
+
+  function drizzleQueryError(): Error {
+    const query =
+      'insert into "transactions" ("transaction_description", "amount", "account_id") values ($1, $2, $3)';
+    const params = ["Groceries at Whole Foods", "1284.55", "7"];
+    const wrapper = new Error(`Failed query: ${query}\nparams: ${params}`);
+    return Object.assign(wrapper, { query, params, cause: databaseError() });
+  }
+
+  it("captures to the backend as well as the log", () => {
+    reportError(new Error("boom"), { action: "createAccount" });
+
+    expect(emitted()).toContain("createAccount failed");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("stays log-only when no DSN is configured", () => {
+    vi.stubEnv("ERROR_DSN", "");
+
+    reportError(new Error("boom"));
+
+    expect(emitted()).toContain("boom");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends no pg detail value to the backend", () => {
+    reportError(databaseError(), { action: "createAccount" });
+
+    const body = captured();
+    expect(body).not.toContain("Joint Checking");
+    expect(body).not.toContain("Pick a different");
+    expect(body).not.toContain("audit_row_change");
+  });
+
+  it("sends no bound query parameter to the backend", () => {
+    reportError(drizzleQueryError(), { action: "submitTransaction" });
+
+    const body = captured();
+    expect(body).not.toContain("Groceries at Whole Foods");
+    expect(body).not.toContain("1284.55");
+    expect(body).not.toContain("params:");
+  });
+
+  it("still sends enough to diagnose the failure", () => {
+    reportError(drizzleQueryError(), { action: "submitTransaction" });
+
+    const body = captured();
+    expect(body).toContain("23505");
+    expect(body).toContain("($1, $2, $3)");
+    expect(body).toContain("accounts_account_name_key");
+  });
+
+  it("is an allowlist on the wire too", () => {
+    reportError(Object.assign(new Error("x"), { rowData: "sensitive" }));
+
+    expect(captured()).not.toContain("sensitive");
+  });
+
+  it("does not let a failing backend disturb the log or the caller", async () => {
+    fetchMock.mockReturnValue(Promise.reject(new Error("ECONNREFUSED")));
+
+    expect(() => reportError(new Error("boom"), { action: "x" })).not.toThrow();
+
+    // The log record still landed, exactly once, unaffected by the send.
+    expect(parsed().msg).toBe("x failed");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   });
 });

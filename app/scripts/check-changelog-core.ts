@@ -20,7 +20,8 @@ export type ChangelogProblem =
   | { kind: "tag-format"; tag: string }
   | { kind: "tag-mismatch"; tag: string; expected: string }
   | { kind: "missing-migration-marker"; version: string }
-  | { kind: "bad-migration-marker"; version: string; value: string };
+  | { kind: "bad-migration-marker"; version: string; value: string }
+  | { kind: "breaking-not-major"; version: string; previous: string; expected: string };
 
 // First heading whose version is X.Y.Z — skips [Unreleased] / non-semver. null if none.
 export function newestRelease(releases: ChangelogRelease[]): ChangelogRelease | null {
@@ -54,6 +55,46 @@ export function checkMigrationMarkers(releases: ChangelogRelease[]): ChangelogPr
   return problems;
 }
 
+// A release declaring **Migration:** breaking cannot be rolled back by re-pinning
+// the previous image — the previous app version does not run against the new
+// schema — so post-1.0 it is a major. Nothing else compares the version against
+// the *content* of the release: package.json, the newest changelog heading and
+// the tag can all agree on an understated number, which is the worst place for a
+// version to be wrong. See Issue #315 and docs/roadmap.md's "breaking → major".
+//
+// Deliberately *not* rules, because they are the first things a reader asks:
+// a major that declares `none` is fine (v1.0.0 is exactly that), and a breaking
+// release that skips a major (1.4.2 → 3.0.0) is legal semver — hence the
+// comparison is "did not increment" rather than "is previous + 1". Pre-1.0 is
+// exempt: a breaking change legitimately ships as a 0.x minor there.
+//
+// Scoped to the release being closed, like missing-migration-marker above: that
+// is the one a drafter is choosing a number for, and history is not relitigated.
+export function checkBreakingIsMajor(releases: ChangelogRelease[]): ChangelogProblem[] {
+  // The filter is also the validation — [Unreleased] and any malformed heading
+  // can never enter the pair.
+  const [current, previous] = releases.filter((r) => VERSION_RE.test(r.version));
+  if (current === undefined || previous === undefined) return [];
+  // `migration`, never `migrationRaw`: a malformed "Breaking" is already reported
+  // as bad-migration-marker, and reading it as breaking here would contradict
+  // lib/changelog.ts's refusal to coerce it.
+  if (current.migration !== "breaking") return [];
+
+  const currentMajor = Number(current.version.split(".")[0]);
+  const previousMajor = Number(previous.version.split(".")[0]);
+  if (previousMajor < 1) return [];
+  if (currentMajor > previousMajor) return [];
+
+  return [
+    {
+      kind: "breaking-not-major",
+      version: current.version,
+      previous: previous.version,
+      expected: `${previousMajor + 1}.0.0`,
+    },
+  ];
+}
+
 export function checkChangelog(
   pkgVersion: string,
   releases: ChangelogRelease[],
@@ -61,9 +102,10 @@ export function checkChangelog(
   const newest = newestReleaseVersion(releases);
   if (newest === null) return [{ kind: "no-releases", pkgVersion }];
   if (newest !== pkgVersion) return [{ kind: "version-mismatch", pkgVersion, changelogVersion: newest }];
-  // Marker problems are reported only once the version agrees: a mismatch is the
-  // more fundamental failure, and fixing it changes which release is being checked.
-  return checkMigrationMarkers(releases);
+  // Marker and bump problems are reported only once the version agrees: a mismatch
+  // is the more fundamental failure, and fixing it changes which release is being
+  // checked.
+  return [...checkMigrationMarkers(releases), ...checkBreakingIsMajor(releases)];
 }
 
 // Combined with checkChangelog, enforces tag === v<version> === CHANGELOG top.

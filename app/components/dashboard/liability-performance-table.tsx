@@ -5,8 +5,8 @@ import { ChevronRight, ChevronDown } from "lucide-react";
 import type { LiabilityPerformanceData } from "@/lib/queries/liabilities-drilldown";
 import {
   signedCurrency,
-  signedPercent,
   amountColorClass,
+  formatPercentChange,
 } from "@/lib/format/financial";
 import {
   Table,
@@ -23,19 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-
-// `% Change` is undefined for accounts opened mid-period (start_balance = 0).
-// Render an em-dash so the column reads cleanly without claiming 0% or ∞%.
-export const formatPercentChange = (n: number | null): string =>
-  n === null ? "—" : signedPercent(n);
+import { formatCurrency } from "@/lib/format/financial";
 
 interface LiabilityPerformanceTableProps {
   data: LiabilityPerformanceData;

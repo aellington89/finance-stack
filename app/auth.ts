@@ -51,12 +51,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  // No `authorized` callback here, deliberately (#237). It used to drive the
+  // proxy's redirect, but proxy.ts now passes a function to `auth()` — and
+  // under that form `handleAuth` still calls the callback and then throws its
+  // result away, because the branch that acts on it is only reached when no
+  // middleware function was supplied. Leaving one here would read as the gate
+  // while gating nothing. The redirect lives in proxy.ts instead.
   callbacks: {
-    // Used by the proxy (app/proxy.ts) to decide whether a matched request
-    // may proceed; false triggers a redirect to pages.signIn.
-    authorized({ auth }) {
-      return !!auth?.user;
-    },
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;

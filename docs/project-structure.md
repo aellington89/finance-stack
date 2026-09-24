@@ -223,13 +223,16 @@ finance-stack/
 │   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
-│   ├── Dockerfile                         # finance-importer image — bakes poll.py + pinned deps, non-root (#224)
+│   ├── Dockerfile                         # finance-importer image — bakes poll.py, lookups.py + pinned deps, non-root (#224)
 │   ├── requirements.txt                   # Pinned Python deps, installed at build time (Dependabot `pip`)
+│   ├── requirements-dev.txt               # Test-only deps (pytest) — excluded from the build context
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed, baked into the image)
+│   ├── lookups.py                         # Name-based PK resolution for parsers — no hardcoded ids (#273)
+│   ├── tests/                             # pytest suite — dispatch loop, lookup resolution, import_log constraints
 │   └── parsers/                           # One module per import type (gitignored, bind-mounted)
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)
-├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration tests, E2E job
+├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration + importer tests, E2E job
 ├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
 ├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122); also the repo's shellcheck step
 ├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh install → failed upgrade → automatic rollback (#228)
@@ -242,6 +245,7 @@ finance-stack/
 │   │   ├── 01-create-roles.sql           # finance_app / finance_importer / finance_bi (cluster-global)
 │   │   ├── 02-grants.sql                 # Per-database grant matrix; revokes then grants, so it converges
 │   │   ├── 03-metabase-role.sql          # Converges the Metabase metadata role — attributes, ownership, password (#239, #189)
+│   │   ├── 04-glitchtip-role.sql         # Converges GlitchTip's role — same shape as 03, for the error-tracking DB (#232)
 │   │   └── assert-grants.sql             # Catalog assertions for the matrix — the CI grant gate
 │   └── seeds/                            # Applied by the `migrate` Compose service after migrations
 │       ├── shared-lookups.sql            # account_type_categories + transaction_types (both DBs, every run — must stay additive, #187)

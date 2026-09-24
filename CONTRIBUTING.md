@@ -115,8 +115,9 @@ See [Roles & Privileges](docs/database.md#roles--privileges).
 
 Fails if `app/package.json` version doesn't equal the newest released version
 in `CHANGELOG.md`, if that release doesn't declare a valid `**Migration:**`
-marker, or (on a `v*` tag push) if the tag isn't a well-formed `vX.Y.Z` matching
-that version.
+marker, if a release declaring `**Migration:** breaking` didn't increment its
+major version (pre-1.0 releases exempt), or (on a `v*` tag push) if the tag
+isn't a well-formed `vX.Y.Z` matching that version.
 
 **Fix:** run locally before pushing:
 
@@ -142,6 +143,9 @@ against the new schema, so an image rollback suffices) · `breaking` (rolling ba
 requires restoring a pre-upgrade dump — there are no down migrations). The gate
 requires the marker on the release being tagged and rejects an unrecognized value
 anywhere, `[Unreleased]` included; `[Unreleased]` is not required to carry one.
+Post-1.0 a `breaking` release must also be a **major** — the marker is what says
+an upgrade is one-way, and the gate refuses to let that ship as a patch or minor
+([#315](https://github.com/aellington89/finance-stack/issues/315)).
 Full guidance on picking a value is in [docs/releases.md](docs/releases.md).
 
 ### Deploy-bundle parity gate
@@ -383,6 +387,7 @@ with. Editing any of these means rebuilding before the change takes effect:
 | `app/**` | `docker compose build finance-app` |
 | `init-db/roles/*.sql`, `init-db/seeds/*.sql`, `app/scripts/*.sh`, `scripts/verify-db-roles.sh` | `docker compose build migrate` |
 | `importer/poll.py`, `importer/requirements.txt` | `docker compose build importer` |
+| `importer/tests/**`, `importer/requirements-dev.txt` | no rebuild — excluded from the build context |
 | `scripts/backup.sh`, `scripts/restore.sh`, `scripts/update-account-balance-history.sql` | `docker compose build pg-backup` |
 
 `scripts/build.sh` with no arguments builds all four, which is the safe default.
@@ -402,7 +407,15 @@ After the gates pass, CI runs:
 
 ```sh
 npm run lint
-npm run test:coverage      # both projects; requires the Finances_Test database
+npm run test:coverage      # all three projects; requires the Finances_Test database
+```
+
+The importer is Python and sits outside Vitest, so it runs as its own step in
+the same job — after the migrations and grants, because half the suite asserts
+them (see [docs/testing.md](docs/testing.md#importer-tests)):
+
+```sh
+cd importer && pytest tests   # unit always; import_log tests need IMPORTER_DATABASE_URL
 ```
 
 and, in a parallel `e2e` job:
@@ -411,11 +424,13 @@ and, in a parallel `e2e` job:
 npm run test:e2e           # Playwright; builds the app and drives it in Chromium
 ```
 
-`test:coverage` rather than `test:unit` + `test:integration`: since Issue #142
-the suite runs once, merged, and **fails if coverage drops below the thresholds
-in `app/vitest.config.ts`**. Running the halves separately would check the
-thresholds against the wrong denominator — `lib/queries` and `lib/actions` are
-most of it and are covered by the integration project, not the unit one.
+`test:coverage` rather than `test:unit` + `test:jsdom` + `test:integration`:
+since Issue #142 the suite runs once, merged, and **fails if coverage drops
+below the thresholds in `app/vitest.config.ts`**. Running the projects
+separately would check the thresholds against the wrong denominator —
+`lib/queries` and `lib/actions` are covered by the integration project, and
+since [Issue #296](https://github.com/aellington89/finance-stack/issues/296) the
+41 files under `components/` are covered by the jsdom one.
 
 `test:e2e` is the money-path gate added by
 [Issue #141](https://github.com/aellington89/finance-stack/issues/141): one
@@ -427,8 +442,8 @@ out of the vitest denominator precisely because this suite is what covers it.
 First run locally needs `npx playwright install --with-deps chromium` (the
 `--with-deps` half needs sudo).
 
-See [docs/testing.md](docs/testing.md) for the unit/integration split and how
-to point integration tests at the right database,
+See [docs/testing.md](docs/testing.md) for the unit/jsdom/integration split and
+how to point integration tests at the right database,
 [docs/testing.md#coverage](docs/testing.md#coverage) for the thresholds, what
 the denominator includes, and how to raise them, and
 [docs/testing.md#end-to-end-tests](docs/testing.md#end-to-end-tests) for the E2E
@@ -479,7 +494,7 @@ weekly:
 | Ecosystem | Watches |
 | --- | --- |
 | `npm` | `app/package.json` |
-| `pip` | `importer/requirements.txt` |
+| `pip` | `importer/requirements.txt`, `importer/requirements-dev.txt` |
 | `docker` | base images in `app/Dockerfile`, `importer/Dockerfile`, `scripts/Dockerfile` (one entry per directory) |
 | `docker-compose` | service images in `docker-compose.yml` (`postgres`, `metabase`) |
 | `github-actions` | workflow actions (SHA pins) |
@@ -530,7 +545,10 @@ on `## [Unreleased]` — `none` → `backward-compatible` → `breaking`, and ne
 downgrade it. The marker describes the release as a whole, not the last PR to
 touch it, so a `breaking` already declared by an earlier PR stays `breaking`.
 `[Unreleased]` may carry no marker at all until something needs one, but once it
-does the value must be one of the three or the gate fails.
+does the value must be one of the three or the gate fails. Escalating to
+`breaking` also commits the release to a **major** version, and the release-notes
+generator reads your marker to suggest one — so the value you set here decides
+the next version number, not just the rollback advice.
 
 ## Schema changes
 
@@ -577,7 +595,10 @@ detail, including the one-time visibility step on first publish, is in
    ```
 
    The script prints a draft Keep-a-Changelog block (issue-linked bullets and a
-   suggested minor/patch bump) to **stdout** — it does not edit any files.
+   suggested major/minor/patch bump) to **stdout** — it does not edit any files.
+   The suggestion keys a major off the `**Migration:**` marker on `[Unreleased]`;
+   pass `--bump=major` for a breaking change that ships no migration. See
+   [docs/releases.md](docs/releases.md#choosing-the-bump).
    Re-sort the bullets into the correct `Added`/`Changed`/`Fixed`/`Security`
    subsections under `## [Unreleased]` in `CHANGELOG.md`.
 

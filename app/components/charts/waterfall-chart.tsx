@@ -14,91 +14,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-const COLORS = {
-  positive: "#2eb88a",
-  negative: "#e23670",
-  neutral: "#6b7280",
-};
+import {
+  COLORS,
+  buildWaterfallBars,
+  getBarColor,
+  type WaterfallBar,
+} from "@/components/charts/waterfall-bars";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
 
 const chartConfig: ChartConfig = {
   value: { label: "Change", color: COLORS.neutral },
 };
-
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
-export interface WaterfallBar {
-  name: string;
-  base: number;
-  value: number;
-  displayValue: number;
-  type: "start" | "end" | "positive" | "negative";
-}
-
-/**
- * Transforms waterfall query data into the stacked bar format
- * Recharts needs: each bar has a transparent `base` and a visible `value`.
- */
-export function buildWaterfallBars(data: WaterfallData): WaterfallBar[] {
-  const bars: WaterfallBar[] = [];
-
-  // Starting bar
-  const startVal = data.startNetWorth;
-  bars.push({
-    name: "Start",
-    base: Math.min(0, startVal),
-    value: Math.abs(startVal),
-    displayValue: startVal,
-    type: "start",
-  });
-
-  // Category change bars
-  let runningTotal = startVal;
-  for (const cat of data.categories) {
-    if (cat.change === 0) continue;
-    const isPositive = cat.change > 0;
-    bars.push({
-      name: cat.categoryName,
-      base: isPositive ? runningTotal : runningTotal + cat.change,
-      value: Math.abs(cat.change),
-      displayValue: cat.change,
-      type: isPositive ? "positive" : "negative",
-    });
-    runningTotal += cat.change;
-  }
-
-  // Ending bar
-  const endVal = data.endNetWorth;
-  bars.push({
-    name: "End",
-    base: Math.min(0, endVal),
-    value: Math.abs(endVal),
-    displayValue: endVal,
-    type: "end",
-  });
-
-  return bars;
-}
-
-function getBarColor(type: WaterfallBar["type"]): string {
-  if (type === "positive") return COLORS.positive;
-  if (type === "negative") return COLORS.negative;
-  return COLORS.neutral;
-}
 
 interface WaterfallChartProps {
   data: WaterfallData;
@@ -151,7 +80,7 @@ export function WaterfallChart({ data }: WaterfallChartProps) {
                     return (
                       <span className="font-bold tabular-nums">
                         {prefix}
-                        {formatCurrencyFull(bar.displayValue)}
+                        {formatCurrency(bar.displayValue)}
                       </span>
                     );
                   }}

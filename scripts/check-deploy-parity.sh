@@ -67,7 +67,7 @@ render() {
   docker compose \
     --env-file /dev/null \
     --file "$1" \
-    --profile init --profile bi --profile edge \
+    --profile init --profile bi --profile edge --profile errors \
     config --format json
 }
 
