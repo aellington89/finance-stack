@@ -2,7 +2,6 @@
 
 import type React from "react";
 import { useState } from "react";
-import { addDays, format, getQuarter } from "date-fns";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import type { AccountingTimeSeriesPoint, TimeGrouping } from "@/lib/queries/accounting";
 import {
@@ -10,7 +9,6 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-  type TooltipDatePayload,
 } from "@/components/ui/chart";
 import {
   Card,
@@ -18,6 +16,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
+import {
+  makeTickFormatter,
+  makeTooltipLabelFormatter,
+} from "@/components/charts/accounting-axis";
 
 const COLORS = {
   income: "#2eb88a",
@@ -39,118 +45,9 @@ const TOOLTIP_LABELS: Record<string, string> = {
   totalInvestments: "Investments:",
 };
 
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
 
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
 
-const DOW_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function parseDate(dateStr: string) {
-  return new Date(dateStr + "T00:00:00");
-}
-
-function formatDotDate(d: Date) {
-  return `${d.getMonth() + 1}.${d.getDate()}.${d.getFullYear()}`;
-}
-
-function makeTickFormatter(grouping: TimeGrouping) {
-  if (grouping === "day") {
-    return (dateStr: string) => format(parseDate(dateStr), "MMM d");
-  }
-  if (grouping === "week") {
-    // Show last day of week period
-    return (dateStr: string) => {
-      const end = addDays(parseDate(dateStr), 6);
-      return format(end, "MMM d");
-    };
-  }
-  if (grouping === "month") {
-    return (dateStr: string) => format(parseDate(dateStr), "MMMM yyyy");
-  }
-  if (grouping === "quarter") {
-    return (dateStr: string) => {
-      const d = parseDate(dateStr);
-      return `Q${getQuarter(d)} ${d.getFullYear()}`;
-    };
-  }
-  if (grouping === "year") {
-    return (dateStr: string) => format(parseDate(dateStr), "yyyy");
-  }
-  if (grouping === "day_of_week") {
-    return (val: string) => DOW_NAMES[Number(val)] ?? val;
-  }
-  if (grouping === "month_of_year") {
-    return (val: string) => MONTH_NAMES[Number(val)] ?? val;
-  }
-  if (grouping === "quarter_of_year") {
-    return (val: string) => `Q${val}`;
-  }
-  // day_of_month, day_of_year, week_of_year — just show the number
-  return (val: string) => val;
-}
-
-function makeTooltipLabelFormatter(grouping: TimeGrouping) {
-  if (grouping === "day") {
-    return (_: unknown, payload: TooltipDatePayload) => {
-      if (!payload?.[0]?.payload?.date) return "";
-      return format(parseDate(payload[0].payload.date), "MMM d, yyyy");
-    };
-  }
-  if (grouping === "week") {
-    return (_: unknown, payload: TooltipDatePayload) => {
-      if (!payload?.[0]?.payload?.date) return "";
-      const start = parseDate(payload[0].payload.date);
-      const end = addDays(start, 6);
-      return `${formatDotDate(start)} - ${formatDotDate(end)}`;
-    };
-  }
-  if (grouping === "month") {
-    return (_: unknown, payload: TooltipDatePayload) => {
-      if (!payload?.[0]?.payload?.date) return "";
-      return format(parseDate(payload[0].payload.date), "MMMM yyyy");
-    };
-  }
-  if (grouping === "quarter") {
-    return (_: unknown, payload: TooltipDatePayload) => {
-      if (!payload?.[0]?.payload?.date) return "";
-      const d = parseDate(payload[0].payload.date);
-      return `Q${getQuarter(d)} ${d.getFullYear()}`;
-    };
-  }
-  if (grouping === "year") {
-    return (_: unknown, payload: TooltipDatePayload) => {
-      if (!payload?.[0]?.payload?.date) return "";
-      return format(parseDate(payload[0].payload.date), "yyyy");
-    };
-  }
-  if (grouping === "day_of_week") {
-    return (_: unknown, payload: TooltipDatePayload) =>
-      DOW_NAMES[Number(payload?.[0]?.payload?.date)] ?? String(payload?.[0]?.payload?.date);
-  }
-  if (grouping === "month_of_year") {
-    return (_: unknown, payload: TooltipDatePayload) =>
-      MONTH_NAMES[Number(payload?.[0]?.payload?.date)] ?? String(payload?.[0]?.payload?.date);
-  }
-  if (grouping === "quarter_of_year") {
-    return (_: unknown, payload: TooltipDatePayload) =>
-      `Q${payload?.[0]?.payload?.date}`;
-  }
-  return (_: unknown, payload: TooltipDatePayload) =>
-    String(payload?.[0]?.payload?.date ?? "");
-}
 
 interface AccountingChartProps {
   data: AccountingTimeSeriesPoint[];
@@ -215,7 +112,7 @@ export function AccountingChart({ data, timeGrouping = "month", description }: A
                         {TOOLTIP_LABELS[name as string] ?? name}
                       </span>
                       <span className="tabular-nums">
-                        {formatCurrencyFull(value as number)}
+                        {formatCurrency(value as number)}
                       </span>
                     </div>
                   )}

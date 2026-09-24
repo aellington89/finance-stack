@@ -9,6 +9,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
 
 const CATEGORY_COLORS: Record<number, string> = {
   1: "#2eb88a", // Current Asset
@@ -16,22 +20,6 @@ const CATEGORY_COLORS: Record<number, string> = {
   3: "#eab308", // Fixed Asset
   4: "#2662d9", // Investment
 };
-
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
 
 // A type alias, not an interface: recharts 3 types `Treemap`'s `data` as
 // `TreemapDataType[]`, which carries a `[key: string]: unknown` index
@@ -138,7 +126,7 @@ function TreemapTooltip({
         <div className="text-muted-foreground">{datum.categoryName}</div>
       )}
       <div className="mt-1 tabular-nums">
-        {formatCurrencyFull(datum.size)}
+        {formatCurrency(datum.size)}
       </div>
       {datum.percentOfTotal != null && (
         <div className="text-muted-foreground tabular-nums">

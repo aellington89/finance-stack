@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildDebtWaterfallBars } from "@/components/charts/debt-waterfall-chart";
+import {
+  buildDebtWaterfallBars,
+  getBarColor,
+  COLORS,
+} from "@/components/charts/debt-waterfall-bars";
 import type { DebtWaterfallData } from "@/lib/queries/liabilities-drilldown";
 
 describe("buildDebtWaterfallBars", () => {
@@ -97,5 +101,18 @@ describe("buildDebtWaterfallBars", () => {
     for (const bar of buildDebtWaterfallBars(data)) {
       expect(bar.value).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("getBarColor", () => {
+  it("paints paydowns green and added debt red", () => {
+    expect(getBarColor("good")).toBe(COLORS.good);
+    expect(getBarColor("bad")).toBe(COLORS.bad);
+  });
+
+  it("falls back to neutral for the start and end anchors", () => {
+    expect(getBarColor("start")).toBe(COLORS.neutral);
+    expect(getBarColor("end")).toBe(COLORS.neutral);
+    expect(getBarColor("neutral")).toBe(COLORS.neutral);
   });
 });

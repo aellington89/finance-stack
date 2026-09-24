@@ -544,14 +544,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # Issue #142. One step rather than the `test:unit` + `test:integration`
-      # pair this replaces, because a coverage threshold is only meaningful over
-      # the merged map. lib/queries and lib/actions are ~840 of the 1518
-      # statements in the denominator and sit near 5% on a unit-only run — they
-      # are almost entirely the integration project's work — so thresholds
-      # checked against either half alone would be measuring the wrong thing,
-      # and running both halves separately *and* a coverage pass would run the
-      # whole suite twice on every PR.
+      # Issue #142. One step rather than the `test:unit` + `test:jsdom` +
+      # `test:integration` trio this replaces, because a coverage threshold is
+      # only meaningful over the merged map. lib/queries and lib/actions are
+      # ~840 of the 2992 statements in the denominator and sit near 5% on a
+      # unit-only run — they are almost entirely the integration project's work
+      # — and since Issue #296 the 41 files under components/ sit near 0%
+      # without the jsdom project. Thresholds checked against any one project
+      # alone would be measuring the wrong thing, and running the projects
+      # separately *and* a coverage pass would run the whole suite twice on
+      # every PR.
       #
       # The split is not lost: vitest prefixes every failure with its project
       # name, so "which suite went red" is still the first thing in the log.

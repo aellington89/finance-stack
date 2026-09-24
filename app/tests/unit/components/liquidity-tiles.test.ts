@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildLiquidityTiles } from "@/components/dashboard/liquidity-breakdown";
+import { buildLiquidityTiles } from "@/components/dashboard/liquidity-tiles";
 import type { LiquidityData } from "@/lib/queries/assets-drilldown";
 
 describe("buildLiquidityTiles", () => {

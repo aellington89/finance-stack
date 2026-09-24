@@ -18,14 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+import { formatCurrency } from "@/lib/format/financial";
 
 const formatPctOfPayment = (numerator: number, payments: number) =>
   payments === 0 ? "—" : `${((numerator / payments) * 100).toFixed(1)}%`;
