@@ -1,7 +1,7 @@
 # Versioning Roadmap
 
-How Finance Stack's milestones map to release versions through **v1.0.0**
-and beyond. For the mechanics of *cutting* a release (tags, changelog, workflow),
+How Finance Stack's milestones mapped to release versions through **v1.0.0**,
+and how work is grouped and released after it. For the mechanics of *cutting* a release (tags, changelog, workflow),
 see [Releases & Tagging](releases.md).
 
 ## How versions relate to issues and milestones
@@ -15,15 +15,17 @@ Two rules govern everything below:
   Example: when [#81](https://github.com/aellington89/finance-stack/issues/81)
   lands but the rest of Phase 2 has not, the app is **still `v0.2.0`**
   (`0.2.0 (dev)` at a `master` SHA), with #81 sitting in `[Unreleased]`.
-- **A milestone completing is what triggers cutting a release.** The version number
-  is chosen at tag time from everything accumulated since the last tag — breaking →
-  major, new feature → minor, fixes/chores → patch.
+- **A release is cut when `[Unreleased]` is worth deploying — not when a milestone
+  completes.** The version number is chosen at tag time from everything accumulated
+  since the last tag — breaking → major, new feature → minor, fixes/chores → patch —
+  and the release-notes generator suggests it from `[Unreleased]` itself
+  ([Choosing the bump](releases.md#choosing-the-bump)).
 
-So **milestones map to versions; issues map to changelog entries.** The mapping in
-this document is a *plan*, not a constraint: you can slice a release wherever
-`[Unreleased]` is worth shipping. If you ever want one issue out ahead of its
-milestone, cut the release with just that issue and move the rest to the next
-milestone.
+Through v1.0.0, each milestone shipped as one version. **After v1.0.0 the phases
+below are themes for grouping work, not release targets:** issues map to changelog
+entries, and a release carries whatever has landed, from whichever phases. v1.1.0
+was the first cut this way — six Phase 3 issues shipped while the rest of the phase
+stayed open.
 
 ## What v1.0.0 means here
 
@@ -73,10 +75,16 @@ v0.4.1 rather than newly assembled on top of it.
 | **v0.3.0** ✅ | Phase 2 — Auth-gated lookup-table protection | Roles/admin, seed-data integrity — **released 2026-08-15** | Minor |
 | **v0.4.0** ✅ | Phase 2.5 — Deployment & upgrade | GHCR images + deploy bundle: a verified artifact and a backup-gated, health-checked upgrade. **This is the 1.0 release candidate** — **released 2026-08-22** | Minor |
 | **v1.0.0** ✅ | v1.0.0 — Stabilization | **The safety/stability commitment: trustworthy & exposable** — gates #294, #141 and #142 all met — **released 2026-08-29** | **Major** |
-| **v1.1.0** | Phase 3 — DX compounding | Importer hardening, E2E tests, tooling | Minor |
-| **v1.2.0** | Phase 4 — Performance polish | Caching, materialized views, chart consolidation | Minor |
-| **v1.3.0** | Phase 5 — Small UX fixes | Accessibility, mobile, UX debt | Minor |
-| **v1.4.0 →** | Phase 6 — Features | One minor release per feature | Minor (each) |
+| **v1.1.0** ✅ | *(sliced from Phase 3)* | Importer idempotency + name-resolved lookups, error tracking, nonce CSP, component coverage, release tooling — **released 2026-09-23** | Minor |
+| — | Phase 3 — DX compounding | Importer hardening, tooling (remainder) | As cut |
+| — | Phase 4 — Performance polish | Caching, materialized views, chart consolidation | As cut |
+| — | Phase 5 — Small UX fixes | Accessibility, mobile, UX debt | As cut |
+| — | Phase 6 — Features | New functionality | As cut |
+
+> **Post-1.0 rows carry no version.** A phase no longer promises a version number:
+> each release is cut from `[Unreleased]` when it is worth deploying, and the bump
+> follows from what it contains. Released versions are recorded as ✅ rows above
+> and in [`CHANGELOG.md`](../CHANGELOG.md).
 
 > **Judgment call.** An *aggressive* 1.0 could fire the moment Phase 1 ships (auth =
 > 1.0). This roadmap takes the conservative path: 1.0 is a promise best made after
@@ -192,30 +200,32 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#141](https://github.com/aellington89/finance-stack/issues/141) E2E tests with Playwright *(moved from Phase 3 — required, not recommended)*
 - [#142](https://github.com/aellington89/finance-stack/issues/142) Coverage thresholds in vitest.config.ts *(moved from Phase 3 — required, not recommended)*
 
-### v1.1.0 — Phase 3 (DX compounding)
-- [#124](https://github.com/aellington89/finance-stack/issues/124) Importer idempotency + dead-letter handling
+### Phase 3 — DX compounding
+**v1.1.0 (released 2026-09-23)** shipped the six ✅ issues below — see [CHANGELOG](../CHANGELOG.md#110---2026-09-23). The rest stay open and ship in whichever release follows them.
+
+- ✅ [#124](https://github.com/aellington89/finance-stack/issues/124) Importer idempotency + dead-letter handling
 - [#132](https://github.com/aellington89/finance-stack/issues/132) Importer Dockerfile + healthcheck
 - [#133](https://github.com/aellington89/finance-stack/issues/133) Pre-commit hooks + Makefile
 - [#185](https://github.com/aellington89/finance-stack/issues/185) Audit docker-compose services: necessity & profile gating *(new)*
 - [#193](https://github.com/aellington89/finance-stack/issues/193) Adopt `react-hooks/set-state-in-effect`; drop the `eslint-plugin-react-hooks` pin *(new — from #131)*
 - [#195](https://github.com/aellington89/finance-stack/issues/195) Run `npm run typecheck` in CI *(new — from #131)*
-- [#296](https://github.com/aellington89/finance-stack/issues/296) React component coverage: add a jsdom vitest project *(new — from #142)*
+- ✅ [#296](https://github.com/aellington89/finance-stack/issues/296) React component coverage: add a jsdom vitest project *(new — from #142)*
 - [#301](https://github.com/aellington89/finance-stack/issues/301) `finance-app` image ships `app/tests/` and a local coverage report *(new — from #141)*
 - [#263](https://github.com/aellington89/finance-stack/issues/263) Bump to eslint 10 once `eslint-config-next` ships plugins that support it *(new — split from #194; blocked upstream)*
-- [#232](https://github.com/aellington89/finance-stack/issues/232) Wire an error-tracking backend into `reportError()` *(new — from #129)*
+- ✅ [#232](https://github.com/aellington89/finance-stack/issues/232) Wire an error-tracking backend into `reportError()` *(new — from #129)*
 - [#340](https://github.com/aellington89/finance-stack/issues/340) GlitchTip alerting is not configured — wire a real mail relay *(new — from #232)*
 - [#339](https://github.com/aellington89/finance-stack/issues/339) Capture browser-side errors through a same-origin ingest route *(new — from #232)*
-- [#237](https://github.com/aellington89/finance-stack/issues/237) Nonce-based CSP: `script-src` is done; `'unsafe-inline'` cannot leave `style-src` until `sonner` and Next's own 404 fallback stop injecting nonce-less `<style>` elements *(from #182; blocked upstream)*
+- ✅ [#237](https://github.com/aellington89/finance-stack/issues/237) Nonce-based CSP: `script-src` is done; `'unsafe-inline'` cannot leave `style-src` until `sonner` and Next's own 404 fallback stop injecting nonce-less `<style>` elements *(from #182; blocked upstream)*
 - [#260](https://github.com/aellington89/finance-stack/issues/260) `release.yml` uses `MB_DB_USER: metabase`, diverging from the shipped `metabase_user` *(new — from #250)*
 - [#211](https://github.com/aellington89/finance-stack/issues/211) Re-take `node:26-alpine` once it reaches LTS *(after 2026-10-28; from #210)*
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#292](https://github.com/aellington89/finance-stack/issues/292) `.trivyignore`: split by source of finding, or move to `.trivyignore.yaml` *(new — from #291)*
 - [#304](https://github.com/aellington89/finance-stack/issues/304) Dependabot never sees `deploy/compose.yml`, so every image bump fails the parity gate *(new — from #298)*
-- [#315](https://github.com/aellington89/finance-stack/issues/315) `suggestBump()` cannot suggest a major; its pre-1.0 minor/patch assumption went stale at v1.0.0 *(new — from the v1.0.1 release)*
+- ✅ [#315](https://github.com/aellington89/finance-stack/issues/315) `suggestBump()` cannot suggest a major; its pre-1.0 minor/patch assumption went stale at v1.0.0 *(new — from the v1.0.1 release)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
 - [#271](https://github.com/aellington89/finance-stack/issues/271) `transaction_types` id 9 ships as `Accrued Amoritized Interest` — *amortized* is misspelled *(new — from #109)*
-- [#273](https://github.com/aellington89/finance-stack/issues/273) `importer/parsers/paystubs.py` hardcodes 17 lookup ids; five categories and the pay account are absent from the test fixture *(new — from #109)*
+- ✅ [#273](https://github.com/aellington89/finance-stack/issues/273) `importer/parsers/paystubs.py` hardcodes 17 lookup ids; five categories and the pay account are absent from the test fixture *(new — from #109)*
 
 > **#273 is importer hardening's real prerequisite.** #124 and #132 above treat
 > the importer as a service to make idempotent and containerize; #273 is the data
@@ -235,14 +245,14 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 > rather than a fixture assertion, and why the pattern also has to land in the
 > skill that generates the parser: it is the only durable record of it.
 
-### v1.2.0 — Phase 4 (Performance polish)
+### Phase 4 — Performance polish
 - [#125](https://github.com/aellington89/finance-stack/issues/125) Suspense + loading.tsx + not-found.tsx
 - [#126](https://github.com/aellington89/finance-stack/issues/126) Cache ensureTodayBalances() and dashboard queries
 - [#128](https://github.com/aellington89/finance-stack/issues/128) Consolidate chart libraries onto Recharts
 - [#143](https://github.com/aellington89/finance-stack/issues/143) Memoize hierarchy build + getAssetPerformance
 - [#146](https://github.com/aellington89/finance-stack/issues/146) Materialized view for v_transactions_full
 
-### v1.3.0 — Phase 5 (Small UX fixes)
+### Phase 5 — Small UX fixes
 - [#118](https://github.com/aellington89/finance-stack/issues/118) Evaluate cookie-based persistence for txn-visible-columns / sidebar_state
 - [#144](https://github.com/aellington89/finance-stack/issues/144) Accessibility: keyboard nav, color+icon, chart SVG titles
 - [#145](https://github.com/aellington89/finance-stack/issues/145) Mobile form layout
@@ -250,7 +260,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#251](https://github.com/aellington89/finance-stack/issues/251) Debt Waterfall: axis scale dominated by total balance makes period changes unreadable
 - [#321](https://github.com/aellington89/finance-stack/issues/321) New Transaction form: long formatted dates overflow the Date input *(new)*
 
-### v1.4.0 onward — Phase 6 (Features, one minor each)
+### Phase 6 — Features
 - [#136](https://github.com/aellington89/finance-stack/issues/136) Budgets + spending caps
 - [#135](https://github.com/aellington89/finance-stack/issues/135) Recurring transactions / scheduled entries
 - [#137](https://github.com/aellington89/finance-stack/issues/137) Transaction search + CSV export
@@ -274,8 +284,8 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 
 - **Every open issue carries a milestone, and every milestone's issues are listed
   above.** This is the invariant that keeps the two views honest — GitHub is where
-  work is filed, this file is where it maps to a version. An issue with no
-  milestone is invisible to the release plan, which is how the deployment epic
+  work is filed, this file is where it is grouped by theme. An issue with no
+  milestone is invisible to the plan, which is how the deployment epic
   (#223) grew to seven issues before appearing here at all. When filing, assign
   the milestone and add the bullet in the same pass; to audit, compare
   `gh issue list --state open --json number,milestone` against the sections above.
@@ -286,6 +296,8 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - **Pre-release tags.** The CI changelog gate currently accepts only stable
   `vX.Y.Z`. To ship a `v1.0.0-rc.1`, broaden the tag regex to accept
   `-rc.N` / `-beta.N` first (see [Releases & Tagging](releases.md)).
-- **Cadence.** Historically every release was a `0.1.x` patch. Going forward, use
-  one **minor** bump per phase (above) so the version number carries information;
-  reserve patches for fixes within a phase.
+- **Cadence.** Historically every release was a `0.1.x` patch; from v0.2.0 to
+  v1.0.0 each phase shipped as one release. After v1.0.0 releases are cut on
+  demand from `[Unreleased]`, and the number carries the information the bump
+  rule gives it: a minor whenever anything under `### Added` ships, a patch for
+  fixes and dependency-only releases.
