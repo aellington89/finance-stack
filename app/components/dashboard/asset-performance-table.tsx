@@ -23,14 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+import { formatCurrency } from "@/lib/format/financial";
 
 interface AssetPerformanceTableProps {
   data: PerformanceData;

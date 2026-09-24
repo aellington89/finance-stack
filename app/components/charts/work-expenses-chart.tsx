@@ -18,6 +18,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
+import { parseChartDate } from "@/lib/format/dates";
 
 const COLORS = {
   expenses: "#2662d9",
@@ -35,26 +40,6 @@ const TOOLTIP_LABELS: Record<string, string> = {
   totalExpenses: "Expenses:",
   totalReimbursements: "Reimbursements:",
 };
-
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
-function parseDate(dateStr: string) {
-  return new Date(dateStr + "T00:00:00");
-}
 
 interface WorkExpensesChartProps {
   data: WorkExpenseTimeSeriesPoint[];
@@ -90,7 +75,7 @@ export function WorkExpensesChart({ data, description }: WorkExpensesChartProps)
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={(dateStr: string) => format(parseDate(dateStr), "MMM yyyy")}
+              tickFormatter={(dateStr: string) => format(parseChartDate(dateStr), "MMM yyyy")}
               tickLine={false}
               axisLine={false}
               tickMargin={8}
@@ -109,7 +94,7 @@ export function WorkExpensesChart({ data, description }: WorkExpensesChartProps)
                 <ChartTooltipContent
                   labelFormatter={(_: unknown, payload: TooltipDatePayload) => {
                     if (!payload?.[0]?.payload?.date) return "";
-                    return format(parseDate(payload[0].payload.date), "MMMM yyyy");
+                    return format(parseChartDate(payload[0].payload.date), "MMMM yyyy");
                   }}
                   labelClassName="font-bold"
                   formatter={(value, name) => (
@@ -118,7 +103,7 @@ export function WorkExpensesChart({ data, description }: WorkExpensesChartProps)
                         {TOOLTIP_LABELS[name as string] ?? name}
                       </span>
                       <span className="tabular-nums">
-                        {formatCurrencyFull(value as number)}
+                        {formatCurrency(value as number)}
                       </span>
                     </div>
                   )}

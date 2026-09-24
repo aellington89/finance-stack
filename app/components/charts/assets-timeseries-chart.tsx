@@ -16,6 +16,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
+import { formatAxisDate } from "@/lib/format/dates";
+import { pivotByCategory } from "@/components/charts/timeseries-pivot";
 
 const CATEGORY_COLORS: Record<number, string> = {
   1: "#2eb88a",
@@ -24,77 +30,6 @@ const CATEGORY_COLORS: Record<number, string> = {
   4: "#2662d9",
 };
 
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
-const formatDate = (dateStr: string) => {
-  const d = new Date(dateStr + "T00:00:00");
-  return format(d, "MMM d");
-};
-
-interface SeriesInfo {
-  key: string;
-  label: string;
-  color: string;
-  categoryId: number;
-}
-
-interface PivotedRow {
-  date: string;
-  [seriesKey: string]: number | string;
-}
-
-function pivotByCategory(points: AssetDecompositionPoint[]): {
-  rows: PivotedRow[];
-  series: SeriesInfo[];
-} {
-  const seriesMap = new Map<number, SeriesInfo>();
-  for (const p of points) {
-    if (!seriesMap.has(p.categoryId)) {
-      seriesMap.set(p.categoryId, {
-        key: `cat_${p.categoryId}`,
-        label: p.categoryName,
-        color: CATEGORY_COLORS[p.categoryId] ?? "#6b7280",
-        categoryId: p.categoryId,
-      });
-    }
-  }
-
-  const series = Array.from(seriesMap.values()).sort(
-    (a, b) => a.categoryId - b.categoryId
-  );
-
-  const dateMap = new Map<string, PivotedRow>();
-  for (const p of points) {
-    if (!dateMap.has(p.date)) {
-      const row: PivotedRow = { date: p.date };
-      for (const s of series) row[s.key] = 0;
-      dateMap.set(p.date, row);
-    }
-    const row = dateMap.get(p.date)!;
-    const key = `cat_${p.categoryId}`;
-    row[key] = ((row[key] as number) || 0) + p.cumulativeBalance;
-  }
-
-  const rows = Array.from(dateMap.values()).sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
-
-  return { rows, series };
-}
 
 interface AssetsTimeSeriesChartProps {
   decomposition: AssetDecompositionPoint[];
@@ -104,7 +39,7 @@ export function AssetsTimeSeriesChart({
   decomposition,
 }: AssetsTimeSeriesChartProps) {
   const { rows, series } = useMemo(
-    () => pivotByCategory(decomposition),
+    () => pivotByCategory(decomposition, CATEGORY_COLORS),
     [decomposition]
   );
 
@@ -132,7 +67,7 @@ export function AssetsTimeSeriesChart({
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="date"
-                tickFormatter={formatDate}
+                tickFormatter={formatAxisDate}
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
@@ -162,7 +97,7 @@ export function AssetsTimeSeriesChart({
                           {chartConfig[name as string]?.label ?? name}:
                         </span>
                         <span className="tabular-nums">
-                          {formatCurrencyFull(value as number)}
+                          {formatCurrency(value as number)}
                         </span>
                       </div>
                     )}

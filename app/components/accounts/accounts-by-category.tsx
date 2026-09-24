@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { AccountListRow } from "@/lib/queries/accounts";
+import { formatCurrency } from "@/lib/format/financial";
 
 interface TypeGroup {
   typeName: string;
@@ -41,13 +42,6 @@ function groupByCategory(accounts: AccountListRow[]): CategoryGroup[] {
   }
 
   return groups;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
 }
 
 function CategoryCard({ category }: { category: CategoryGroup }) {

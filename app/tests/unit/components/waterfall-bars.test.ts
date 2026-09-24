@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildWaterfallBars } from "@/components/charts/waterfall-chart";
+import {
+  buildWaterfallBars,
+  getBarColor,
+  COLORS,
+} from "@/components/charts/waterfall-bars";
 import type { WaterfallData } from "@/lib/queries/net-worth-drilldown";
 
 describe("buildWaterfallBars", () => {
@@ -159,5 +163,17 @@ describe("buildWaterfallBars", () => {
     expect(bars).toHaveLength(2); // Start + End only
     expect(bars[0].type).toBe("start");
     expect(bars[1].type).toBe("end");
+  });
+});
+
+describe("getBarColor", () => {
+  it("paints gains green and losses red", () => {
+    expect(getBarColor("positive")).toBe(COLORS.positive);
+    expect(getBarColor("negative")).toBe(COLORS.negative);
+  });
+
+  it("falls back to neutral for the start and end anchors", () => {
+    expect(getBarColor("start")).toBe(COLORS.neutral);
+    expect(getBarColor("end")).toBe(COLORS.neutral);
   });
 });

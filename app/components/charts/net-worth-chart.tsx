@@ -17,6 +17,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+} from "@/lib/format/financial";
+import { formatAxisDate } from "@/lib/format/dates";
 
 interface TimeSeriesChartProps {
   title: string;
@@ -27,28 +32,7 @@ interface TimeSeriesChartProps {
 }
 
 // Compact format for Y-axis ticks (e.g. "$300K")
-const formatCurrencyCompact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-
 // Full precision for tooltips (e.g. "$292,229.40")
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
-const formatDate = (dateStr: string) => {
-  const d = new Date(dateStr + "T00:00:00");
-  return format(d, "MMM d");
-};
-
 export function TimeSeriesChart({
   title,
   data,
@@ -85,7 +69,7 @@ export function TimeSeriesChart({
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={formatDate}
+              tickFormatter={formatAxisDate}
               tickLine={false}
               axisLine={false}
               tickMargin={8}
@@ -107,7 +91,7 @@ export function TimeSeriesChart({
                     const d = new Date(payload[0].payload.date + "T00:00:00");
                     return format(d, "MMM d, yyyy");
                   }}
-                  formatter={(value) => formatCurrencyFull(value as number)}
+                  formatter={(value) => formatCurrency(value as number)}
                 />
               }
             />
