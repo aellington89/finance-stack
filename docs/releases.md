@@ -17,11 +17,26 @@ format); each released version has its own `## [X.Y.Z] - YYYY-MM-DD` section.
 | **patch** | Fixes, chores, dependency bumps. | `1.0.2` → `1.0.3` |
 
 The release-notes generator derives this for you and prints it in the heading it
-drafts, keying a major off the `**Migration:**` marker already standing on
-`## [Unreleased]` — the one each PR sets or escalates as it lands
-([CONTRIBUTING.md](../CONTRIBUTING.md#changelog-entries-day-to-day)). Post-1.0, a
-`breaking` marker means the release is a major, and the changelog gate enforces
-that ([#315](https://github.com/aellington89/finance-stack/issues/315)).
+drafts, reading two things already standing on `## [Unreleased]` — both written
+by each PR as it lands
+([CONTRIBUTING.md](../CONTRIBUTING.md#changelog-entries-day-to-day)):
+
+- **A `breaking` `**Migration:**` marker is a major** post-1.0, and the changelog
+  gate enforces that ([#315](https://github.com/aellington89/finance-stack/issues/315)).
+- **An entry under `### Added` is a minor.** Keep a Changelog defines that section
+  as new features, which is semver's minor exactly.
+- **Otherwise an `enhancement` label is a minor** — read from every issue *and* PR
+  the range references, including the `(#N)` refs in a squash title — and
+  anything else is a patch.
+
+`### Added` outranks the label because labels drift: they are chosen on the issue,
+often before the work is understood. [#124](https://github.com/aellington89/finance-stack/issues/124)
+added a table, a migration and an import log under `bug`, and
+[#232](https://github.com/aellington89/finance-stack/issues/232) added error
+tracking under `infrastructure`/`backend`; with neither labelled `enhancement`,
+the `[Unreleased]` that held them drafted as a patch. A `backward-compatible`
+marker is not a minor signal on its own — an index-only migration can ship in a
+fix, and it still rolls back by re-pinning the image.
 
 **The marker only sees the database.** It answers "can an operator roll back by
 re-pinning the previous image?", which is not the same question as "is this

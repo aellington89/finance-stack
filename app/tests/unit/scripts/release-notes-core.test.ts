@@ -7,6 +7,7 @@ import {
   formatRelease,
   groupCommits,
   isBumpKind,
+  labelRefs,
   parseCommits,
   suggestBump,
 } from "@/scripts/release-notes-core";
@@ -87,6 +88,30 @@ describe("groupCommits", () => {
     const commits = parseCommits(GIT_LOG);
     const { issues } = groupCommits(commits);
     expect(issues.map((e) => e.issueNumber)).toEqual([134, 150]);
+  });
+});
+
+describe("labelRefs", () => {
+  it("collects both the issue and the PR ref of an issue commit", () => {
+    const commits = parseCommits("1bb8e3b Issue #296 - React component coverage (#343)");
+    expect(labelRefs(commits).sort()).toEqual([296, 343]);
+  });
+
+  // The shape that hid #237's enhancement label: a freeform squash title carrying
+  // the issue ref ahead of the PR ref. parseCommits keeps only the last as prRef.
+  it("collects every (#N) in a freeform title, not only the trailing PR ref", () => {
+    const commits = parseCommits(
+      "f551ebf Nonce-based CSP: remove 'unsafe-inline' from script-src (#237) (#333)",
+    );
+    expect(labelRefs(commits).sort()).toEqual([237, 333]);
+  });
+
+  it("deduplicates refs repeated across commits", () => {
+    expect(labelRefs(parseCommits(GIT_LOG)).sort()).toEqual([134, 150, 154]);
+  });
+
+  it("returns nothing for commits that reference no issue or PR", () => {
+    expect(labelRefs(parseCommits("1df841c Replace pull-based drift gate"))).toEqual([]);
   });
 });
 
@@ -206,6 +231,46 @@ describe("suggestBump", () => {
 
   it("honours a major override pre-1.0 — the 0.4.1 to 1.0.0 cut", () => {
     expect(suggestBump("0.4.1", new Map(), null, "major").nextVersion).toBe("1.0.0");
+  });
+
+  // An ### Added entry is a minor on its own, whatever the labels say. The
+  // labels here are #124's and #232's: both shipped features, neither carried
+  // enhancement, and [Unreleased] holding them drafted as 1.0.5.
+  it("suggests a minor at 1.x for an ### Added entry with no enhancement label", () => {
+    const labels = new Map([
+      [124, ["bug", "infrastructure", "backend"]],
+      [232, ["infrastructure", "backend"]],
+    ]);
+    expect(suggestBump("1.0.4", labels, "backward-compatible", null, true)).toMatchObject({
+      bump: "minor",
+      nextVersion: "1.1.0",
+      source: "added-section",
+    });
+  });
+
+  it("names the ### Added entry ahead of an enhancement label when both apply", () => {
+    expect(
+      suggestBump("1.0.4", new Map([[1, ["enhancement"]]]), "none", null, true).source,
+    ).toBe("added-section");
+  });
+
+  it("falls through to the labels when [Unreleased] has no ### Added entry", () => {
+    expect(suggestBump("1.0.4", new Map([[1, ["bug"]]]), "none", null, false)).toMatchObject({
+      bump: "patch",
+      source: "default",
+    });
+  });
+
+  it("still prefers a breaking marker to an ### Added entry", () => {
+    expect(suggestBump("1.0.4", new Map(), "breaking", null, true).bump).toBe("major");
+  });
+
+  it("still honours an override ahead of an ### Added entry", () => {
+    expect(suggestBump("1.0.4", new Map(), "none", "patch", true).nextVersion).toBe("1.0.5");
+  });
+
+  it("treats an ### Added entry as a minor pre-1.0 too", () => {
+    expect(suggestBump("0.4.1", new Map(), null, null, true).nextVersion).toBe("0.5.0");
   });
 
   // Regression guard: "1.0.x" also splits into three parts, so the old
@@ -389,6 +454,16 @@ describe("formatRelease", () => {
   it("names an enhancement label as the reason for a minor", () => {
     const out = formatRelease(issues, other, bumpOf("1.1.0", "minor", "enhancement-label"), slug);
     expect(out).toContain("**Suggested bump:** minor (enhancement label)");
+  });
+
+  it("names an ### Added entry as the reason for a minor", () => {
+    const out = formatRelease(issues, other, bumpOf("1.1.0", "minor", "added-section"), slug);
+    expect(out).toContain("**Suggested bump:** minor ([Unreleased] has an ### Added entry)");
+  });
+
+  it("names every signal it checked when it falls back to a patch", () => {
+    const out = formatRelease(issues, other, bumpOf("1.0.5", "patch", "default"), slug);
+    expect(out).toContain("no ### Added entry, no enhancement label, no breaking migration");
   });
 
   it("emits a placeholder comment when there are no issue entries", () => {

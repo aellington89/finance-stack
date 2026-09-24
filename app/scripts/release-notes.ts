@@ -1,5 +1,5 @@
 // I/O wrapper for the release-notes generator. Reads git log, fetches GitHub
-// issue labels via `gh`, and delegates all logic to the pure core module so
+// issue and PR labels via `gh`, and delegates all logic to the pure core module so
 // the core stays unit-testable. See Issue #170.
 //
 // Usage: tsx scripts/release-notes.ts <git-range> [--changelog|--release] [--bump=<kind>]
@@ -18,6 +18,7 @@ import {
   formatRelease,
   groupCommits,
   isBumpKind,
+  labelRefs,
   parseCommits,
   suggestBump,
 } from "@/scripts/release-notes-core";
@@ -41,21 +42,28 @@ function usage(detail?: string): never {
   process.exit(1);
 }
 
-// The `**Migration:**` marker standing on [Unreleased], which drives the bump
-// (Issue #315). Every failure degrades to null, which falls through to the
-// label/patch path — the safe direction, since it can never over-suggest a major
-// off a bad read. Warnings go to stderr, like fetchLabels' below: console.log is
-// the only stdout write here precisely so the block stays pasteable.
-function readUnreleasedMigration(): MigrationKind | null {
+// What [Unreleased] says about the bump: its `**Migration:**` marker (Issue
+// #315) and whether it carries an `### Added` entry. Every failure degrades to
+// null / false, which falls through to the label/patch path — the safe
+// direction, since it can never over-suggest off a bad read. Warnings go to
+// stderr, like fetchLabels' below: console.log is the only stdout write here
+// precisely so the block stays pasteable.
+interface UnreleasedSignals {
+  migration: MigrationKind | null;
+  added: boolean;
+}
+
+function readUnreleased(): UnreleasedSignals {
+  const none: UnreleasedSignals = { migration: null, added: false };
   let raw: string;
   try {
     raw = readFileSync(CHANGELOG_PATH, "utf8");
   } catch {
     console.warn(
       `Warning: could not read ${CHANGELOG_PATH} — the suggested bump cannot see the ` +
-        "[Unreleased] migration marker. Pass --bump= if this release is breaking.",
+        "[Unreleased] section. Pass --bump= if this release is breaking or adds a feature.",
     );
-    return null;
+    return none;
   }
 
   // The literal heading text, per RELEASE_RE in lib/changelog.ts.
@@ -63,10 +71,15 @@ function readUnreleasedMigration(): MigrationKind | null {
   if (!unreleased) {
     console.warn(
       "Warning: CHANGELOG.md has no [Unreleased] section — the suggested bump cannot " +
-        "see a migration marker. Pass --bump= if this release is breaking.",
+        "see a migration marker or an ### Added entry. Pass --bump= if this release is " +
+        "breaking or adds a feature.",
     );
-    return null;
+    return none;
   }
+
+  // An entry, not a heading: an `### Added` left standing with nothing under it
+  // is an editing leftover, not a feature.
+  const added = unreleased.sections.some((s) => s.heading === "Added" && s.items.length > 0);
 
   // migrationRaw set with migration null is a malformed value. `npm run
   // check:changelog` is already failing on it; say so rather than reading it as
@@ -76,12 +89,12 @@ function readUnreleasedMigration(): MigrationKind | null {
       `Warning: [Unreleased] declares **Migration:** "${unreleased.migrationRaw}", which is ` +
         "not a recognized value — ignoring it. Run `npm run check:changelog`.",
     );
-    return null;
+    return { migration: null, added };
   }
 
   // A marker-free [Unreleased] is explicitly allowed (CONTRIBUTING.md), so it is
   // the ordinary case for a fix-only release and warrants no warning.
-  return unreleased.migration;
+  return { migration: unreleased.migration, added };
 }
 
 // --bump=<kind> only. The range is `args.find((a) => !a.startsWith("--"))`, so a
@@ -131,7 +144,7 @@ function fetchLabels(
       ).trim();
       map.set(n, JSON.parse(raw) as string[]);
     } catch {
-      console.warn(`Warning: could not fetch labels for issue #${n} — skipping`);
+      console.warn(`Warning: could not fetch labels for #${n} — skipping`);
     }
   }
 
@@ -170,12 +183,18 @@ function main(): void {
   const commits = parseCommits(gitLog);
   const { issues, other } = groupCommits(commits);
 
-  const issueNumbers = issues.map((e) => e.issueNumber);
   const repoSlug = readRepoSlug();
-  const labelsByIssue = fetchLabels(issueNumbers, repoSlug);
+  const labelsByIssue = fetchLabels(labelRefs(commits), repoSlug);
   const currentVersion = readCurrentVersion();
-  const unreleasedMigration = readUnreleasedMigration();
-  const suggestion = suggestBump(currentVersion, labelsByIssue, unreleasedMigration, override);
+  const unreleased = readUnreleased();
+  const unreleasedMigration = unreleased.migration;
+  const suggestion = suggestBump(
+    currentVersion,
+    labelsByIssue,
+    unreleasedMigration,
+    override,
+    unreleased.added,
+  );
   const today = new Date().toISOString().slice(0, 10);
 
   // The only place the generator and the changelog gate are aware of each other:
