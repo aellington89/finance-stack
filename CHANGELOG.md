@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-26
+
+**Migration:** none
+
 ### Fixed
 
 - **The transaction and account forms no longer squeeze two fields into a phone-width row.** ([Issue #145](https://github.com/aellington89/finance-stack/issues/145)) Date/Amount, Transaction Type/Category and, when editing an account, Opened/Closed Date sat in a fixed two-column grid. On a phone each field got about 140px, and the date ran across the Amount field. The rows now go two-up only once the form itself is 28rem wide, the narrowest width at which each half fits the longest date the picker shows. Below that they stack. The form's width decides, not the screen's: from `lg` up the Transactions page docks the form in a 380px column, so it stacks there too. That also stops the date running past its field on desktop ([Issue #321](https://github.com/aellington89/finance-stack/issues/321)).
@@ -545,7 +549,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/aellington89/finance-stack/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/aellington89/finance-stack/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/aellington89/finance-stack/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/aellington89/finance-stack/compare/v1.0.3...v1.0.4
