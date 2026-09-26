@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Debt and Net Worth waterfalls drew a period's movement as slivers.** ([Issue #251](https://github.com/aellington89/finance-stack/issues/251)) Both charts drew Start and End as bars rising from $0, so the Y-axis had to span the whole balance. The bars between them, which are the reason to draw a waterfall, came out 1–2% tall. On a $250K debt moved by a few thousand dollars, Payments, Interest and Other barely registered. The axis now zooms to the bridge and cuts Start and End off at the edge of the plot.
+
+  It zooms only when that at least doubles the scale of the bars, measured on the axis as it will actually be drawn. A bridge that crosses $0, or that is already big enough to read, keeps the $0-based axis exactly as before. The zoomed range covers every level the bridge passes through, not just its two ends, because payments can lift the running balance well past both before interest and other changes bring it back. Tick values are round, and the step is never finer than the compact `$…K` labels can tell apart, so no label repeats.
+
+  A plain `domain` could not have done this. recharts stacks every bar from 0 and widens any domain back out to include it, so the zoom needs `allowDataOverflow`, which is also what clips Start and End. Only the axis changed. The bars are the same, so `start + payments + interest + other = end` still reconciles, and the tooltip and the empty state are unchanged. The logic is in the unit-tested `waterfall-axis.ts`, next to the bar builders; each chart gained only three `YAxis` props.
+
 ## [1.1.0] - 2026-09-23
 
 **Migration:** backward-compatible

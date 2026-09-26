@@ -20,6 +20,7 @@ import {
   getBarColor,
   type WaterfallBar,
 } from "@/components/charts/waterfall-bars";
+import { buildWaterfallAxis } from "@/components/charts/waterfall-axis";
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -35,6 +36,9 @@ interface WaterfallChartProps {
 
 export function WaterfallChart({ data }: WaterfallChartProps) {
   const bars = buildWaterfallBars(data);
+  // Zooms to the bridge when the balance would dwarf it. It is null, and the
+  // axis keeps recharts' defaults, when it would not (#251).
+  const axis = buildWaterfallAxis(bars);
 
   return (
     <Card className="flex h-full flex-col">
@@ -61,6 +65,9 @@ export function WaterfallChart({ data }: WaterfallChartProps) {
               axisLine={false}
               tickMargin={8}
               width={60}
+              domain={axis?.domain}
+              ticks={axis?.ticks}
+              allowDataOverflow={axis !== null}
             />
             <ChartTooltip
               content={({ active, payload, label }) => (
