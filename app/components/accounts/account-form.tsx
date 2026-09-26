@@ -200,7 +200,7 @@ export function AccountForm({ accountTypes, account, defaultTypeId }: AccountFor
   // `@container`: the Opened/Closed row stacks by this form's width, not the
   // viewport's — see the note in transaction-form.tsx (Issue #145).
   return (
-    <form action={formAction} className="@container space-y-4 max-w-lg">
+    <form action={formAction} className="@container space-y-4">
       {isEdit && (
         <input type="hidden" name="accountId" value={account.accountId} />
       )}
