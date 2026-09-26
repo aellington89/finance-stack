@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The transaction and account forms no longer squeeze two fields into a phone-width row.** ([Issue #145](https://github.com/aellington89/finance-stack/issues/145)) Date/Amount, Transaction Type/Category and, when editing an account, Opened/Closed Date sat in a fixed two-column grid. On a phone each field got about 140px, and the date ran across the Amount field. The rows now go two-up only once the form itself is 28rem wide, the narrowest width at which each half fits the longest date the picker shows. Below that they stack. The form's width decides, not the screen's: from `lg` up the Transactions page docks the form in a 380px column, so it stacks there too. That also stops the date running past its field on desktop ([Issue #321](https://github.com/aellington89/finance-stack/issues/321)).
+
+  It is a container query (`@container` on each form, `@md:grid-cols-2` on its rows) rather than the `md:` breakpoint the issue proposed, because a viewport breakpoint cannot see that column. `md:` would have kept the docked form two-up at 348px, where each half is 166px and 228 of 2026's 365 dates overrun it; the widest, "September 22nd, 2026", needs a 204px button. The account form is 512px wide on desktop, so it stays two-up there.
+
 ## [1.1.1] - 2026-09-25
 
 **Migration:** none

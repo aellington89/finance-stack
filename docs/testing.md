@@ -122,6 +122,20 @@ Two things are **not** rendered, on purpose:
   import a server action cut the chain with a `vi.mock` of the action module —
   see [`transaction-list.test.tsx`](../app/tests/unit/components/transaction-list.test.tsx).
 
+**Responsive layout is out of reach here.** jsdom has no layout engine and
+evaluates neither media nor container queries (the `matchMedia` stub above
+answers `matches: false` to every query), so a test can pin the responsive
+classes a row carries but never show that the row actually stacks.
+[`debt-mix-breakdown.test.tsx`](../app/tests/unit/components/debt-mix-breakdown.test.tsx)
+and the [`transaction-form`](../app/tests/unit/components/transaction-form.test.tsx)
+and [`account-form`](../app/tests/unit/components/account-form.test.tsx) tests
+do exactly that; the stacking itself is a browser check, at the widths the
+classes are meant to switch on
+([Issue #145](https://github.com/aellington89/finance-stack/issues/145)). Pin
+with `toHaveClass`, which matches whole class names. A substring check such as
+`className.toContain("grid-cols-2")` also matches `@md:grid-cols-2`, so it
+cannot assert that a class is absent.
+
 One convenience worth knowing: every `next/navigation` export is a `vi.fn()`,
 so a test steers `usePathname` with
 `vi.mocked(usePathname).mockReturnValue("/dashboard/assets")` and asserts on

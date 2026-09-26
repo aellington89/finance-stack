@@ -75,6 +75,22 @@ describe("TransactionForm", () => {
     }
   });
 
+  // jsdom has no layout engine and evaluates neither media nor container
+  // queries, so this can only pin the classes; the stacking itself was checked
+  // in a browser (Issue #145). toHaveClass rather than className.toContain:
+  // "@md:grid-cols-2" contains "grid-cols-2", so a substring check could not
+  // tell the fix from the bug.
+  it("stacks its two-up rows until the form itself is wide enough for two", () => {
+    const { container } = render(<TransactionForm {...props} />);
+    expect(container.querySelector("form")).toHaveClass("@container");
+
+    for (const field of ["#amount", "#transactionTypeId"]) {
+      const row = container.querySelector(field)?.closest(".grid");
+      expect(row).toHaveClass("grid-cols-1", "@md:grid-cols-2");
+      expect(row).not.toHaveClass("grid-cols-2");
+    }
+  });
+
   it("shows no error region before a submission", () => {
     render(<TransactionForm {...props} />);
     expect(toastError).not.toHaveBeenCalled();

@@ -221,8 +221,14 @@ export function TransactionForm({
     }
   }, [state, transactionDate, amount, accountId, relatedAccountId, transactionTypeId, transactionCategoryId]);
 
+  // The two-up rows below switch on the form's own width, not the viewport's
+  // (Issue #145). From lg the Transactions page docks this form in a 380px
+  // column — narrower than it is on a tablet — so `@md:` here is a container
+  // query (28rem), not the 768px `md:` breakpoint it resembles. 28rem is the
+  // narrowest form whose halves still fit the longest date DatePicker renders
+  // ("September 22nd, 2026" needs a 204px button).
   return (
-    <form ref={formRef} action={formAction} className="space-y-4">
+    <form ref={formRef} action={formAction} className="@container space-y-4">
       <div className="space-y-2">
         <Label htmlFor="transactionDescription">Description *</Label>
         <Input
@@ -240,7 +246,7 @@ export function TransactionForm({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
         <div className="space-y-2">
           <Label>Date *</Label>
           <input type="hidden" name="transactionDate" value={transactionDate} />
@@ -293,7 +299,7 @@ export function TransactionForm({
         error={state.errors.relatedAccountId}
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
         <ComboboxField
           label="Transaction Type"
           name="transactionTypeId"
