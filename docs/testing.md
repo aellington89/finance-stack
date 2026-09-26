@@ -114,9 +114,9 @@ Two things are **not** rendered, on purpose:
   no chart inside it. A test can therefore assert only the card title, while the
   coverage report credits 41% of the file. They are excluded from the
   denominator instead, and their logic lives in tested `.ts` siblings —
-  `waterfall-bars.ts`, `debt-waterfall-bars.ts`, `timeseries-pivot.ts`,
-  `accounting-axis.ts`. `gauge-badge.tsx`, the one hand-rolled SVG in that
-  directory, *is* rendered and tested.
+  `waterfall-bars.ts`, `debt-waterfall-bars.ts`, `waterfall-axis.ts`,
+  `timeseries-pivot.ts`, `accounting-axis.ts`. `gauge-badge.tsx`, the one
+  hand-rolled SVG in that directory, *is* rendered and tested.
 - **Anything reaching `next-auth`.** It does not resolve under vitest's jsdom
   environment (`Cannot find module 'next/server'`). Components whose children
   import a server action cut the chain with a `vi.mock` of the action module —

@@ -20,6 +20,7 @@ import {
   getBarColor,
   type DebtWaterfallBar,
 } from "@/components/charts/debt-waterfall-bars";
+import { buildWaterfallAxis } from "@/components/charts/waterfall-axis";
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -35,6 +36,9 @@ interface DebtWaterfallChartProps {
 
 export function DebtWaterfallChart({ data }: DebtWaterfallChartProps) {
   const bars = buildDebtWaterfallBars(data);
+  // Zooms to the bridge when the balance would dwarf it. It is null, and the
+  // axis keeps recharts' defaults, when it would not (#251).
+  const axis = buildWaterfallAxis(bars);
   const isEmpty = data.startBalance === 0 && data.endBalance === 0;
 
   return (
@@ -65,6 +69,9 @@ export function DebtWaterfallChart({ data }: DebtWaterfallChartProps) {
                 axisLine={false}
                 tickMargin={8}
                 width={70}
+                domain={axis?.domain}
+                ticks={axis?.ticks}
+                allowDataOverflow={axis !== null}
               />
               <ChartTooltip
                 content={({ active, payload, label }) => (
