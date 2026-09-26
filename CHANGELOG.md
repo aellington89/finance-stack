@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-25
+
+**Migration:** none
+
 ### Fixed
 
 - **The Debt and Net Worth waterfalls drew a period's movement as slivers.** ([Issue #251](https://github.com/aellington89/finance-stack/issues/251)) Both charts drew Start and End as bars rising from $0, so the Y-axis had to span the whole balance. The bars between them, which are the reason to draw a waterfall, came out 1–2% tall. On a $250K debt moved by a few thousand dollars, Payments, Interest and Other barely registered. The axis now zooms to the bridge and cuts Start and End off at the edge of the plot.
@@ -533,7 +537,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/aellington89/finance-stack/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/aellington89/finance-stack/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/aellington89/finance-stack/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/aellington89/finance-stack/compare/v1.0.2...v1.0.3

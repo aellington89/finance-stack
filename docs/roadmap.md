@@ -76,6 +76,7 @@ v0.4.1 rather than newly assembled on top of it.
 | **v0.4.0** ✅ | Phase 2.5 — Deployment & upgrade | GHCR images + deploy bundle: a verified artifact and a backup-gated, health-checked upgrade. **This is the 1.0 release candidate** — **released 2026-08-22** | Minor |
 | **v1.0.0** ✅ | v1.0.0 — Stabilization | **The safety/stability commitment: trustworthy & exposable** — gates #294, #141 and #142 all met — **released 2026-08-29** | **Major** |
 | **v1.1.0** ✅ | *(sliced from Phase 3)* | Importer idempotency + name-resolved lookups, error tracking, nonce CSP, component coverage, release tooling — **released 2026-09-23** | Minor |
+| **v1.1.1** ✅ | *(sliced from Phase 5)* | Debt and Net Worth waterfalls zoom to the period's movement — **released 2026-09-25** | Patch |
 | — | Phase 3 — DX compounding | Importer hardening, tooling (remainder) | As cut |
 | — | Phase 4 — Performance polish | Caching, materialized views, chart consolidation | As cut |
 | — | Phase 5 — Small UX fixes | Accessibility, mobile, UX debt | As cut |
@@ -253,11 +254,13 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#146](https://github.com/aellington89/finance-stack/issues/146) Materialized view for v_transactions_full
 
 ### Phase 5 — Small UX fixes
+**v1.1.1 (released 2026-09-25)** shipped the ✅ issue below — see [CHANGELOG](../CHANGELOG.md#111---2026-09-25). The rest stay open and ship in whichever release follows them.
+
 - [#118](https://github.com/aellington89/finance-stack/issues/118) Evaluate cookie-based persistence for txn-visible-columns / sidebar_state
 - [#144](https://github.com/aellington89/finance-stack/issues/144) Accessibility: keyboard nav, color+icon, chart SVG titles
 - [#145](https://github.com/aellington89/finance-stack/issues/145) Mobile form layout
 - [#148](https://github.com/aellington89/finance-stack/issues/148) Replace window.confirm() in transaction-list.tsx
-- [#251](https://github.com/aellington89/finance-stack/issues/251) Debt Waterfall: axis scale dominated by total balance makes period changes unreadable
+- ✅ [#251](https://github.com/aellington89/finance-stack/issues/251) Debt Waterfall: axis scale dominated by total balance makes period changes unreadable
 - [#321](https://github.com/aellington89/finance-stack/issues/321) New Transaction form: long formatted dates overflow the Date input *(new)*
 
 ### Phase 6 — Features
