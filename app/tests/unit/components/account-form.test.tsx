@@ -87,4 +87,24 @@ describe("AccountForm", () => {
     const { container } = render(<AccountForm accountTypes={accountTypes} />);
     expect(container.querySelector('input[name="accountTypeId"]')).toHaveValue("");
   });
+
+  // Classes only: jsdom evaluates no container queries. See the note in
+  // transaction-form.test.tsx (Issue #145).
+  it("stacks the Opened/Closed row until the form itself is wide enough for two", () => {
+    const { container } = render(
+      <AccountForm accountTypes={accountTypes} account={existing} />
+    );
+    expect(container.querySelector("form")).toHaveClass("@container");
+
+    const row = container.querySelector('input[name="openedDate"]')?.closest(".grid");
+    expect(row).toHaveClass("grid-cols-1", "@md:grid-cols-2");
+    expect(row).not.toHaveClass("grid-cols-2");
+  });
+
+  it("leaves the lone Opened Date full-width when creating", () => {
+    const { container } = render(<AccountForm accountTypes={accountTypes} />);
+    expect(
+      container.querySelector('input[name="openedDate"]')?.closest(".grid")
+    ).toBeNull();
+  });
 });
