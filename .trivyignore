@@ -159,33 +159,35 @@ CVE-2026-103111 exp:2026-11-07
 # containers in the same step.
 
 # --- python:3.14-slim bundled packages (finance-importer) -------------------
-CVE-2025-47273 exp:2026-11-17
-# setuptools 70.3.0, bundled in the base image rather than by
-# importer/requirements.txt. poll.py never imports it; it is present because the
-# image ships pip. Clears on a base rebuild, or could be removed outright if the
-# importer image ever drops pip after the install layer.
-GHSA-6v7p-g79w-8964 exp:2026-11-17
-# msgpack 1.1.2, pulled in under the base image's pip tooling, not by
-# requirements.txt. Same disposition as setuptools above.
+# EMPTY, AND THAT IS THE POINT. This block held CVE-2025-47273 (setuptools
+# 70.3.0) and GHSA-6v7p-g79w-8964 (msgpack 1.1.2), both of them there because
+# the image shipped pip. importer/Dockerfile now removes pip after the install
+# layer — done to fix urllib3 CVE-2026-97687 / CVE-2026-97689, which pip
+# vendored the same way and which no requirements.txt pin could reach — and
+# scripts/check-trivy-suppressions.sh named both of these from the CI run on the
+# very next push. Deleted here on that verdict, which is the normal end of an
+# entry's life and the second time this file has gone backwards after #303.
 #
-# THIS ENTRY IS EXPECTED TO GO STALE on the next CI run, and is deliberately
-# left here rather than deleted with the change that kills it. importer's
-# Dockerfile now removes pip after the install layer — the fix for urllib3
-# CVE-2026-97687 / CVE-2026-97689, which were vendored the same way — and pip's
-# vendored msgpack goes with it. Predicting a staleness verdict is exactly the
-# #291 mistake this block's own note warns about, so the entry stays until
-# scripts/check-trivy-suppressions.sh names it from a CI run, and is deleted
-# then. setuptools above is NOT affected: it is a top-level site-package and the
-# Dockerfile deliberately leaves it alone.
+# TWO THINGS WORTH KEEPING FROM HOW THAT WENT. The setuptools entry's own
+# comment had already worked out the answer — "could be removed outright if the
+# importer image ever drops pip after the install layer" — and it sat there for
+# weeks while the entry was renewed instead. A suppression that names its own
+# exit is a task, not a decision; read the comments before extending the dates.
 #
-# BOTH OF THESE WERE BRIEFLY DELETED IN #291 AND PUT STRAIGHT BACK, which is worth
-# recording because the mistake is easy to repeat. A local run of
-# scripts/check-trivy-suppressions.sh reported them stale, and a local
-# `ls site-packages` appeared to confirm it. Both were wrong: the machine's cached
-# python:3.14-slim was three weeks older than the one CI pulls, and these packages
-# live under pip/_vendor/, not at the top level. CI failed on the very next push.
-# Trust a staleness verdict from CI, where the image was just built from a freshly
-# pulled base — not from a workstation.
+# And the change that removed pip predicted only msgpack would clear, on the
+# reasoning that setuptools was a top-level site-package left untouched. CI said
+# both. The setuptools entry was right and that prediction was wrong, which is
+# the same lesson in the opposite direction: this file's verdicts come from CI,
+# including the ones that are better than expected.
+#
+# The #291 warning that lived here is the reason both entries survived to be
+# deleted properly rather than guessed away, so it is kept: a local run of
+# scripts/check-trivy-suppressions.sh once reported these two stale and a local
+# `ls site-packages` appeared to confirm it. Both were wrong — the machine's
+# cached python:3.14-slim was three weeks older than the one CI pulls, and the
+# packages lived under pip/_vendor/, not at the top level. CI failed on the very
+# next push. Trust a staleness verdict from CI, where the image was just built
+# from a freshly pulled base — not from a workstation.
 
 # --- npm's own vendored dependencies (finance-migrate) ----------------------
 # The migrate stage deliberately keeps npm — it runs `npx drizzle-kit` — where
