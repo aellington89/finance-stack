@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "auth:create-user": "tsx scripts/create-user.ts",
     "check:seed-references": "tsx scripts/check-seed-references.ts",
+    "check:audit": "tsx scripts/check-audit.ts",
     "check:changelog": "tsx scripts/check-changelog.ts",
     "check:docs": "tsx scripts/check-docs.ts",
     "release:notes": "tsx scripts/release-notes.ts",
