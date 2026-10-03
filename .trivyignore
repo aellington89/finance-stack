@@ -168,6 +168,16 @@ GHSA-6v7p-g79w-8964 exp:2026-11-17
 # msgpack 1.1.2, pulled in under the base image's pip tooling, not by
 # requirements.txt. Same disposition as setuptools above.
 #
+# THIS ENTRY IS EXPECTED TO GO STALE on the next CI run, and is deliberately
+# left here rather than deleted with the change that kills it. importer's
+# Dockerfile now removes pip after the install layer — the fix for urllib3
+# CVE-2026-97687 / CVE-2026-97689, which were vendored the same way — and pip's
+# vendored msgpack goes with it. Predicting a staleness verdict is exactly the
+# #291 mistake this block's own note warns about, so the entry stays until
+# scripts/check-trivy-suppressions.sh names it from a CI run, and is deleted
+# then. setuptools above is NOT affected: it is a top-level site-package and the
+# Dockerfile deliberately leaves it alone.
+#
 # BOTH OF THESE WERE BRIEFLY DELETED IN #291 AND PUT STRAIGHT BACK, which is worth
 # recording because the mistake is easy to repeat. A local run of
 # scripts/check-trivy-suppressions.sh reported them stale, and a local
@@ -191,16 +201,38 @@ CVE-2026-69192 exp:2026-11-17
 # ip-address 10.2.0, fixed in 10.3.1. npm-vendored, as above.
 CVE-2026-73566 exp:2026-11-17
 # tar 7.5.19, fixed in 7.5.21. npm-vendored, as above (#291).
+CVE-2026-102276 exp:2026-11-17
+# brace-expansion 5.0.7, fixed in 5.0.10. npm-vendored, as above.
+CVE-2026-102278 exp:2026-11-17
+# brace-expansion 5.0.7, fixed in 5.0.11. npm-vendored, as above.
+CVE-2026-19534 exp:2026-11-17
+# undici 6.27.0, fixed in 6.28.1. npm-vendored, as above.
+#
+# THE LAST THREE ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
+# TO VENDORED COPIES, which is worth recording because it is the distinction the
+# block is easiest to get wrong about. finance-migrate reported 15 HIGH in
+# node-pkg on 2026-10-03: this image carries app/node_modules so that the
+# migrate stage can run `npx drizzle-kit`, so the scan sees the application's
+# dependency tree AND npm's vendored one, with the same package names appearing
+# at different versions in each. An `npm update` of undici and brace-expansion
+# in app/package-lock.json cleared twelve of the fifteen and needed no entry
+# here. The three left are the vendored copies at the versions this block's
+# note already named as npm 11.19.0's bundle — brace-expansion 5.0.7 and undici
+# 6.27.0 — which no application-level bump can reach. If a finding here names a
+# version that matches app/package-lock.json, it belongs in the lockfile, not in
+# this file.
 #
 # The installed versions above are the point of this block after #303, and they
 # are why partial clears are the normal case rather than a curiosity. This
 # section held eight entries; node:24-alpine shipped npm 11.19.0, which moved
 # tar 7.5.16 → 7.5.19, brace-expansion 5.0.6 → 5.0.7 and undici 6.26.0 → 6.27.0,
-# and exactly the four entries whose fix version that reached went dead. These
-# four survive because their fix is still ahead of what npm bundles. A vendored
-# bump therefore clears *some* of a package's entries and leaves others, so
-# re-read the installed version here before assuming a comment is still true —
-# these three had drifted a full release behind the image within weeks.
+# and exactly the four entries whose fix version that reached went dead. Those
+# four survived because their fix was still ahead of what npm bundles, and the
+# three added above bring the block to seven. A vendored bump therefore clears
+# *some* of a package's entries and leaves others, so re-read the installed
+# version here before assuming a comment is still true — brace-expansion and
+# undici now carry two generations of advisory each, against one installed
+# version apiece.
 
 # Not listed here, and excluded at the scanner instead: the Go stdlib CVEs
 # reported against drizzle-kit's vendored `esbuild` and the postgres image's
