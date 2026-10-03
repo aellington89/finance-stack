@@ -334,11 +334,12 @@ the other three's findings in the same run rather than across four.
    that one file backs all four scans, so an entry silences its CVE everywhere.
    It is no longer empty: turning the gate on for the other three images required
    seeding ten base-image and bundled-tooling findings. It peaked at fourteen,
-   and holds twelve today — [#303](https://github.com/aellington89/finance-stack/issues/303)
+   and holds ten today — [#303](https://github.com/aellington89/finance-stack/issues/303)
    deleted eight that had gone stale, three debian 13.7 entries replaced the one
-   OpenSSL entry that went stale after them, and three more cover the brace-expansion
-   and undici copies that npm itself vendors. Read those before
-   adding a thirteenth — yours may already be covered, as three of the four added in
+   OpenSSL entry that went stale after them, three more cover the brace-expansion
+   and undici copies that npm itself vendors, and the two `python:3.14-slim`
+   entries went when the importer image stopped shipping pip. Read those before
+   adding an eleventh — yours may already be covered, as three of the four added in
    [#291](https://github.com/aellington89/finance-stack/issues/291) were by an
    entry already sitting there for the same fixed version.
 

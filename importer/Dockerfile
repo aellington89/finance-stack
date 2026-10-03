@@ -47,10 +47,16 @@ ENV PYTHONUNBUFFERED=1
 # container runs as non-root uid 1001, but `pip install --user` would have
 # worked before this change and will now fail with "No module named pip".
 #
-# setuptools is deliberately left in place. It is a separate finding
-# (CVE-2025-47273), suppressed on its own entry, and pkg_resources is imported
-# at runtime by more packages than is comfortable to bet on — so removing it is
-# its own change with its own blast radius, not a rider on this one.
+# SETUPTOOLS GOES TOO, which was not the plan and is recorded because the wrong
+# half was the reasoning. This layer removes only pip: setuptools looked like a
+# separate finding (CVE-2025-47273) on a top-level site-package, and
+# pkg_resources is imported at runtime by more packages than is comfortable to
+# bet on, so it was deliberately left alone rather than ridden along. CI then
+# reported BOTH that entry and the msgpack one as matching nothing. The old
+# suppression had it right all along — "it is present because the image ships
+# pip" — so pip was the only thing holding setuptools in the image, and the
+# imports below prove nothing here needed pkg_resources either. Both entries are
+# gone from .trivyignore; the empty block there carries the rest of the story.
 #
 # The uninstall is best-effort and the `rm -rf` is the guarantee: `pip uninstall
 # pip` is the tidy path — it takes the console scripts and dist-info with it —
