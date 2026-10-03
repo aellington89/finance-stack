@@ -298,9 +298,11 @@ the other three's findings in the same run rather than across four.
    [`.trivyignore`](.trivyignore) — the file documents the required format. Note
    that one file backs all four scans, so an entry silences its CVE everywhere.
    It is no longer empty: turning the gate on for the other three images required
-   seeding ten base-image and bundled-tooling findings, and it currently holds
-   fourteen. Read those before adding a fifteenth — yours may already be covered,
-   as three of the four added in
+   seeding ten base-image and bundled-tooling findings. It peaked at fourteen,
+   and holds nine today — [#303](https://github.com/aellington89/finance-stack/issues/303)
+   deleted eight that had gone stale, and the three `postgres:18.6` entries
+   replaced the one OpenSSL entry that went stale after them. Read those before
+   adding a tenth — yours may already be covered, as three of the four added in
    [#291](https://github.com/aellington89/finance-stack/issues/291) were by an
    entry already sitting there for the same fixed version.
 
