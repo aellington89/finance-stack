@@ -1,0 +1,117 @@
+# Per-advisory suppressions for the dependency audit gate.
+#
+# Read by `npm run check:audit`, which is the CI gate — see
+# app/scripts/audit-allowlist-core.ts for the mechanism and CONTRIBUTING.md
+# "Dependency audit gate" for the procedure that leads here.
+#
+# This file is the "third option" CONTRIBUTING.md used to say did not exist.
+# `npm audit` is pass/fail with no per-advisory escape hatch, so an advisory with
+# no published fix took the gate red and kept it there, and a red gate on a base
+# branch is inherited by every open Dependabot PR — which is exactly the state in
+# which a real regression on one of them gets waved through as "the usual red".
+#
+# IT IS DELIBERATELY SHAPED LIKE .trivyignore, down to `exp:`, because the
+# decision is the same decision and should not have to be learned twice. An entry
+# here means "we know, and we have decided to ship anyway". That needs to be
+# reviewable, so every entry must carry:
+#
+#   1. the advisory ID
+#   2. why it does not apply, or why the fix cannot be taken yet
+#   3. an expiry date — the suppression stops working ON that date
+#
+# Format:
+#   GHSA-xxxx-xxxx-xxxx exp:YYYY-MM-DD
+#   # <why this is suppressed, and what unblocks removing it>
+#
+# ONE ENTRY IS ONE ADVISORY, NOT ONE PACKAGE. npm reports a package as vulnerable
+# both when an advisory names it and when it only depends on something
+# vulnerable. An entry clears the advisory everywhere it is reported, including
+# every package that merely inherits it, and a *new* advisory against any of
+# those packages still goes red. So the entry below is one line for eight
+# reported packages, and it is not a blanket over those eight.
+#
+# THE RUNTIME GATE NEEDS AN EXPLICIT MARKER. A bare entry covers the build-time
+# gate only. To suppress something in the tree that ships inside the image, the
+# entry must end in `runtime`:
+#
+#   GHSA-xxxx-xxxx-xxxx exp:YYYY-MM-DD runtime
+#
+# This is the one place the file does NOT follow .trivyignore, on purpose. That
+# file backs four scans from one list and its header warns that an entry
+# therefore widens to images that never reported the finding. The same widening
+# here would cross the line CONTRIBUTING.md draws between the two gates — runtime
+# red means the advisory ships to users, build-time red means it is confined to
+# the toolchain — and that is too big a difference to cross by omission. Every
+# entry this file has ever held is dev-tree; if one ever needs `runtime`, that
+# fact should be legible on the line itself.
+#
+# Prefer bumping, then an `overrides` entry, over a line here — that is
+# CONTRIBUTING.md's order and this is its last resort, not its first. Issue #194
+# is the cautionary case: it sat open for months on the belief that the eslint dev
+# tree needed eslint@10, when four of its HIGH advisories were cleared by a plain
+# lockfile refresh. Check `npm view <pkg> versions` against the advisory's
+# affected range before concluding there is no fix.
+#
+# NOTHING REMOVES AN ENTRY WHEN THE ADVISORY IS FIXED UPSTREAM. It simply stops
+# being reported and the line stays, inert, until someone deletes it — `exp:`
+# stops a suppression working, it does not delete anything. `npm run check:audit`
+# ends by naming the entries that matched nothing, as warnings, never failures,
+# for the reason scripts/check-trivy-suppressions.sh gives: a stale entry is not
+# a vulnerability, and a gate that goes red for tidiness is a gate people stop
+# reading. Unlike that script, this one is trustworthy locally — it reads
+# package-lock.json, which is the same file CI reads, not a base image whose
+# cached layer may be weeks stale.
+#
+# Populate only from real findings, never pre-emptively.
+
+GHSA-vfj7-8cjw-p6xm exp:2026-11-14
+# braces: stack-exhaustion denial of service through deeply nested patterns.
+# Affected range <=3.0.3, and 3.0.3 is the newest version published, so there is
+# no fix to take — this is the finding that made this file necessary.
+#
+# WHY A BUMP CANNOT CLEAR IT, checked rather than assumed. `npm view braces
+# versions` ends at 3.0.3. npm offers two "fixes" and both are major downgrades
+# of direct dependencies: eslint-config-next 16.3.6 -> 14.2.35 and
+# shadcn ^4.21.0 -> 1.0.0. eslint-config-next 14 against next 16.3.6 would trade
+# an audit failure for a lint failure, which is not a fix. Dropping one
+# dependency does not work either: braces is reached through two independent
+# paths, eslint-config-next -> @next/eslint-plugin-next -> fast-glob ->
+# micromatch and shadcn -> fast-glob, so clearing it by subtraction means giving
+# up both the Next lint config and the component CLI.
+#
+# WHY IT DOES NOT APPLY. Three things have to hold, and all three do.
+#
+# It is build-time only. braces is not in the shipped tree at all — the runtime
+# gate (`npm audit --omit=dev`) reports zero vulnerabilities, so nothing here
+# reaches a user of the deployed app. That is why this entry carries no `runtime`
+# marker, and the gate will reject it if that ever changes.
+#
+# The impact is availability only. CVSS 3.1 7.5
+# AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H — no confidentiality, no integrity. The
+# failure mode is the globbing process exhausting its stack and dying, and the
+# processes doing the globbing are `eslint` and the shadcn CLI. A crashed lint
+# run is a red check, not a breach.
+#
+# The patterns are ours. The advisory needs a deeply nested brace *pattern*, and
+# the patterns reaching braces here are the glob patterns in eslint.config.mjs
+# and components.json plus shadcn's own internal file globs. They are committed
+# to this repository, not read from user input, a request, or the database. There
+# is no path by which an outside party supplies one.
+#
+# WHAT UNBLOCKS REMOVING IT. A braces release above 3.0.3, or
+# @next/eslint-plugin-next and shadcn moving off fast-glob. Neither looks
+# imminent: braces' newest publish is 3.0.3 and fast-glob's is 3.3.3 from
+# 2025-01-05, with nothing since. Neither is formally deprecated on npm, so this
+# is a quiet dependency rather than an abandoned one — which is the weaker
+# claim, and the one actually checkable. Re-check with
+# `cd app && npm view braces versions` and `npm audit --audit-level=high`.
+#
+# THE DATE IS SIX WEEKS OUT, AND IT IS NOT WAITING ON A REBUILD. The .trivyignore
+# entries use short dates because an upstream base rebuild is a scheduled,
+# expected event. This one is waiting on an upstream release that may never
+# arrive, so the date is not a countdown to a fix — it is a prompt to re-ask a
+# different question: whether a glob stack neither of whose links has shipped in
+# a year is still worth carrying for a lint config and a component CLI. If this
+# entry reaches a
+# second extension, that is the signal the .trivyignore header gives for its own
+# entries, and the answer is to change the dependency rather than the date.
