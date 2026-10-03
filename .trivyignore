@@ -60,7 +60,7 @@
 # the entries that no longer match a finding in any image; those are the ones to
 # remove, along with their comment.
 
-# --- postgres:18.6 / debian 13.7 OS packages (finance-backup) ----------------
+# --- debian 13.7 OS packages (finance-backup, and pcre2 also finance-importer) -
 # This section replaces CVE-2026-14456, whose life ran exactly as its own
 # comment predicted and so is worth recording. It was suppressed because debian
 # had published 3.5.7-1~deb13u2 and no base rebuild carried it yet. The base has
@@ -80,13 +80,28 @@
 # there is no newer base to pull. Re-check the same URL before extending these
 # dates; a last_updated after 2026-10-03 means try a re-run first.
 #
-# NARROWER THAN THE ENTRY THEY REPLACE. CVE-2026-14456 was reported by all four
-# images. These three come from finance-backup alone; the other three scans
-# passed in the same run. So the widening the header warns about is live again,
-# and harmless only for as long as finance-app, finance-migrate and
-# finance-importer do not report these IDs. If one of them does, that is the
-# signal to split this into .trivy/<image>.trivyignore rather than let one
-# image's acceptance speak for four.
+# NARROWER THAN THE ENTRY THEY REPLACE, BUT NOT AS NARROW AS FIRST RECORDED.
+# This paragraph first said all three come from finance-backup alone and that
+# the other three scans passed. The second half was wrong, and the correction
+# is left visible because the mistake is the kind this file exists to prevent:
+# it came from reading only the tail of the job log, where finance-backup is
+# the last of the four scans, and inferring that the three scans above it had
+# passed. They had not. In the 2026-10-03 17:01 run finance-migrate reported 15
+# HIGH and finance-importer 3, and both failed; only finance-app was green.
+# Read every scan's summary, not the one next to the error.
+#
+# What is actually true of these three IDs. CVE-2026-75804 and CVE-2026-84782
+# are finance-backup's alone, so for those two the widening the header warns
+# about is live and harmless for as long as the other three images do not report
+# them. CVE-2026-103111 is not: finance-importer reported it too, against the
+# same libpcre2-8-0 and the same fixed version, so that entry covers two images
+# by necessity rather than by spillover — which is also why finance-importer's
+# debian findings went to zero in the 18:22 run. If an image that does not
+# report one of these starts to, that is the signal to split this into
+# .trivy/<image>.trivyignore rather than let one image's acceptance speak for
+# four.
+#
+# CVE-2026-14456, for comparison, was reported by all four.
 
 CVE-2026-75804 exp:2026-11-07
 # OpenSSL DoS through unenforced QUIC connection flow control. libssl3t64,
