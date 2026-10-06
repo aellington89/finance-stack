@@ -136,4 +136,25 @@ describe("DebtServiceSummary", () => {
     const footerTotal = screen.getByText("Total").closest("tr")!;
     expect(within(footerTotal).getByText("$1,000.00")).toBeInTheDocument();
   });
+
+  it("expands and collapses from the keyboard, reporting the state", async () => {
+    const user = userEvent.setup();
+    render(<DebtServiceSummary data={data} />);
+
+    // Tab rather than .focus(): being reachable by Tab is the point.
+    await user.tab();
+    const toggle = screen.getByRole("button", {
+      name: "Current Liability",
+      expanded: false,
+    });
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Credit Card")).toBeInTheDocument();
+
+    await user.keyboard(" ");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Credit Card")).not.toBeInTheDocument();
+  });
 });

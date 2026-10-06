@@ -24,6 +24,7 @@ import {
   makeTickFormatter,
   makeTooltipLabelFormatter,
 } from "@/components/charts/accounting-axis";
+import { TIME_GROUPING_LABELS } from "@/components/dashboard/accounting-filters";
 
 const COLORS = {
   income: "#2eb88a",
@@ -45,6 +46,10 @@ const TOOLTIP_LABELS: Record<string, string> = {
   totalInvestments: "Investments:",
 };
 
+// The visible card title is also the SVG's <title>, its accessible name, so
+// the two cannot drift (Issue #144).
+const TITLE = "Totals Over Time";
+
 
 
 
@@ -61,6 +66,9 @@ export function AccountingChart({ data, timeGrouping = "month", description }: A
   );
   const tickFormatter = makeTickFormatter(timeGrouping);
   const tooltipLabelFormatter = makeTooltipLabelFormatter(timeGrouping);
+  const groupingLabel = (
+    TIME_GROUPING_LABELS[timeGrouping] ?? timeGrouping
+  ).toLowerCase();
 
   const toggleMetric = (key: string) => {
     setVisibleMetrics((prev) => {
@@ -78,12 +86,17 @@ export function AccountingChart({ data, timeGrouping = "month", description }: A
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Totals Over Time</CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
         {description && <div className="mt-1">{description}</div>}
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-[5/2] w-full">
-          <AreaChart data={data} margin={{ left: 8, right: 8, bottom: 0 }}>
+          <AreaChart
+            data={data}
+            margin={{ left: 8, right: 8, bottom: 0 }}
+            title={TITLE}
+            desc={`Area chart of total income, expenses and investments, one point per ${groupingLabel}.`}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"

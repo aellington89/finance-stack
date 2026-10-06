@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AssetPerformanceTable } from "@/components/dashboard/asset-performance-table";
 import type { PerformanceData } from "@/lib/queries/assets-drilldown";
@@ -66,7 +66,13 @@ describe("AssetPerformanceTable", () => {
     const catRow = screen.getByTestId("row-cat:1");
     expect(catRow).toHaveTextContent("+$1,000.00");
     expect(catRow).toHaveTextContent("+10.00%");
-    expect(catRow.innerHTML).toContain("text-green-600");
+
+    // Icon and colour on the one element: Issue #144's "icon + colour".
+    for (const text of ["+$1,000.00", "+10.00%"]) {
+      const change = within(catRow).getByText(text);
+      expect(change).toHaveClass("text-green-600");
+      expect(change.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
+    }
   });
 
   it("drills from category to account type to account", async () => {
@@ -108,7 +114,29 @@ describe("AssetPerformanceTable", () => {
     );
 
     const catRow = screen.getByTestId("row-cat:1");
-    expect(catRow).toHaveTextContent("-$500.00");
-    expect(catRow.innerHTML).toContain("text-red-600");
+    const change = within(catRow).getByText("-$500.00");
+    expect(change).toHaveClass("text-red-600");
+    expect(change.querySelector("svg.lucide-trending-down")).toBeInTheDocument();
+  });
+
+  it("expands and collapses from the keyboard, reporting the state", async () => {
+    const user = userEvent.setup();
+    render(<AssetPerformanceTable data={data} />);
+
+    // Tab rather than .focus(): being reachable by Tab is the point.
+    await user.tab();
+    const toggle = screen.getByRole("button", {
+      name: "Current Asset",
+      expanded: false,
+    });
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Checking")).toBeInTheDocument();
+
+    await user.keyboard(" ");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Checking")).not.toBeInTheDocument();
   });
 });

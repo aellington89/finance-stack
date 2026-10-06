@@ -10,6 +10,7 @@ import { LiabilitiesTimeSeriesChart } from "@/components/charts/liabilities-time
 import { DebtWaterfallChart } from "@/components/charts/debt-waterfall-chart";
 import { DebtMixBreakdown } from "@/components/dashboard/debt-mix-breakdown";
 import { DebtServiceSummary } from "@/components/dashboard/debt-service-summary";
+import { TrendIcon } from "@/components/dashboard/signed-change";
 import { LiabilityPerformanceTable } from "@/components/dashboard/liability-performance-table";
 import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filter";
@@ -107,7 +108,13 @@ export default async function LiabilitiesDrilldownPage({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Period Change</CardTitle>
+            {/* The direction icon sits in the title row, not beside the
+                figure: at text-5xl in a quarter-width card there is no room
+                for it on the figure's line (Issue #144). */}
+            <CardTitle className="flex items-center justify-between">
+              <span>Period Change</span>
+              <TrendIcon value={performance.totalChange} className="size-5" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <span

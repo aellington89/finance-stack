@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LiabilityPerformanceTable } from "@/components/dashboard/liability-performance-table";
 import type { LiabilityPerformanceData } from "@/lib/queries/liabilities-drilldown";
@@ -97,14 +97,38 @@ describe("LiabilityPerformanceTable", () => {
     const cells = screen.getByTestId("row-type:5:15").querySelectorAll("td");
     expect(cells[3]).toHaveTextContent("—");
     expect(cells[3].textContent).not.toContain("%");
+    // And no trend icon: there is no direction to show.
+    expect(cells[3].querySelector("svg")).toBeNull();
   });
 
   it("colours a paydown as a gain and shows the signed change", () => {
     render(<LiabilityPerformanceTable data={data} />);
 
     const catRow = screen.getByTestId("row-cat:5");
-    expect(catRow).toHaveTextContent("+$1,000.00");
-    expect(catRow.innerHTML).toContain("text-green-600");
+    const change = within(catRow).getByText("+$1,000.00");
+    expect(change).toHaveClass("text-green-600");
+    expect(change.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
+  });
+
+  it("expands and collapses from the keyboard, reporting the state", async () => {
+    const user = userEvent.setup();
+    render(<LiabilityPerformanceTable data={data} />);
+
+    // Tab rather than .focus(): being reachable by Tab is the point.
+    await user.tab();
+    const toggle = screen.getByRole("button", {
+      name: "Current Liability",
+      expanded: false,
+    });
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Credit Card")).toBeInTheDocument();
+
+    await user.keyboard(" ");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Credit Card")).not.toBeInTheDocument();
   });
 
   it("renders each row only once across repeated renders in one file", () => {

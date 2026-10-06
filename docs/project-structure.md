@@ -104,8 +104,8 @@ finance-stack/
 │   │   │   ├── date-range-macros.ts      # Saved Quick Select macros: types, built-in defaults, localStorage helpers
 │   │   │   └── input-group.tsx           # Input with inline prefix/suffix slot (custom)
 │   │   ├── charts/                       # Chart components (client components)
-│   │   │   ├── accounting-chart.tsx      # Time-series area chart for income/expenses/investments (Chart.js)
-│   │   │   ├── expenses-category-chart.tsx # Donut chart for expense category breakdown (Chart.js)
+│   │   │   ├── accounting-chart.tsx      # Time-series area chart for income/expenses/investments (Recharts)
+│   │   │   ├── expenses-category-chart.tsx # Donut chart for expense category breakdown (Recharts)
 │   │   │   ├── work-expenses-chart.tsx   # Grouped bar chart for work expenses vs reimbursements over time
 │   │   │   ├── net-worth-chart.tsx       # Reusable time-series line chart (Recharts)
 │   │   │   ├── waterfall-chart.tsx       # Net worth waterfall analysis chart (Recharts)
@@ -117,7 +117,7 @@ finance-stack/
 │   │   │   ├── debt-waterfall-chart.tsx  # Debt waterfall (Start → Payments → Interest → Other → End) (Recharts)
 │   │   │   └── gauge-badge.tsx           # Custom SVG semicircular gauge with range segments
 │   │   ├── accounts/                     # Accounts page components
-│   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse; exports amountColorClass()
+│   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse
 │   │   │   ├── accounts-by-category.tsx  # Grouped card view: Assets (2x2) + Liabilities, with per-type + icon
 │   │   │   ├── account-form.tsx          # Create/edit account form with combobox type selector
 │   │   │   └── delete-account-dialog.tsx # Delete confirmation dialog with transaction check
@@ -139,7 +139,9 @@ finance-stack/
 │   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
 │   │   │   ├── liability-performance-table.tsx # Expandable liability performance table (category → account type → account)
 │   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type (current vs. long-term)
-│   │   │   └── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
+│   │   │   ├── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
+│   │   │   ├── expand-toggle.tsx         # Disclosure button for an expandable table row: aria-expanded, Tab/Enter/Space (#144)
+│   │   │   └── signed-change.tsx         # SignedChange: a gain/loss in green/red with a trend icon, so direction is not colour-only; TrendIcon: the icon alone (#144)
 │   │   └── transactions/                 # Transaction-specific components
 │   │       ├── transaction-form.tsx      # Transaction entry form (client component)
 │   │       ├── transaction-list.tsx      # Sortable transaction table with inline edit + delete (client component)

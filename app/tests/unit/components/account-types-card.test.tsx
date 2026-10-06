@@ -66,6 +66,19 @@ describe("AccountTypesCard", () => {
     expect(screen.getByText("Checking")).toBeInTheDocument();
   });
 
+  it("reports whether each group is expanded", async () => {
+    const user = userEvent.setup();
+    render(<AccountTypesCard {...props} />);
+
+    // Groups start open, so the button starts out expanded.
+    const group = screen.getByRole("button", {
+      name: "Current Asset",
+      expanded: true,
+    });
+    await user.click(group);
+    expect(group).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("offers edit and delete per type", () => {
     render(<AccountTypesCard {...props} />);
     expect(screen.getByRole("button", { name: "Edit Checking" })).toBeInTheDocument();

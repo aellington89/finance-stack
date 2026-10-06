@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
 import type { DebtServiceData } from "@/lib/queries/liabilities-drilldown";
 import {
   Card,
@@ -18,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ExpandToggle } from "@/components/dashboard/expand-toggle";
 import { formatCurrency } from "@/lib/format/financial";
 
 const formatPctOfPayment = (numerator: number, payments: number) =>
@@ -133,7 +133,6 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                   {data.categories.map((cat) => {
                     const catKey = `cat:${cat.categoryId}`;
                     const catOpen = expanded.has(catKey);
-                    const Chevron = catOpen ? ChevronDown : ChevronRight;
                     return (
                       <Fragment key={catKey}>
                         <TableRow
@@ -143,10 +142,12 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                           data-testid={`row-${catKey}`}
                         >
                           <TableCell className="text-muted-foreground">
-                            <span className="inline-flex items-center gap-1">
-                              <Chevron className="h-4 w-4" />
+                            <ExpandToggle
+                              expanded={catOpen}
+                              onToggle={() => toggle(catKey)}
+                            >
                               {cat.categoryName}
-                            </span>
+                            </ExpandToggle>
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {formatCurrency(cat.totalPayments)}
@@ -174,9 +175,6 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                           cat.accountTypes.map((type) => {
                             const typeKey = `type:${cat.categoryId}:${type.accountTypeId}`;
                             const typeOpen = expanded.has(typeKey);
-                            const TypeChevron = typeOpen
-                              ? ChevronDown
-                              : ChevronRight;
                             return (
                               <Fragment key={typeKey}>
                                 <TableRow
@@ -186,10 +184,12 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                                   data-testid={`row-${typeKey}`}
                                 >
                                   <TableCell className="text-muted-foreground pl-8">
-                                    <span className="inline-flex items-center gap-1">
-                                      <TypeChevron className="h-4 w-4" />
+                                    <ExpandToggle
+                                      expanded={typeOpen}
+                                      onToggle={() => toggle(typeKey)}
+                                    >
                                       {type.accountTypeName}
-                                    </span>
+                                    </ExpandToggle>
                                   </TableCell>
                                   <TableCell className="text-right tabular-nums">
                                     {formatCurrency(type.totalPayments)}

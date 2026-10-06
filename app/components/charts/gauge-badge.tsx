@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 /**
  * Semi-circular gauge with colored range segments and a triangle pointer.
@@ -80,6 +80,7 @@ export function GaugeBadge({
       <div style={{ width: SVG_W, height: SVG_H }}>
         {mounted && (
           <GaugeSVG
+            title={title}
             value={value}
             min={min}
             max={max}
@@ -94,6 +95,7 @@ export function GaugeBadge({
 }
 
 function GaugeSVG({
+  title,
   value,
   min,
   max,
@@ -101,6 +103,7 @@ function GaugeSVG({
   label,
   valueColor,
 }: {
+  title: string;
   value: number;
   min: number;
   max: number;
@@ -108,6 +111,12 @@ function GaugeSVG({
   label: string;
   valueColor: string;
 }) {
+  // An image with a name (Issue #144). The <title> carries the reading as well
+  // as the metric, because role="img" makes the <text> inside presentational.
+  // aria-labelledby repeats what SVG-AAM already derives from a first-child
+  // <title>, for the screen readers that do not.
+  const titleId = useId();
+
   function valToAngle(v: number) {
     const clamped = Math.max(min, Math.min(max, v));
     const ratio = (clamped - min) / (max - min);
@@ -137,7 +146,16 @@ function GaugeSVG({
   const pointerPath = `M ${tip.x} ${tip.y} L ${baseL.x} ${baseL.y} L ${baseRt.x} ${baseRt.y} Z`;
 
   return (
-    <svg width={SVG_W} height={SVG_H} viewBox={VB} className="overflow-visible">
+    <svg
+      width={SVG_W}
+      height={SVG_H}
+      viewBox={VB}
+      className="overflow-visible"
+      role="img"
+      aria-labelledby={titleId}
+    >
+      <title id={titleId}>{`${title}: ${label}`}</title>
+      <desc>{`Gauge on a scale from ${min} to ${max}.`}</desc>
       {/* Background track */}
       <path
         d={arc(Math.PI, 0)}

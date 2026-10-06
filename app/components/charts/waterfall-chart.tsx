@@ -30,6 +30,12 @@ const chartConfig: ChartConfig = {
   value: { label: "Change", color: COLORS.neutral },
 };
 
+// The visible card title is also the SVG's <title>, its accessible name, so
+// the two cannot drift; the <desc> says what is plotted (Issue #144).
+const TITLE = "Net Worth Waterfall";
+const DESCRIPTION =
+  "Bar chart bridging net worth from the start to the end of the selected range, with one bar for each account category that changed.";
+
 interface WaterfallChartProps {
   data: WaterfallData;
 }
@@ -43,13 +49,16 @@ export function WaterfallChart({ data }: WaterfallChartProps) {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">
-          Net Worth Waterfall
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
         <ChartContainer config={chartConfig} className="min-h-0 flex-1 w-full">
-          <BarChart data={bars} margin={{ left: 8, right: 8 }}>
+          <BarChart
+            data={bars}
+            margin={{ left: 8, right: 8 }}
+            title={TITLE}
+            desc={DESCRIPTION}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="name"
