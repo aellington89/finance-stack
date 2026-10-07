@@ -31,6 +31,12 @@ const CATEGORY_COLORS: Record<number, string> = {
 };
 
 
+// The visible card title is also the SVG's <title>, its accessible name, so
+// the two cannot drift; the <desc> says what is plotted (Issue #144).
+const TITLE = "Assets Over Time (by category)";
+const DESCRIPTION =
+  "Stacked area chart of asset balances across the selected date range, one band per account category.";
+
 interface AssetsTimeSeriesChartProps {
   decomposition: AssetDecompositionPoint[];
 }
@@ -52,9 +58,7 @@ export function AssetsTimeSeriesChart({
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">
-          Assets Over Time (by category)
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
         {isEmpty ? (
@@ -63,7 +67,12 @@ export function AssetsTimeSeriesChart({
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="min-h-0 flex-1 w-full">
-            <AreaChart data={rows} margin={{ left: 8, right: 8 }}>
+            <AreaChart
+              data={rows}
+              margin={{ left: 8, right: 8 }}
+              title={TITLE}
+              desc={DESCRIPTION}
+            >
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="date"

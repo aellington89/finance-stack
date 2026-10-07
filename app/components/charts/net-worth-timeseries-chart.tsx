@@ -37,6 +37,19 @@ const PALETTE = [
 
 type Mode = "net-worth" | "category" | "account-type" | "account";
 
+const TITLE = "Net Worth Over Time";
+
+// The chart's <desc> (Issue #144): what is plotted, which the mode changes.
+const MODE_DESCRIPTIONS: Record<Mode, string> = {
+  "net-worth": "Line chart of net worth across the selected date range.",
+  category:
+    "Line chart of net worth split into one line per account category, across the selected date range.",
+  "account-type":
+    "Line chart of net worth split into one line per account type, across the selected date range.",
+  account:
+    "Line chart of net worth split into one line per account, across the selected date range.",
+};
+
 
 interface NetWorthTimeSeriesChartProps {
   timeSeries: TimeSeriesPoint[];
@@ -99,9 +112,7 @@ export function NetWorthTimeSeriesChart({
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="text-sm font-medium">
-          Net Worth Over Time
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
         <div className="flex gap-1 rounded-md border p-0.5 text-xs">
           {(
             [
@@ -128,7 +139,12 @@ export function NetWorthTimeSeriesChart({
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
         <ChartContainer config={chartConfig} className="min-h-0 flex-1 w-full">
-          <LineChart data={chartData} margin={{ left: 8, right: 8 }}>
+          <LineChart
+            data={chartData}
+            margin={{ left: 8, right: 8 }}
+            title={TITLE}
+            desc={MODE_DESCRIPTIONS[mode]}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"

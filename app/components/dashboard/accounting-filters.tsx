@@ -39,7 +39,7 @@ const TIME_GROUPING_OPTIONS = [
   { value: "quarter_of_year", label: "Quarter of Year" },
 ] as const;
 
-const TIME_GROUPING_LABELS: Record<string, string> = Object.fromEntries(
+export const TIME_GROUPING_LABELS: Record<string, string> = Object.fromEntries(
   TIME_GROUPING_OPTIONS.map(({ value, label }) => [value, label])
 );
 

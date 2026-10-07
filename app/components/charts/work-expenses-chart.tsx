@@ -41,6 +41,12 @@ const TOOLTIP_LABELS: Record<string, string> = {
   totalReimbursements: "Reimbursements:",
 };
 
+// The visible card title is also the SVG's <title>, its accessible name, so
+// the two cannot drift; the <desc> says what is plotted (Issue #144).
+const TITLE = "Expenses vs Reimbursements Over Time";
+const DESCRIPTION =
+  "Bar chart of work expenses and reimbursements, one pair of bars per month.";
+
 interface WorkExpensesChartProps {
   data: WorkExpenseTimeSeriesPoint[];
   description?: React.ReactNode;
@@ -66,12 +72,17 @@ export function WorkExpensesChart({ data, description }: WorkExpensesChartProps)
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Expenses vs Reimbursements Over Time</CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
         {description && <div className="mt-1">{description}</div>}
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-[5/2] w-full">
-          <BarChart data={data} margin={{ left: 8, right: 8, bottom: 0 }}>
+          <BarChart
+            data={data}
+            margin={{ left: 8, right: 8, bottom: 0 }}
+            title={TITLE}
+            desc={DESCRIPTION}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"

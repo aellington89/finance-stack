@@ -30,6 +30,12 @@ const chartConfig: ChartConfig = {
   value: { label: "Change", color: COLORS.neutral },
 };
 
+// The visible card title is also the SVG's <title>, its accessible name, so
+// the two cannot drift; the <desc> says what is plotted (Issue #144).
+const TITLE = "Debt Waterfall";
+const DESCRIPTION =
+  "Bar chart bridging total liabilities from the start to the end of the selected range through payments, interest and other changes.";
+
 interface DebtWaterfallChartProps {
   data: DebtWaterfallData;
 }
@@ -44,7 +50,7 @@ export function DebtWaterfallChart({ data }: DebtWaterfallChartProps) {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Debt Waterfall</CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
         {isEmpty ? (
@@ -53,7 +59,12 @@ export function DebtWaterfallChart({ data }: DebtWaterfallChartProps) {
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="min-h-0 flex-1 w-full">
-            <BarChart data={bars} margin={{ left: 8, right: 8 }}>
+            <BarChart
+              data={bars}
+              margin={{ left: 8, right: 8 }}
+              title={TITLE}
+              desc={DESCRIPTION}
+            >
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="name"

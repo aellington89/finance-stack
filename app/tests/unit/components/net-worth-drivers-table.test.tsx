@@ -58,16 +58,21 @@ describe("NetWorthDriversTable", () => {
     expect(screen.getByText("Current Liability")).toBeInTheDocument();
   });
 
-  it("signs the change and colours gains and losses differently", () => {
+  it("signs the change and pairs each colour with a trend icon", () => {
     render(<NetWorthDriversTable data={data} />);
 
-    const gain = screen.getByText("Current Asset").closest("tr")!;
-    expect(within(gain).getByText("+$5,000.00")).toBeInTheDocument();
-    expect(gain.innerHTML).toContain("text-green-600");
+    // Icon and colour on the one element: Issue #144's "icon + colour".
+    const gain = within(row("Current Asset")).getByText("+$5,000.00");
+    expect(gain).toHaveClass("text-green-600");
+    expect(gain.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
 
-    const loss = screen.getByText("Current Liability").closest("tr")!;
-    expect(within(loss).getByText("-$1,000.00")).toBeInTheDocument();
-    expect(loss.innerHTML).toContain("text-red-600");
+    const loss = within(row("Current Liability")).getByText("-$1,000.00");
+    expect(loss).toHaveClass("text-red-600");
+    expect(loss.querySelector("svg.lucide-trending-down")).toBeInTheDocument();
+
+    // The shares are signed changes too, so they carry the icon as well.
+    const share = within(row("Current Liability")).getByText("-25.00%");
+    expect(share.querySelector("svg.lucide-trending-down")).toBeInTheDocument();
   });
 
   it("renders a share over 100% as-is rather than clamping it", () => {
@@ -97,6 +102,54 @@ describe("NetWorthDriversTable", () => {
     await user.click(row("Current Asset"));
     await user.click(row("Current Asset"));
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
+  });
+
+  it("expands and collapses from the keyboard, reporting the state", async () => {
+    const user = userEvent.setup();
+    render(<NetWorthDriversTable data={data} />);
+
+    // Tab rather than .focus(): being reachable by Tab is the point.
+    await user.tab();
+    const category = screen.getByRole("button", {
+      name: "Current Asset",
+      expanded: false,
+    });
+    expect(category).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(category).toHaveAttribute("aria-expanded", "true");
+    expect(category).toHaveFocus();
+
+    // The rows just revealed come next in the tab order.
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Checking" })).toHaveFocus();
+
+    await user.tab({ shift: true });
+    await user.keyboard(" ");
+    expect(category).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Checking")).not.toBeInTheDocument();
+  });
+
+  it("toggles once when the button itself is clicked, not once per handler", async () => {
+    // The row has its own onClick. If the button's click reached it too, the
+    // two toggles would cancel out and the row would never open.
+    const user = userEvent.setup();
+    render(<NetWorthDriversTable data={data} />);
+
+    await user.click(screen.getByRole("button", { name: "Current Asset" }));
+    expect(screen.getByText("Checking")).toBeInTheDocument();
+  });
+
+  it("puts a toggle on every row that expands and on no leaf", async () => {
+    const user = userEvent.setup();
+    render(<NetWorthDriversTable data={data} />);
+
+    await user.click(row("Current Asset"));
+    await user.click(row("Checking"));
+
+    // Two categories and one account type; the account row is a leaf.
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+    expect(within(row("Everyday")).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("shows the net total in the footer", () => {
