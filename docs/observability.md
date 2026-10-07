@@ -263,9 +263,12 @@ If you change this, keep that property: **nothing in the capture path may take
 Beyond the redaction argument, the cost is specific and local:
 
 - `@sentry/nextjs` pulls the OpenTelemetry package set into *production*
-  dependencies, and both `npm audit` gates block on HIGH with no per-advisory
-  allowlist ([CI gates](../CONTRIBUTING.md#ci-gates)). A HIGH anywhere in that
-  tree is a red gate with no escape hatch.
+  dependencies, where both `npm audit` gates block on HIGH
+  ([CI gates](../CONTRIBUTING.md#ci-gates)). There is a per-advisory allowlist
+  now, but it does not soften this: a bare entry covers the build-time gate
+  only, so a HIGH in that tree needs an explicit `runtime` suppression saying
+  why shipping it to users is acceptable — a decision per advisory, on a tree
+  this app does not otherwise need.
 - The same tree becomes Trivy-scannable surface in two images.
 - It needs a `register()` export `instrumentation.ts` does not have,
   `withSentryConfig` around `next.config.ts`, and a `SENTRY_AUTH_TOKEN` build

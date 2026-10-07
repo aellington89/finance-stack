@@ -231,9 +231,14 @@ CRITICAL advisory:
 
 ```sh
 cd app
-npm audit --omit=dev --audit-level=high   # runtime — ships inside the image
-npm audit --audit-level=high              # the full tree, dev deps included
+npm run check:audit -- --runtime   # runtime — ships inside the image
+npm run check:audit                # the full tree, dev deps included
 ```
+
+Both wrap `npm audit` with the per-advisory allowlist in
+[`app/.audit-allowlist`](app/.audit-allowlist) — same HIGH/CRITICAL gate,
+plus step 3 below. They fail closed: an audit report the gate cannot parse is
+an error, never a clean tree.
 
 The second subsumes the first, and the split is kept because *which one* goes
 red is the diagnosis. Runtime red means the advisory ships to users; build-time
@@ -252,16 +257,46 @@ red means it is confined to the toolchain. Same fix procedure, different urgency
    to `overrides` in `app/package.json` **and** explain it in the `//overrides`
    note alongside. The note is not optional; an unexplained override is
    indistinguishable from a stale one.
-3. **There is no third option yet.** If an advisory has no fix at all — `npm
-   audit` says a fix requires a breaking downgrade, or names no fix — the gate
-   goes red and stays red. `npm audit` has no per-advisory allowlist, so there
-   is no equivalent of [`.trivyignore`](.trivyignore) here. Raise it rather than
-   working around it: the answer is either dropping the dependency or building
-   that allowlist, and both are decisions worth making deliberately.
+3. **Suppress, with an expiry.** If an advisory has no fix at all — `npm audit`
+   names no fix, or offers one only as a breaking downgrade — add a dated,
+   justified entry to [`app/.audit-allowlist`](app/.audit-allowlist). The file
+   documents the required format, which is deliberately
+   [`.trivyignore`](.trivyignore)'s: an ID, a reason, and an `exp:` date.
+
+   This is the option that used to read "there is no third option yet", and the
+   caveat that sentence carried still applies — it is a last resort, not a first
+   one. Work steps 1 and 2 first and say what you found. Issue #194 sat open for
+   months on the belief that the eslint dev tree needed `eslint@10`, when four of
+   its HIGH advisories were cleared by a plain lockfile refresh.
+
+   Two things are worth knowing before writing an entry. **One entry is one
+   advisory, not one package** — npm reports a package as vulnerable both when
+   an advisory names it and when it only depends on something vulnerable, so one
+   entry clears every package that inherits it while a *new* advisory against
+   any of them still goes red. And **a bare entry covers the build-time gate
+   only**: suppressing something in the shipped tree takes an explicit `runtime`
+   marker on the line, because "it ships to users" is a different decision from
+   "it is confined to the toolchain", and that difference should not be crossed
+   by omission.
+
+**Stale entries are reported, not enforced**, exactly as for the image gate.
+Nothing removes an entry when the advisory is finally fixed upstream — it stops
+being reported and the line stays, inert. So the build-time step ends by naming
+every entry that no longer matches anything, as warnings, and **it never fails
+the build**: a stale entry is not a vulnerability, and a gate that goes red for
+tidiness is a gate people stop reading. That reporting is on the build-time step
+alone because the full tree is a strict superset of the runtime one, so an entry
+unused there is unused everywhere. Unlike
+[`scripts/check-trivy-suppressions.sh`](scripts/check-trivy-suppressions.sh),
+a local verdict here is trustworthy: it reads `package-lock.json`, the same file
+CI reads, not a base image whose cached layer may be weeks stale.
 
 Run the audits before pushing. A red gate on `master` is inherited by every open
 Dependabot PR, which is exactly the state in which a real regression on one of
-them gets waved through as "the usual red".
+them gets waved through as "the usual red". PR #352 is the worked example: it
+sat on an inherited red whose ten HIGH advisories had nothing to do with its own
+diff, two of them clearing on a lockfile refresh and the other eight all tracing
+to one unfixable advisory.
 
 ### Image scan gate
 
@@ -298,9 +333,13 @@ the other three's findings in the same run rather than across four.
    [`.trivyignore`](.trivyignore) — the file documents the required format. Note
    that one file backs all four scans, so an entry silences its CVE everywhere.
    It is no longer empty: turning the gate on for the other three images required
-   seeding ten base-image and bundled-tooling findings, and it currently holds
-   fourteen. Read those before adding a fifteenth — yours may already be covered,
-   as three of the four added in
+   seeding ten base-image and bundled-tooling findings. It peaked at fourteen,
+   and holds ten today — [#303](https://github.com/aellington89/finance-stack/issues/303)
+   deleted eight that had gone stale, three debian 13.7 entries replaced the one
+   OpenSSL entry that went stale after them, three more cover the brace-expansion
+   and undici copies that npm itself vendors, and the two `python:3.14-slim`
+   entries went when the importer image stopped shipping pip. Read those before
+   adding an eleventh — yours may already be covered, as three of the four added in
    [#291](https://github.com/aellington89/finance-stack/issues/291) were by an
    entry already sitting there for the same fixed version.
 
