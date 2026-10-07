@@ -61,8 +61,14 @@ jobs:
       # Issue #131. Runtime dependencies: everything here ships inside the image.
       # `overrides` in package.json lift next's vendored postcss/sharp, which is
       # what keeps this green.
+      #
+      # `npm run check:audit` rather than `npm audit` since #352: same HIGH and
+      # CRITICAL gate, plus the per-advisory allowlist in app/.audit-allowlist.
+      # A bare allowlist entry does NOT cover this step — reaching the shipped
+      # tree takes an explicit `runtime` marker, because "it ships to users" is a
+      # different decision from "it is confined to the toolchain".
       - name: Dependency audit (runtime)
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run check:audit -- --runtime
 
       # Issue #194. The full tree, dev dependencies included. This step spent
       # its first months as `continue-on-error` because the eslint 9 dev
@@ -79,11 +85,25 @@ jobs:
       # ships to users and usually needs an `overrides` entry; build-time red
       # means it is a dev-tree bump. Merging them would cost a local re-run with
       # --omit=dev to learn the same thing. CONTRIBUTING.md carries the fix
-      # procedure, including what to do about an advisory with no fix at all —
-      # npm audit has no per-advisory allowlist, so unlike .trivyignore there is
-      # no escape hatch here yet.
+      # procedure.
+      #
+      # That procedure used to end with "there is no third option yet": an
+      # advisory with no fix at all took the gate red and kept it there, because
+      # npm audit has no per-advisory allowlist. #352 built the one
+      # CONTRIBUTING.md named as the deliberate alternative, so this now runs
+      # `npm run check:audit` — app/scripts/audit-allowlist-core.ts for the
+      # mechanism, app/.audit-allowlist for the entries and their justifications.
+      # It reached that point on `braces` GHSA-vfj7-8cjw-p6xm, affected range
+      # <=3.0.3 with 3.0.3 the newest version published.
+      #
+      # This step also reports allowlist entries that have stopped matching
+      # anything, as warnings and never failures, which is why that reporting
+      # lives here rather than in the runtime step: the full tree is a strict
+      # superset of the runtime one, so an entry unused here is unused
+      # everywhere, while an entry checked only against the runtime tree would
+      # look stale whenever it is doing its job in the dev tree.
       - name: Dependency audit (build-time)
-        run: npm audit --audit-level=high
+        run: npm run check:audit
 
       # Issues #130, #225. CI's postgres service is a bare image — it runs no
       # initdb hook and never runs the migrate job — so stand the cluster up with
