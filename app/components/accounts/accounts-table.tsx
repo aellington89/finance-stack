@@ -1,12 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
-} from "lucide-react";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react";
 
 import {
   Card,
@@ -21,6 +16,7 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
+import { ExpandToggle } from "@/components/dashboard/expand-toggle";
 import { cn } from "@/lib/utils";
 import { amountColorClass } from "@/lib/format/financial";
 import type { AccountBalanceRow } from "@/lib/queries/accounts";
@@ -310,16 +306,16 @@ function CategoryRows({
         onClick={() => onToggle(category.category)}
       >
         <TableCell className="py-2">
-          <div className="flex items-center gap-1.5">
-            {isCategoryExpanded ? (
-              <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-            )}
+          <ExpandToggle
+            expanded={isCategoryExpanded}
+            onToggle={() => onToggle(category.category)}
+            className="gap-1.5"
+            chevronClassName="text-muted-foreground"
+          >
             <span className="font-bold text-base uppercase tracking-wide">
               {category.category}
             </span>
-          </div>
+          </ExpandToggle>
         </TableCell>
         <TableCell
           className={cn(
@@ -360,14 +356,14 @@ function AccountTypeRows({
     <>
       <TableRow className="cursor-pointer" onClick={onToggle}>
         <TableCell className="pl-4">
-          <div className="flex items-center gap-1.5">
-            {isExpanded ? (
-              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            )}
+          <ExpandToggle
+            expanded={isExpanded}
+            onToggle={onToggle}
+            className="gap-1.5"
+            chevronClassName="size-3.5 text-muted-foreground"
+          >
             <span className="font-medium">{group.accountType}</span>
-          </div>
+          </ExpandToggle>
         </TableCell>
         <TableCell
           className={cn(

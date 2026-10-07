@@ -263,6 +263,9 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#148](https://github.com/aellington89/finance-stack/issues/148) Replace window.confirm() in transaction-list.tsx
 - ✅ [#251](https://github.com/aellington89/finance-stack/issues/251) Debt Waterfall: axis scale dominated by total balance makes period changes unreadable
 - ✅ [#321](https://github.com/aellington89/finance-stack/issues/321) New Transaction form: long formatted dates overflow the Date input *(new)*
+- [#356](https://github.com/aellington89/finance-stack/issues/356) Liabilities KPI figures are cut off at 1440px and narrower *(new — from #144)*
+- [#357](https://github.com/aellington89/finance-stack/issues/357) Gain text (text-green-600) fails WCAG AA contrast *(new — from #144)*
+- [#358](https://github.com/aellington89/finance-stack/issues/358) Accessibility: fix the remaining axe violations (unnamed filter, protected-row tooltip, landmarks) *(new — from #144)*
 
 ### Phase 6 — Features
 - [#136](https://github.com/aellington89/finance-stack/issues/136) Budgets + spending caps

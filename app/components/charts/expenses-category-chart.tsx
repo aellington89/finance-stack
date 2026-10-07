@@ -34,6 +34,10 @@ const SLICE_COLORS = [
 ];
 const OTHER_COLOR = "#6b7280";
 
+// The SVG's <desc>; its <title> is the card title prop (Issue #144).
+const DESCRIPTION =
+  "Donut chart of totals by category, showing the ten largest and grouping any others as Other.";
+
 interface ExpensesCategoryChartProps {
   data: CategoryBreakdown[];
   title?: string;
@@ -75,7 +79,7 @@ export function ExpensesCategoryChart({ data, title = "Total Expenses by Categor
           config={chartConfig}
           className="aspect-[4/3] w-full"
         >
-          <PieChart>
+          <PieChart title={title} desc={DESCRIPTION}>
             <ChartTooltip
               content={
                 <ChartTooltipContent

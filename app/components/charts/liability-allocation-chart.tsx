@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { ResponsiveContainer, Tooltip, Treemap } from "recharts";
 import type { LiabilityAllocationData } from "@/lib/queries/liabilities-drilldown";
 import {
@@ -151,9 +151,16 @@ function TreemapTooltip({
   );
 }
 
+// The visible card title is also the image's accessible name, so the two
+// cannot drift; the description says what is plotted (Issue #144).
+const TITLE = "Liability Allocation";
+const DESCRIPTION =
+  "Treemap of liability balances by account type, each tile sized by its balance and grouped by account category.";
+
 export function LiabilityAllocationChart({
   data,
 }: LiabilityAllocationChartProps) {
+  const descId = useId();
   // Treemap tile size must be a positive number, but liability balances are
   // negative. Use the absolute value for `size` (controls tile area) and
   // surface the raw signed value separately for labels and tooltips.
@@ -181,9 +188,7 @@ export function LiabilityAllocationChart({
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">
-          Liability Allocation
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{TITLE}</CardTitle>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="min-h-0 flex-1">
@@ -192,18 +197,35 @@ export function LiabilityAllocationChart({
               No liability balances in the selected range.
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <Treemap
-                data={treeData}
-                dataKey="size"
-                nameKey="name"
-                stroke="#fff"
-                isAnimationActive={false}
-                content={<TreemapContent />}
-              >
-                <Tooltip content={<TreemapTooltip />} />
-              </Treemap>
-            </ResponsiveContainer>
+            // recharts' Treemap drops `title` and `desc`: neither is in the
+            // SVG prop allowlist it filters its props through, and its types
+            // do not declare them. So the name goes on a wrapper, the way the
+            // liquidity and debt-mix bars are named. A treemap has no
+            // accessibility layer, so nothing inside the image is focusable.
+            // The description is `hidden` rather than sr-only so a screen
+            // reader does not also read it as page text (Issue #144).
+            <div
+              role="img"
+              aria-label={TITLE}
+              aria-describedby={descId}
+              className="h-full"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <Treemap
+                  data={treeData}
+                  dataKey="size"
+                  nameKey="name"
+                  stroke="#fff"
+                  isAnimationActive={false}
+                  content={<TreemapContent />}
+                >
+                  <Tooltip content={<TreemapTooltip />} />
+                </Treemap>
+              </ResponsiveContainer>
+              <p id={descId} hidden>
+                {DESCRIPTION}
+              </p>
+            </div>
           )}
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">

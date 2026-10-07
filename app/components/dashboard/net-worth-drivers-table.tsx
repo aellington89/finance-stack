@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
 import type { DriversData } from "@/lib/queries/net-worth-drilldown";
 import {
   Table,
@@ -13,27 +12,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/format/financial";
-
-function signedCurrency(n: number): string {
-  const formatted = formatCurrency(Math.abs(n));
-  if (n > 0) return `+${formatted}`;
-  if (n < 0) return `-${formatted}`;
-  return formatted;
-}
-
-function signedPercent(n: number): string {
-  const abs = Math.abs(n).toFixed(2);
-  if (n > 0) return `+${abs}%`;
-  if (n < 0) return `-${abs}%`;
-  return `${abs}%`;
-}
-
-function valueColor(n: number): string {
-  if (n > 0) return "text-green-600 dark:text-green-400";
-  if (n < 0) return "text-red-600 dark:text-red-400";
-  return "";
-}
+import { ExpandToggle } from "@/components/dashboard/expand-toggle";
+import { SignedChange } from "@/components/dashboard/signed-change";
+import { signedCurrency, signedPercent } from "@/lib/format/financial";
 
 interface NetWorthDriversTableProps {
   data: DriversData;
@@ -97,7 +78,6 @@ export function NetWorthDriversTable({ data }: NetWorthDriversTableProps) {
             {data.categories.map((cat) => {
               const catKey = `cat:${cat.categoryId}`;
               const catOpen = expanded.has(catKey);
-              const Chevron = catOpen ? ChevronDown : ChevronRight;
               return (
                 <Fragment key={catKey}>
                   <TableRow
@@ -106,32 +86,31 @@ export function NetWorthDriversTable({ data }: NetWorthDriversTableProps) {
                     onClick={() => toggle(catKey)}
                   >
                     <TableCell className="text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <Chevron className="h-4 w-4" />
+                      <ExpandToggle
+                        expanded={catOpen}
+                        onToggle={() => toggle(catKey)}
+                      >
                         {cat.categoryName}
-                      </span>
+                      </ExpandToggle>
                     </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${valueColor(cat.change)}`}
-                    >
-                      {signedCurrency(cat.change)}
+                    <TableCell className="text-right tabular-nums">
+                      <SignedChange value={cat.change}>
+                        {signedCurrency(cat.change)}
+                      </SignedChange>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       —
                     </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${valueColor(cat.percentOfTotal)}`}
-                    >
-                      {signedPercent(cat.percentOfTotal)}
+                    <TableCell className="text-right tabular-nums">
+                      <SignedChange value={cat.percentOfTotal}>
+                        {signedPercent(cat.percentOfTotal)}
+                      </SignedChange>
                     </TableCell>
                   </TableRow>
                   {catOpen &&
                     cat.accountTypes.map((type) => {
                       const typeKey = `type:${cat.categoryId}:${type.accountTypeId}`;
                       const typeOpen = expanded.has(typeKey);
-                      const TypeChevron = typeOpen
-                        ? ChevronDown
-                        : ChevronRight;
                       return (
                         <Fragment key={typeKey}>
                           <TableRow
@@ -140,25 +119,27 @@ export function NetWorthDriversTable({ data }: NetWorthDriversTableProps) {
                             onClick={() => toggle(typeKey)}
                           >
                             <TableCell className="text-muted-foreground pl-8">
-                              <span className="inline-flex items-center gap-1">
-                                <TypeChevron className="h-4 w-4" />
+                              <ExpandToggle
+                                expanded={typeOpen}
+                                onToggle={() => toggle(typeKey)}
+                              >
                                 {type.accountTypeName}
-                              </span>
+                              </ExpandToggle>
                             </TableCell>
-                            <TableCell
-                              className={`text-right tabular-nums ${valueColor(type.change)}`}
-                            >
-                              {signedCurrency(type.change)}
+                            <TableCell className="text-right tabular-nums">
+                              <SignedChange value={type.change}>
+                                {signedCurrency(type.change)}
+                              </SignedChange>
                             </TableCell>
-                            <TableCell
-                              className={`text-right tabular-nums ${valueColor(type.percentOfParent)}`}
-                            >
-                              {signedPercent(type.percentOfParent)}
+                            <TableCell className="text-right tabular-nums">
+                              <SignedChange value={type.percentOfParent}>
+                                {signedPercent(type.percentOfParent)}
+                              </SignedChange>
                             </TableCell>
-                            <TableCell
-                              className={`text-right tabular-nums ${valueColor(type.percentOfTotal)}`}
-                            >
-                              {signedPercent(type.percentOfTotal)}
+                            <TableCell className="text-right tabular-nums">
+                              <SignedChange value={type.percentOfTotal}>
+                                {signedPercent(type.percentOfTotal)}
+                              </SignedChange>
                             </TableCell>
                           </TableRow>
                           {typeOpen &&
@@ -169,20 +150,20 @@ export function NetWorthDriversTable({ data }: NetWorthDriversTableProps) {
                                 <TableCell className="text-muted-foreground pl-14">
                                   {acc.accountName}
                                 </TableCell>
-                                <TableCell
-                                  className={`text-right tabular-nums ${valueColor(acc.change)}`}
-                                >
-                                  {signedCurrency(acc.change)}
+                                <TableCell className="text-right tabular-nums">
+                                  <SignedChange value={acc.change}>
+                                    {signedCurrency(acc.change)}
+                                  </SignedChange>
                                 </TableCell>
-                                <TableCell
-                                  className={`text-right tabular-nums ${valueColor(acc.percentOfParent)}`}
-                                >
-                                  {signedPercent(acc.percentOfParent)}
+                                <TableCell className="text-right tabular-nums">
+                                  <SignedChange value={acc.percentOfParent}>
+                                    {signedPercent(acc.percentOfParent)}
+                                  </SignedChange>
                                 </TableCell>
-                                <TableCell
-                                  className={`text-right tabular-nums ${valueColor(acc.percentOfTotal)}`}
-                                >
-                                  {signedPercent(acc.percentOfTotal)}
+                                <TableCell className="text-right tabular-nums">
+                                  <SignedChange value={acc.percentOfTotal}>
+                                    {signedPercent(acc.percentOfTotal)}
+                                  </SignedChange>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -196,10 +177,10 @@ export function NetWorthDriversTable({ data }: NetWorthDriversTableProps) {
           <TableFooter>
             <TableRow>
               <TableCell className="font-bold">Total</TableCell>
-              <TableCell
-                className={`text-right font-bold tabular-nums ${valueColor(data.totalChange)}`}
-              >
-                {signedCurrency(data.totalChange)}
+              <TableCell className="text-right font-bold tabular-nums">
+                <SignedChange value={data.totalChange}>
+                  {signedCurrency(data.totalChange)}
+                </SignedChange>
               </TableCell>
               <TableCell className="text-right font-bold tabular-nums text-muted-foreground">
                 —

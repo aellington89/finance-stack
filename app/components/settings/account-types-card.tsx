@@ -121,6 +121,7 @@ export function AccountTypesCard({
                   {/* Category header row */}
                   <button
                     type="button"
+                    aria-expanded={!isCollapsed}
                     onClick={() => toggleGroup(group.categoryId)}
                     className="flex items-center gap-1 w-full px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/50 transition-colors"
                   >

@@ -132,14 +132,20 @@ export default defineConfig({
         "components/ui/**/*.tsx",
 
         // The eleven recharts wrappers, excluded because a test of one cannot
-        // assert anything. They all render through ChartContainer ->
-        // ResponsiveContainer, which has no layout under jsdom: a mounted
-        // chart produces {svg: 0, rect: 0, text: 0} — the container element and
-        // nothing inside it. Measured, not assumed. So a render test buys 41%
-        // of the file's statements, 2 of its 8 functions and 0% of its
-        // branches while asserting only the card title, which is the definition
-        // of coverage theatre. Every tick and tooltip formatter stays
-        // unexecuted because no axis is ever drawn.
+        // assert anything about their logic. They all render through
+        // ChartContainer -> ResponsiveContainer, which has no layout under
+        // jsdom: a mounted chart produces {svg: 0, rect: 0, text: 0} — the
+        // container element and nothing inside it. Measured, not assumed. So
+        // a render test buys 41% of the file's statements, 2 of its 8
+        // functions and 0% of its branches while asserting only the card
+        // title, which is the definition of coverage theatre. Every tick and
+        // tooltip formatter stays unexecuted because no axis is ever drawn.
+        //
+        // One test does draw them: chart-accessible-names.test.tsx (#144)
+        // mocks ResponsiveContainer to a fixed size, because a chart's
+        // accessible name only exists in a rendered SVG. It asserts that name
+        // and nothing else, so the axis formatters it runs on the way would be
+        // coverage with no assertion behind it. The exclusion stands.
         //
         // What makes this honest rather than convenient is that Issue #296
         // emptied these files first. The transforms are in *-bars.ts and

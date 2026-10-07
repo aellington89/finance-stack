@@ -1,11 +1,9 @@
 "use client";
 
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
 import type { LiabilityPerformanceData } from "@/lib/queries/liabilities-drilldown";
 import {
   signedCurrency,
-  amountColorClass,
   formatPercentChange,
 } from "@/lib/format/financial";
 import {
@@ -23,6 +21,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ExpandToggle } from "@/components/dashboard/expand-toggle";
+import { SignedChange } from "@/components/dashboard/signed-change";
 import { formatCurrency } from "@/lib/format/financial";
 
 interface LiabilityPerformanceTableProps {
@@ -94,7 +94,6 @@ export function LiabilityPerformanceTable({
             {data.categories.map((cat) => {
               const catKey = `cat:${cat.categoryId}`;
               const catOpen = expanded.has(catKey);
-              const Chevron = catOpen ? ChevronDown : ChevronRight;
               return (
                 <Fragment key={catKey}>
                   <TableRow
@@ -104,27 +103,25 @@ export function LiabilityPerformanceTable({
                     data-testid={`row-${catKey}`}
                   >
                     <TableCell className="text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <Chevron className="h-4 w-4" />
+                      <ExpandToggle
+                        expanded={catOpen}
+                        onToggle={() => toggle(catKey)}
+                      >
                         {cat.categoryName}
-                      </span>
+                      </ExpandToggle>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatCurrency(cat.currentValue)}
                     </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${amountColorClass(cat.change)}`}
-                    >
-                      {signedCurrency(cat.change)}
+                    <TableCell className="text-right tabular-nums">
+                      <SignedChange value={cat.change}>
+                        {signedCurrency(cat.change)}
+                      </SignedChange>
                     </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${
-                        cat.percentChange !== null
-                          ? amountColorClass(cat.percentChange)
-                          : ""
-                      }`}
-                    >
-                      {formatPercentChange(cat.percentChange)}
+                    <TableCell className="text-right tabular-nums">
+                      <SignedChange value={cat.percentChange}>
+                        {formatPercentChange(cat.percentChange)}
+                      </SignedChange>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {cat.percentOfTotal.toFixed(2)}%
@@ -134,9 +131,6 @@ export function LiabilityPerformanceTable({
                     cat.accountTypes.map((type) => {
                       const typeKey = `type:${cat.categoryId}:${type.accountTypeId}`;
                       const typeOpen = expanded.has(typeKey);
-                      const TypeChevron = typeOpen
-                        ? ChevronDown
-                        : ChevronRight;
                       return (
                         <Fragment key={typeKey}>
                           <TableRow
@@ -146,27 +140,25 @@ export function LiabilityPerformanceTable({
                             data-testid={`row-${typeKey}`}
                           >
                             <TableCell className="text-muted-foreground pl-8">
-                              <span className="inline-flex items-center gap-1">
-                                <TypeChevron className="h-4 w-4" />
+                              <ExpandToggle
+                                expanded={typeOpen}
+                                onToggle={() => toggle(typeKey)}
+                              >
                                 {type.accountTypeName}
-                              </span>
+                              </ExpandToggle>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {formatCurrency(type.currentValue)}
                             </TableCell>
-                            <TableCell
-                              className={`text-right tabular-nums ${amountColorClass(type.change)}`}
-                            >
-                              {signedCurrency(type.change)}
+                            <TableCell className="text-right tabular-nums">
+                              <SignedChange value={type.change}>
+                                {signedCurrency(type.change)}
+                              </SignedChange>
                             </TableCell>
-                            <TableCell
-                              className={`text-right tabular-nums ${
-                                type.percentChange !== null
-                                  ? amountColorClass(type.percentChange)
-                                  : ""
-                              }`}
-                            >
-                              {formatPercentChange(type.percentChange)}
+                            <TableCell className="text-right tabular-nums">
+                              <SignedChange value={type.percentChange}>
+                                {formatPercentChange(type.percentChange)}
+                              </SignedChange>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {type.percentOfTotal.toFixed(2)}%
@@ -184,19 +176,15 @@ export function LiabilityPerformanceTable({
                                 <TableCell className="text-right tabular-nums">
                                   {formatCurrency(acc.currentValue)}
                                 </TableCell>
-                                <TableCell
-                                  className={`text-right tabular-nums ${amountColorClass(acc.change)}`}
-                                >
-                                  {signedCurrency(acc.change)}
+                                <TableCell className="text-right tabular-nums">
+                                  <SignedChange value={acc.change}>
+                                    {signedCurrency(acc.change)}
+                                  </SignedChange>
                                 </TableCell>
-                                <TableCell
-                                  className={`text-right tabular-nums ${
-                                    acc.percentChange !== null
-                                      ? amountColorClass(acc.percentChange)
-                                      : ""
-                                  }`}
-                                >
-                                  {formatPercentChange(acc.percentChange)}
+                                <TableCell className="text-right tabular-nums">
+                                  <SignedChange value={acc.percentChange}>
+                                    {formatPercentChange(acc.percentChange)}
+                                  </SignedChange>
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   {acc.percentOfTotal.toFixed(2)}%
@@ -216,19 +204,15 @@ export function LiabilityPerformanceTable({
               <TableCell className="text-right font-bold tabular-nums">
                 {formatCurrency(data.totalCurrentValue)}
               </TableCell>
-              <TableCell
-                className={`text-right font-bold tabular-nums ${amountColorClass(data.totalChange)}`}
-              >
-                {signedCurrency(data.totalChange)}
+              <TableCell className="text-right font-bold tabular-nums">
+                <SignedChange value={data.totalChange}>
+                  {signedCurrency(data.totalChange)}
+                </SignedChange>
               </TableCell>
-              <TableCell
-                className={`text-right font-bold tabular-nums ${
-                  data.totalPercentChange !== null
-                    ? amountColorClass(data.totalPercentChange)
-                    : ""
-                }`}
-              >
-                {formatPercentChange(data.totalPercentChange)}
+              <TableCell className="text-right font-bold tabular-nums">
+                <SignedChange value={data.totalPercentChange}>
+                  {formatPercentChange(data.totalPercentChange)}
+                </SignedChange>
               </TableCell>
               <TableCell className="text-right font-bold tabular-nums">
                 {totalIsNonZero ? "100.00%" : "0.00%"}

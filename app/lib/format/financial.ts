@@ -45,6 +45,12 @@ export function signedPercent(n: number): string {
 /**
  * Tailwind text-color class for a signed monetary value — amounts, balances,
  * and period changes. Green for positive, red for negative, none for zero.
+ *
+ * On its own this is for values whose sign is already in the text, such as
+ * a balance or a transaction amount. A gain or loss also needs a trend icon,
+ * so the direction is not carried by colour alone (Issue #144): render it
+ * through <SignedChange>, or give it a <TrendIcon> nearby where the figure has
+ * no room for one (both in components/dashboard/signed-change.tsx).
  */
 export function amountColorClass(n: number): string {
   if (n > 0) return "text-green-600 dark:text-green-400";

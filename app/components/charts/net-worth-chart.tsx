@@ -65,7 +65,19 @@ export function TimeSeriesChart({
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
-          <LineChart data={data} margin={{ left: 8, right: 8 }}>
+          <LineChart
+            data={data}
+            margin={{ left: 8, right: 8 }}
+            title={title}
+            desc={`Line chart of ${title.toLowerCase()} across the selected date range.`}
+            // With an href this card is a link, and a link may not contain a
+            // focusable element. recharts' accessibility layer makes the SVG
+            // one (tabIndex 0, role "application"): a second tab stop per
+            // card that only moves the tooltip. Off inside the link, the
+            // <title> still names the chart and the hover tooltip still works
+            // (Issue #144).
+            accessibilityLayer={!href}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
@@ -109,8 +121,12 @@ export function TimeSeriesChart({
   );
 
   if (href) {
+    // Named for the card's title alone. A link takes its name from its
+    // content, which now includes the chart's <title>, so unnamed it would
+    // read "Net Worth Net Worth". The chart keeps its own name inside the
+    // link (Issue #144).
     return (
-      <Link href={href} className="group/chart-link block">
+      <Link href={href} aria-label={title} className="group/chart-link block">
         {card}
       </Link>
     );

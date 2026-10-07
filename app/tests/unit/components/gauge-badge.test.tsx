@@ -24,6 +24,19 @@ describe("GaugeBadge", () => {
     expect(screen.getByText("42%")).toBeInTheDocument();
   });
 
+  it("is an image named by its metric and reading, described by its scale", () => {
+    render(
+      <GaugeBadge title="Savings Rate" label="42%" value={42} max={100} segments={segments} />
+    );
+
+    // role="img" makes the <text> reading presentational, so the name must
+    // carry it (Issue #144).
+    const gauge = screen.getByRole("img", { name: "Savings Rate: 42%" });
+    expect(gauge.querySelector("desc")?.textContent).toBe(
+      "Gauge on a scale from 0 to 100."
+    );
+  });
+
   it("renders the SVG once mounted", () => {
     // The component renders nothing until its mount effect runs — a guard
     // against SSR/client float mismatch in the path coordinates.

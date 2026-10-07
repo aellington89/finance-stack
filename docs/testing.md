@@ -117,6 +117,18 @@ Two things are **not** rendered, on purpose:
   `waterfall-bars.ts`, `debt-waterfall-bars.ts`, `waterfall-axis.ts`,
   `timeseries-pivot.ts`, `accounting-axis.ts`. `gauge-badge.tsx`, the one
   hand-rolled SVG in that directory, *is* rendered and tested.
+
+  One test does draw them, for one contract.
+  [`chart-accessible-names.test.tsx`](../app/tests/unit/components/chart-accessible-names.test.tsx)
+  mocks `ResponsiveContainer` to a fixed 800×400 so recharts draws a real SVG,
+  then asserts each chart's accessible name and `<desc>`
+  ([Issue #144](https://github.com/aellington89/finance-stack/issues/144)).
+  Only a drawn chart can show that: the name is the text recharts writes into
+  the SVG's `<title>`, and `Treemap` proves a prop is no guarantee. Its types
+  reject `title`, and forced past them it never reaches the SVG. The coverage
+  exclusion stands. Drawing a chart runs its axis formatters, but the test
+  asserts only the name, so those statements would count with no assertion
+  behind them.
 - **Anything reaching `next-auth`.** It does not resolve under vitest's jsdom
   environment (`Cannot find module 'next/server'`). Components whose children
   import a server action cut the chain with a `vi.mock` of the action module —
@@ -135,6 +147,15 @@ classes are meant to switch on
 with `toHaveClass`, which matches whole class names. A substring check such as
 `className.toContain("grid-cols-2")` also matches `@md:grid-cols-2`, so it
 cannot assert that a class is absent.
+
+**Accessibility contracts are queried the way assistive tech finds them**
+([Issue #144](https://github.com/aellington89/finance-stack/issues/144)). An
+expandable row's toggle is `getByRole("button", { name: "Current Asset",
+expanded: false })`, reached with `user.tab()` rather than `.focus()`, which
+also succeeds on a `tabindex="-1"` element that Tab skips. A chart is
+`getByRole("application", { name })`, or `getByRole("img", { name })` for the
+treemaps and gauges. A `data-testid` would still match with the role or the
+name missing, and those are the bugs these tests exist to catch.
 
 One convenience worth knowing: every `next/navigation` export is a `vi.fn()`,
 so a test steers `usePathname` with
@@ -269,7 +290,7 @@ Out, and why:
 | The five `scripts/` entrypoints | argv-parsing and stdout shells. The logic each wraps lives in a sibling module (`check-changelog-core.ts`, `docs-index-check.ts`, `release-notes-core.ts`, `seed-reference-check.ts`) which stays in and sits near 100%. |
 | `**/*.test.ts`, `**/*.test.tsx` | Belt-and-braces rather than load-bearing, and worth saying so: `tests/` is not in `include` and anchored globs cannot reach it. Verified by removing them and re-measuring — 2677 statements either way. Kept because vitest 4's substring matching *did* pull them in (see [trap 2](#three-glob-traps)). |
 
-| `components/charts/*-chart.tsx` | **The eleven recharts wrappers, because a test of one cannot assert anything.** They render through `ChartContainer` → `ResponsiveContainer`, which has no layout under jsdom: a mounted chart produces `{svg: 0, rect: 0, text: 0}` — the container element and nothing inside it. Measured, not assumed. A render test therefore buys 41% of the file's statements, 2 of its 8 functions and **0% of its branches** while asserting only the card title. The `-chart.tsx` suffix is load-bearing: it keeps `gauge-badge.tsx`, the one hand-rolled SVG here, *in* the denominator, where it renders fully and is tested. |
+| `components/charts/*-chart.tsx` | **The eleven recharts wrappers, because a test of one cannot assert anything about their logic.** They render through `ChartContainer` → `ResponsiveContainer`, which has no layout under jsdom: a mounted chart produces `{svg: 0, rect: 0, text: 0}` — the container element and nothing inside it. Measured, not assumed. A render test therefore buys 41% of the file's statements, 2 of its 8 functions and **0% of its branches** while asserting only the card title. The `-chart.tsx` suffix is load-bearing: it keeps `gauge-badge.tsx`, the one hand-rolled SVG here, *in* the denominator, where it renders fully and is tested. The one test that draws them, [#144](https://github.com/aellington89/finance-stack/issues/144)'s accessible-name check, asserts only the name. It runs their axis formatters on the way without asserting on them, so it does not change the case. |
 
 **What Issue [#296](https://github.com/aellington89/finance-stack/issues/296)
 changed here.** `**/*.tsx` and `hooks/**` used to head this table, on the
