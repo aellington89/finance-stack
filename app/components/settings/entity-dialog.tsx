@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Combobox,
@@ -228,7 +229,12 @@ export function EntityDialog({
             </div>
           )}
 
-          <DialogFooter showCloseButton>
+          <DialogFooter>
+            {/* Inside the form, but Base UI renders it type="button", so it
+                closes the dialog rather than submitting the edit. */}
+            <DialogClose render={<Button variant="outline" />}>
+              Cancel
+            </DialogClose>
             <SubmitButton isEdit={isEdit} />
           </DialogFooter>
         </form>

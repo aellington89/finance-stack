@@ -147,6 +147,7 @@ finance-stack/
 │   │       ├── transaction-list.tsx      # Sortable transaction table with inline edit + delete (client component)
 │   │       ├── transaction-edit-row.tsx  # Inline row-edit form (client component, uses updateTransaction action)
 │   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
+│   │       ├── transaction-discard-dialog.tsx # Discard-unsaved-edits confirmation when switching inline edit rows (#148)
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
