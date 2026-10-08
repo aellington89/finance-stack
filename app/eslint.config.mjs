@@ -60,6 +60,18 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Issue #148. alert(), confirm() and prompt() hand the page to the browser's
+  // own modal, which blocks the thread and ignores the app's theme and focus
+  // handling. Confirmations here are Dialogs: the delete dialogs, and
+  // components/transactions/transaction-discard-dialog.tsx, which replaced the
+  // one call this rule found when it went in. That makes it the standing
+  // enforcement of the issue's first acceptance criterion.
+  //
+  // tests/, scripts/ and e2e/ are out of scope, as with no-console above.
+  {
+    files: ["app/**/*.{ts,tsx}", "lib/**/*.ts", "components/**/*.{ts,tsx}", "hooks/**/*.ts"],
+    rules: { "no-alert": "error" },
+  },
 ]);
 
 export default eslintConfig;

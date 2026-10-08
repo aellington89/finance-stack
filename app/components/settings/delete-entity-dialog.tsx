@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
 
 interface ActionState {
@@ -73,7 +74,8 @@ export function DeleteEntityDialog({
             action cannot be undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter showCloseButton>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <form action={formAction}>
             <input type="hidden" name={itemIdFieldName} value={itemId} />
             <DeleteButton />
