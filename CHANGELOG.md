@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-07
+
+**Migration:** none
+
 ### Changed
 
 - **Opening a second transaction for editing now asks in an in-app dialog instead of the browser's confirm box, and every delete confirmation has the same Cancel button.** ([Issue #148](https://github.com/aellington89/finance-stack/issues/148)) With one row of the Transactions table open for editing, clicking Edit on another row raised the browser's own "Discard the changes you're currently editing?" box, which is unstyled, ignores the app's theme and blocks the page. It is now a dialog like the app's other confirmations. **Keep editing**, Esc or the × leaves the open row exactly as it was, typed changes included. **Discard changes** opens the other row. The issue named the delete button, but delete has used a dialog since [#99](https://github.com/aellington89/finance-stack/issues/99). The browser prompt that remained was this one.
@@ -14,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The issue also asked for cancel and confirm to match the other delete flows, and those did not match each other. The transaction dialog had **Cancel**, the Settings dialogs had **Close** on the far side of Delete, and deleting an account offered only the ×. Every delete dialog now has **Cancel** to the left of the action, like the transaction one. So do the Settings add and edit dialogs, so a Settings card no longer says Close on edit and Cancel on delete. On a phone the action stacks above Cancel. Putting Cancel first also changes what a dialog focuses when it opens, which is its first focusable button. In the Settings and account delete dialogs that had been the delete button itself, so opening one and pressing Enter straight away deleted. Every delete dialog now opens on Cancel, and the discard dialog opens on Keep editing.
 
   A new lint rule, `no-alert`, rejects `alert()`, `confirm()` and `prompt()` anywhere in the application tree, so a browser prompt cannot come back unnoticed. The edit-switch guard was the only call it found.
+
+- **Metabase moves to v0.58.35** (from v0.58.34). ([PR #353](https://github.com/aellington89/finance-stack/pull/353)) A patch on the 0.58 line, so it runs no one-way metadata migration. `deploy/compose.yml` moved together with `docker-compose.yml`. **An upgraded deployment does not pick this up by itself** until [#347](https://github.com/aellington89/finance-stack/issues/347) is fixed, because `deploy.sh` re-pins only `APP_VERSION`. Copy the release bundle's `compose.yml` and `.env.example` over the installed ones, keep `.env`, and re-run `./deploy.sh 1.2.0`.
+
+- **Application dependencies took their routine patch and minor bumps.** ([PR #360](https://github.com/aellington89/finance-stack/pull/360)) `drizzle-orm` 0.45.2 → 0.45.3, `lucide-react` 1.47.0 → 1.49.0, `pg` 8.23.0 → 8.23.1 and `react-day-picker` 10.0.1 → 10.0.2. All are bundled into `finance-app`, and none changes behaviour an operator would see.
+
+- **The dev tree moved too, including one major: `jsdom` 29.1.1 → 30.1.1.** ([PR #352](https://github.com/aellington89/finance-stack/pull/352)) It is the DOM the component tests run in, so its major does not make this release one. Also: `eslint-config-next` 16.3.5 → 16.3.8, `shadcn` 4.21.0 → 4.21.1, `vitest` and `@vitest/coverage-v8` 5.0.1 → 5.0.3, `drizzle-kit` 0.31.10 → 0.31.11 and `dotenv` 18.0.1 → 18.0.5.
 
 ### Fixed
 
@@ -26,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This is the first test to render the recharts wrappers. It fixes `ResponsiveContainer` at 800×400 so recharts draws a real SVG, then asserts each chart's name and description. The wrappers stay out of the coverage denominator, since the test asserts nothing about their logic.
 
 ### Security
+
+- **`next` 16.3.8 closes a CRITICAL advisory, though the vulnerable code is not reachable here.** ([PR #360](https://github.com/aellington89/finance-stack/pull/360)) `next` 16.3.5 → 16.3.8 fixes [GHSA-vcvr-r3jv-pc5j](https://github.com/advisories/GHSA-vcvr-r3jv-pc5j), remote code execution through `ImageResponse` in `next/og`, which nothing in `app/` imports. The same `next` release also fixes a HIGH server-side request forgery in Image Optimization and several medium cache-poisoning issues. Two more HIGH fixes ship in `finance-app`: `sharp` 0.35.4 → 0.35.5 ([GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w), librsvg CVE-2026-96889, held by the existing `overrides` entry) and `source-map-js` 1.2.1 → 1.2.2 ([GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)).
+
+  `finance-migrate` carries the full `node_modules`, so it also takes `proxy-addr` 2.0.7 → 2.0.8 (CVE-2026-90711, CRITICAL) and `@modelcontextprotocol/sdk` 1.27.1 → 1.32.1 ([GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h), HIGH). The `undici` and `brace-expansion` fixes in the same images are the lockfile refresh recorded below.
 
 - **The importer image no longer ships pip, which is the fix for urllib3 rather than a suppression.** ([PR #352](https://github.com/aellington89/finance-stack/pull/352)) `finance-importer` reported urllib3 2.7.0 against `CVE-2026-97687` (traffic interception through an HTTPS proxy TLS configuration override) and `CVE-2026-97689` (unbounded memory in the chunk parser), both fixed in 2.8.0. urllib3 is neither declared in `importer/requirements.txt` nor imported anywhere under `importer/`: pip vendors its own HTTP stack under `pip/_vendor/`, and **nothing installable reaches a vendored copy** — pinning urllib3 in `requirements.txt` would have added a second, top-level copy and left the vulnerable vendored one exactly where it was. So `importer/Dockerfile` removes pip in the install layer instead, which is `CONTRIBUTING.md`'s fix option 2 and the end state [`.trivyignore`](.trivyignore) had already proposed for this image.
 
@@ -601,7 +615,8 @@ Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
 [Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
 wiki page.
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/aellington89/finance-stack/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/aellington89/finance-stack/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/aellington89/finance-stack/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/aellington89/finance-stack/compare/v1.0.4...v1.1.0
