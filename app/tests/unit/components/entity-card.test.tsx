@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EntityCard } from "@/components/settings/entity-card";
 
@@ -111,5 +111,56 @@ describe("EntityCard", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete Rent" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  // Issue #148: the delete dialogs share one Cancel, in front of the action.
+  // Fresh action mocks here, because the ones in `base` are shared by every
+  // test in the file.
+  it("closes the delete dialog on Cancel without calling the delete action", async () => {
+    const user = userEvent.setup();
+    const deleteAction = action();
+    render(
+      <EntityCard
+        {...base}
+        deleteAction={deleteAction}
+        items={items}
+        createAction={action()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete Rent" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+    expect(deleteAction).not.toHaveBeenCalled();
+  });
+
+  // The edit dialog's Cancel sits inside its <form>. It has to be a plain
+  // button, or clicking it would submit the edit it is meant to abandon.
+  it("closes the edit dialog on Cancel without calling the update action", async () => {
+    const user = userEvent.setup();
+    const updateAction = action();
+    render(
+      <EntityCard
+        {...base}
+        updateAction={updateAction}
+        items={items}
+        createAction={action()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit Rent" }));
+    const dialog = await screen.findByRole("dialog");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveAttribute("type", "button");
+    await user.click(cancel);
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+    expect(updateAction).not.toHaveBeenCalled();
   });
 });

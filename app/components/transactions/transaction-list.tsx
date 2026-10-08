@@ -29,6 +29,7 @@ import { amountColorClass } from "@/lib/format/financial";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
 import { TransactionEditRow } from "@/components/transactions/transaction-edit-row";
 import { TransactionDeleteDialog } from "@/components/transactions/transaction-delete-dialog";
+import { TransactionDiscardDialog } from "@/components/transactions/transaction-discard-dialog";
 import {
   VISIBLE_COLUMNS_COOKIE,
   VISIBLE_COLUMNS_COOKIE_MAX_AGE,
@@ -219,17 +220,18 @@ export function TransactionList({
   const searchParams = useSearchParams();
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [pendingEditId, setPendingEditId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransactionRow | null>(
     null
   );
 
+  // Switching rows unmounts the open edit row and loses what was typed into
+  // it, so the switch waits for the discard dialog (Issue #148).
   const requestEdit = useCallback(
     (id: number) => {
       if (editingId !== null && editingId !== id) {
-        const ok = window.confirm(
-          "Discard the changes you're currently editing?"
-        );
-        if (!ok) return;
+        setPendingEditId(id);
+        return;
       }
       setEditingId(id);
     },
@@ -440,6 +442,17 @@ export function TransactionList({
             amount={pendingDelete.amount}
           />
         )}
+
+      <TransactionDiscardDialog
+        open={pendingEditId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingEditId(null);
+        }}
+        onDiscard={() => {
+          setEditingId(pendingEditId);
+          setPendingEditId(null);
+        }}
+      />
 
       {/* Pagination controls */}
       <div className="flex items-center justify-between pt-4">

@@ -1,7 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { TransactionList } from "@/components/transactions/transaction-list";
+import { deleteTransaction } from "@/lib/actions/transaction";
 import {
   ALL_COLUMN_KEYS,
   VISIBLE_COLUMNS_COOKIE,
@@ -126,5 +135,154 @@ describe("TransactionList", () => {
     expect(
       screen.getByRole("button", { name: "Delete transaction" })
     ).toBeInTheDocument();
+  });
+});
+
+// ── Row confirmations (Issue #148) ──
+
+const rent = {
+  ...transactions[0],
+  transactionId: 2,
+  transactionDescription: "Rent",
+  transactionDate: "2026-04-01",
+  amount: "-1500.00",
+  transactionCategory: "Housing",
+  transactionCategoryId: 10,
+};
+
+const twoRowProps = {
+  ...props,
+  transactions: [transactions[0], rent],
+  totalCount: 2,
+  categories: [
+    { id: 9, name: "Food" },
+    { id: 10, name: "Housing" },
+  ],
+};
+
+// Finds a row by its description cell, so it only reaches rows that are not
+// open for editing: an open row holds its description in an input instead.
+function rowButton(description: string, name: string): HTMLElement {
+  const row = screen.getByText(description).closest("tr");
+  if (!row) throw new Error(`No table row shows "${description}"`);
+  return within(row).getByRole("button", { name });
+}
+
+// Only one row is ever open, so there is only ever one of these.
+function openDescription(): HTMLElement {
+  return screen.getByRole("textbox", { name: "Description *" });
+}
+
+describe("TransactionList confirmations", () => {
+  // jsdom stubs confirm() as not implemented and returns undefined, so a
+  // regression to window.confirm() would not fail on its own: the row switch
+  // would just quietly never happen. The spy turns it into a failed assertion.
+  let confirmSpy: MockInstance<typeof window.confirm>;
+
+  beforeEach(() => {
+    confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(deleteTransaction).mockClear();
+  });
+
+  afterEach(() => {
+    confirmSpy.mockRestore();
+  });
+
+  // Opens Groceries for editing, changes its description, then clicks Edit on
+  // Rent: the moment the discard guard exists for.
+  async function promptToDiscard(user: UserEvent): Promise<HTMLElement> {
+    render(<TransactionList {...twoRowProps} />);
+    await user.click(rowButton("Groceries", "Edit transaction"));
+    await user.clear(openDescription());
+    await user.type(openDescription(), "Groceries and wine");
+    await user.click(rowButton("Rent", "Edit transaction"));
+    return screen.findByRole("dialog");
+  }
+
+  it("opens a row for editing straight away when no other row is open", async () => {
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Rent", "Edit transaction"));
+
+    expect(openDescription()).toHaveValue("Rent");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("asks in a dialog before discarding an open edit", async () => {
+    const user = userEvent.setup();
+    const dialog = await promptToDiscard(user);
+
+    expect(dialog).toHaveTextContent("Discard changes?");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    // Nothing has switched yet: Groceries is still the open row.
+    expect(screen.getByDisplayValue("Groceries and wine")).toBeInTheDocument();
+  });
+
+  // Every way out of the dialog short of Discard is the same answer, as it is
+  // for the delete dialogs.
+  const dismissals: [string, (user: UserEvent, dialog: HTMLElement) => Promise<void>][] = [
+    [
+      "Keep editing",
+      (user, dialog) =>
+        user.click(within(dialog).getByRole("button", { name: "Keep editing" })),
+    ],
+    [
+      "the corner close button",
+      (user, dialog) =>
+        user.click(within(dialog).getByRole("button", { name: "Close" })),
+    ],
+    ["Escape", (user) => user.keyboard("{Escape}")],
+  ];
+
+  it.each(dismissals)(
+    "keeps the open edit, typed changes and all, on %s",
+    async (_way, dismiss) => {
+      const user = userEvent.setup();
+      const dialog = await promptToDiscard(user);
+
+      await dismiss(user, dialog);
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      );
+
+      // The same edit row rather than a remount of it: the typed text survived.
+      expect(openDescription()).toHaveValue("Groceries and wine");
+      expect(rowButton("Rent", "Edit transaction")).toBeInTheDocument();
+    }
+  );
+
+  it("switches rows once the user discards", async () => {
+    const user = userEvent.setup();
+    const dialog = await promptToDiscard(user);
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Discard changes" })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+
+    expect(openDescription()).toHaveValue("Rent");
+    // Groceries is back to its saved values; the typed text went with the row.
+    expect(rowButton("Groceries", "Edit transaction")).toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Groceries and wine")
+    ).not.toBeInTheDocument();
+  });
+
+  it("confirms a delete in the delete dialog, not window.confirm()", async () => {
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Rent", "Delete transaction"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Delete Transaction");
+    expect(dialog).toHaveTextContent("Rent");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    // Opening the dialog is not the delete; that waits for its own button.
+    expect(deleteTransaction).not.toHaveBeenCalled();
   });
 });

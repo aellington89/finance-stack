@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
 
 import { deleteAccount } from "@/lib/actions/account";
@@ -65,6 +66,7 @@ export function DeleteAccountDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <form action={formAction}>
             <input type="hidden" name="accountId" value={accountId} />
             <DeleteButton />
