@@ -266,6 +266,9 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#356](https://github.com/aellington89/finance-stack/issues/356) Liabilities KPI figures are cut off at 1440px and narrower *(new — from #144)*
 - [#357](https://github.com/aellington89/finance-stack/issues/357) Gain text (text-green-600) fails WCAG AA contrast *(new — from #144)*
 - [#358](https://github.com/aellington89/finance-stack/issues/358) Accessibility: fix the remaining axe violations (unnamed filter, protected-row tooltip, landmarks) *(new — from #144)*
+- [#362](https://github.com/aellington89/finance-stack/issues/362) Destructive buttons fail WCAG AA contrast in light mode *(new — from #148)*
+- [#363](https://github.com/aellington89/finance-stack/issues/363) Settings dialogs repeat their toast when the card re-renders (missing handled-state guard) *(new — from #148)*
+- [#364](https://github.com/aellington89/finance-stack/issues/364) Transactions inline edit: focus is lost when the edit row opens or closes *(new — from #148)*
 
 ### Phase 6 — Features
 - [#136](https://github.com/aellington89/finance-stack/issues/136) Budgets + spending caps
