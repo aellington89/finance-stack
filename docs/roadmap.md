@@ -223,6 +223,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#221](https://github.com/aellington89/finance-stack/issues/221) CONTRIBUTING.md Trivy remediation still names `node:22-alpine` after the Node 24 move *(from #210)*
 - [#292](https://github.com/aellington89/finance-stack/issues/292) `.trivyignore`: split by source of finding, or move to `.trivyignore.yaml` *(new — from #291)*
 - [#304](https://github.com/aellington89/finance-stack/issues/304) Dependabot never sees `deploy/compose.yml`, so every image bump fails the parity gate *(new — from #298)*
+- [#347](https://github.com/aellington89/finance-stack/issues/347) `deploy.sh` upgrades never refresh `compose.yml`, so upgraded hosts silently run a stale stack definition *(new — from the v1.1.0 upgrade)*
 - ✅ [#315](https://github.com/aellington89/finance-stack/issues/315) `suggestBump()` cannot suggest a major; its pre-1.0 minor/patch assumption went stale at v1.0.0 *(new — from the v1.0.1 release)*
 - [#222](https://github.com/aellington89/finance-stack/issues/222) `docker-compose.yml` header comment lists five services; there are seven
 - [#269](https://github.com/aellington89/finance-stack/issues/269) `transaction_categories`' identity sequence is named `transaction_type_categories_…`; the guessable name matches nothing *(new — from #178)*
@@ -280,6 +281,7 @@ be made. See [What v1.0.0 means here](#what-v100-means-here).
 - [#139](https://github.com/aellington89/finance-stack/issues/139) Receipt attachments + transaction tagging
 - [#140](https://github.com/aellington89/finance-stack/issues/140) Settings: theme, currency, profile
 - [#110](https://github.com/aellington89/finance-stack/issues/110) Liabilities schema expansion
+- [#342](https://github.com/aellington89/finance-stack/issues/342) Track individual holdings within an account (401(k) funds, brokerage positions) *(new)*
 
 > **#274 is the smallest thing in this phase, and it has a sequencing tie.** It is
 > a feature rather than UX debt — Income/Expenses/Investments are compiled into
