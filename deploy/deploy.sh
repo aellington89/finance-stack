@@ -123,6 +123,11 @@ DEPLOY_SCRIPT_VERSION="unreleased"
 # whatever the caller typed, and a relative path stops resolving the moment the
 # working directory changes.
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+# The same goes for a relative DEPLOY_BUNDLE (#347): it names a file relative to
+# where the operator ran this from, not to where this script lives.
+if [ -n "${DEPLOY_BUNDLE:-}" ] && [ "${DEPLOY_BUNDLE#/}" = "$DEPLOY_BUNDLE" ]; then
+    DEPLOY_BUNDLE="${PWD}/${DEPLOY_BUNDLE}"
+fi
 cd "$(dirname "$SELF")"
 
 ENV_FILE=".env"
@@ -344,7 +349,9 @@ version_ge() {
 # the line names — a checksum file naming some other file would pass.
 bundle_checksum_ok() {
     local tgz="$1" sha="$2" name="$3" want="" named="" got
-    [ -f "$tgz" ] && [ -f "$sha" ] || return 1
+    if [ ! -f "$tgz" ] || [ ! -f "$sha" ]; then
+        return 1
+    fi
     { read -r want named || [ -n "$want" ]; } < "$sha" || return 1
     [ "${named#\*}" = "$name" ] || return 1
     printf '%s' "$want" | grep -qE '^[0-9a-f]{64}$' || return 1
@@ -678,12 +685,17 @@ template_report() {
     done < <(LC_ALL=C comm -23 <(template_names "$old") <(template_names "$new"))
 
     while IFS= read -r name; do
-        [ -n "$name" ] && [ "$name" != "APP_VERSION" ] || continue
-        template_active "$old" "$name" && template_active "$new" "$name" || continue
+        if [ -z "$name" ] || [ "$name" = "APP_VERSION" ]; then
+            continue
+        fi
+        if ! template_active "$old" "$name" || ! template_active "$new" "$name"; then
+            continue
+        fi
         oldv="$(env_file_get "$old" "$name")"
         newv="$(env_file_get "$new" "$name")"
-        [ "$oldv" != "$newv" ] || continue
-        env_has "$name" && [ "$(env_get "$name")" = "$oldv" ] || continue
+        if [ "$oldv" = "$newv" ] || ! env_has "$name" || [ "$(env_get "$name")" != "$oldv" ]; then
+            continue
+        fi
         changed+=("${name}: '${oldv}' → '${newv}'")
     done < <(LC_ALL=C comm -12 <(template_names "$old") <(template_names "$new"))
 
@@ -818,14 +830,13 @@ prune_bundles() {
     done
 }
 
-# Replaces this script with the target bundle's once the deploy has committed.
-# The mv swaps the directory entry while bash keeps reading the file it opened,
-# so the rest of this run is unaffected and the next run gets the new script.
-# Forward only: a deliberate rollback keeps the newer script, so the next
-# upgrade is still run by a script that refreshes the stack; and a checkout's
-# copy is never replaced.
-SELF_UPDATED=""
-self_update() {
+# Whether this script should be replaced by the target bundle's once the deploy
+# has committed, and with which version: SELF_UPDATE_TO, empty for no. Forward
+# only — a deliberate rollback keeps the newer script, so the next upgrade is
+# still run by one that refreshes the stack — and a checkout's copy is never
+# replaced.
+SELF_UPDATE_TO=""
+self_update_check() {
     local staged="${STAGE_DIR}/deploy.sh" theirs
     if [ ! -f "$staged" ] || same_file "$staged" deploy.sh; then
         return 0
@@ -839,10 +850,15 @@ self_update() {
         log "keeping this deploy.sh (${DEPLOY_SCRIPT_VERSION}) — the ${TARGET} bundle's is older"
         return 0
     fi
-    mkdir -p "$BUNDLE_BACKUP"
-    cp -p deploy.sh "${BUNDLE_BACKUP}/deploy.sh" || true
-    if install_file "$staged" deploy.sh 755; then
-        SELF_UPDATED="$theirs"
+    SELF_UPDATE_TO="$theirs"
+}
+
+# The mv swaps the directory entry while bash keeps reading the file it opened,
+# so the rest of this run is unaffected and the next run gets the new script.
+SELF_UPDATED=""
+self_update() {
+    if install_file "${STAGE_DIR}/deploy.sh" deploy.sh 755; then
+        SELF_UPDATED="$SELF_UPDATE_TO"
     else
         warn "could not replace deploy.sh with ${TARGET}'s — the deploy itself succeeded; replace it by hand: $(bundle_show_cmd "$BUNDLE_TGZ" "$BUNDLE_FROM" "$TARGET" deploy.sh) > deploy.sh"
     fi
@@ -1281,6 +1297,11 @@ prune_images() {
 # The bundle side of the commit (#347): keep what this run replaced, cache the
 # verified bundles a later rollback would need, and update this script.
 if [ -n "$STAGE_DIR" ]; then
+    self_update_check
+    if [ -n "$SELF_UPDATE_TO" ]; then
+        # The script about to be replaced is kept with the other replaced files.
+        snapshot_take deploy.sh
+    fi
     if [ "${#SNAPSHOT_PATHS[@]}" -gt 0 ]; then
         rm -rf "${BUNDLE_BACKUP}.tmp"
         if cp -a "$SNAPSHOT_DIR" "${BUNDLE_BACKUP}.tmp"; then
@@ -1300,7 +1321,9 @@ if [ -n "$STAGE_DIR" ]; then
     if [ -n "$BASELINE_TGZ" ] && [ "$BASELINE_VERSION" = "$PREV" ]; then
         cache_bundle "$BASELINE_TGZ" "${BASELINE_TGZ}.sha256"
     fi
-    self_update
+    if [ -n "$SELF_UPDATE_TO" ]; then
+        self_update
+    fi
 fi
 
 if [ -n "$PREV" ] && [ "$PREV" != "$TARGET" ]; then
