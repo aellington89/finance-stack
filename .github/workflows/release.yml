@@ -85,49 +85,14 @@ jobs:
       # gate is: a packaging bug should cost nothing, and must never fail after
       # images have already been pushed to GHCR, which is not undoable.
       #
-      # Everything in deploy/ ships as-is, so deploy.sh (#228) joins the bundle
-      # by existing — this step needs no edit when it lands. Two things are
-      # added that are not in the checkout:
-      #
-      #   caddy/Caddyfile   copied from the repo root rather than committed under
-      #                     deploy/, so there is one source of truth and no second
-      #                     copy to drift. This is why `--profile edge` cannot be
-      #                     started from deploy/compose.yml inside a checkout.
-      #   the data dirs     imports/, importer/parsers/ and backups/ are bind
-      #                     mounts. Shipping them empty means the documented first
-      #                     start works; without them Docker creates them itself,
-      #                     owned by root. They cannot simply be committed —
-      #                     .gitignore excludes `imports/` and `importer/parsers/`
-      #                     at any depth.
+      # scripts/pack-bundle.sh is the bundle's only producer (#347).
+      # deploy-smoke.yml packs with it too, and every deployed host downloads
+      # what it writes when it upgrades, so the file name, the one top-level
+      # directory and the checksum format are an interface. What goes in, and
+      # the three version stamps, are documented in the script's header.
       - name: Pack deployment bundle
         working-directory: .
-        run: |
-          BUNDLE="finance-stack-$VER"
-          STAGE="$(mktemp -d)"
-
-          cp -R deploy "$STAGE/$BUNDLE"
-
-          mkdir -p "$STAGE/$BUNDLE/caddy"
-          cp caddy/Caddyfile "$STAGE/$BUNDLE/caddy/Caddyfile"
-          mkdir -p "$STAGE/$BUNDLE/imports" \
-                   "$STAGE/$BUNDLE/importer/parsers" \
-                   "$STAGE/$BUNDLE/backups"
-
-          # Stamp the real version in, so the bundle is self-describing and a
-          # first install needs no edit to APP_VERSION at all.
-          sed -i "s/^APP_VERSION=.*/APP_VERSION=$VER/" "$STAGE/$BUNDLE/.env.example"
-          grep -q "^APP_VERSION=$VER$" "$STAGE/$BUNDLE/.env.example" \
-            || { echo "::error::APP_VERSION was not stamped into the bundle .env.example"; exit 1; }
-
-          # -C so the archive has exactly one top-level directory and unpacking
-          # never scatters files into the operator's cwd.
-          tar -czf "$BUNDLE.tar.gz" -C "$STAGE" "$BUNDLE"
-          sha256sum "$BUNDLE.tar.gz" > "$BUNDLE.tar.gz.sha256"
-          rm -rf "$STAGE"
-
-          echo "--- bundle contents ---"
-          tar -tzf "$BUNDLE.tar.gz"
-          cat "$BUNDLE.tar.gz.sha256"
+        run: scripts/pack-bundle.sh "$VER" .
 
       # Build via docker compose so the `repo` additional_contexts entry and the
       # GIT_SHA/BUILD_TIME build-args are wired exactly as they are in local builds

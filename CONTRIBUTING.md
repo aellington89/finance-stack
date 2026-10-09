@@ -177,30 +177,65 @@ environment entry, profile or label — must match. It also compares the two
 The diff it prints is of the rendered `docker compose config` output, so it
 points at the resolved value rather than the line you typed.
 
-**`deploy/deploy.sh` needs no new variables here.** Its three overrides
-(`DEPLOY_SKIP_PULL`, `DEPLOY_HEALTH_TIMEOUT`, `DEPLOY_HEALTH_URL`) configure the
-script, not the stack, so they are plain environment variables documented in the
-script header and the bundle README. Adding one to `deploy/.env.example` would
-fail this gate, which allows exactly two deploy-only names.
+**`deploy/deploy.sh` needs no new variables here.** Its six overrides
+(`DEPLOY_SKIP_PULL`, `DEPLOY_HEALTH_TIMEOUT`, `DEPLOY_HEALTH_URL`, and since
+[#347](https://github.com/aellington89/finance-stack/issues/347) `DEPLOY_BUNDLE`,
+`DEPLOY_RELEASE_URL` and `DEPLOY_SKIP_BUNDLE`) configure the script, not the
+stack, so they are plain environment variables documented in the script header
+and the bundle README. Adding one to `deploy/.env.example` would fail this gate,
+which allows exactly two deploy-only names.
+
+The first line of `deploy/compose.yml`, `# finance-stack bundle: unreleased`, is a
+comment the packer stamps with the version
+([Releases](docs/releases.md#deployment-bundle)). The gate never sees it, and the
+dev `docker-compose.yml` does not need one.
 
 ### Deploy smoke
 
-`.github/workflows/deploy-smoke.yml` runs `deploy/deploy.sh` end to end — first
-install, a no-op re-run, then an upgrade that is deliberately made to fail its
-health gate — and asserts each of the guarantees the script advertises
-([#228](https://github.com/aellington89/finance-stack/issues/228)). It runs
-weekly and on PRs touching the script, `deploy/compose.yml`, or the backup and
-restore scripts it invokes.
+`.github/workflows/deploy-smoke.yml` runs `deploy/deploy.sh` end to end and
+asserts each guarantee the script advertises
+([#228](https://github.com/aellington89/finance-stack/issues/228),
+[#347](https://github.com/aellington89/finance-stack/issues/347)). The sequence:
+
+- a first install, then a no-op re-run;
+- a same-version refresh from a bundle with deliberate edits, which must be
+  installed;
+- an upgrade that is made to fail its health gate, and must be rolled back
+  files and all;
+- malformed bundles, which must change nothing;
+- edit conflicts, and an interrupted run.
+
+The job runs weekly and on PRs touching the script, either compose file input,
+the pack script, the Caddyfile, or the backup and restore scripts it invokes.
+
+**The host is a packed bundle, not `deploy/`.** Every step runs in `host/`,
+unpacked from what `scripts/pack-bundle.sh` produces, because that is what an
+operator receives. The fixtures are that bundle re-packed with edits each
+scenario then looks for. The job's member-list assertion fails when a file joins
+the bundle: since #347 that file is installed on every host, so add it to the
+list deliberately. `DEPLOY_RELEASE_URL` points at a name that never resolves, so
+no scenario can lean on GitHub's releases.
 
 The "bad release" costs nothing to maintain: `build.version` is inlined from
 `app/package.json` at image build time, so the job tags the *same* image as
 `9.9.9` and gets a container that starts, migrates and answers 200 while
 reporting the wrong version — exactly the failure the health gate exists for.
 
-A red job here usually means one of three things: the health poll no longer
-combines its two conditions, `docker compose run` lost its `--no-deps` or
-`--entrypoint` (which makes the backup gate start `migrate`, or hang on
-`pg-backup`'s sleep loop), or a message the assertions grep for was reworded.
+A red job here usually means one of these:
+
+- the health poll no longer combines its two conditions;
+- `docker compose run` lost its `--no-deps` or `--entrypoint`, which makes the
+  backup gate start `migrate`, or hang on `pg-backup`'s sleep loop;
+- a message the assertions grep for was reworded;
+- a fixture's `sed` no longer matches the `compose.yml` line it edits — the
+  fixtures step fails on a missed label, for instance.
+
+To rehearse locally, pack a bundle from your checkout and unpack it somewhere
+other than the repo:
+
+```sh
+scripts/pack-bundle.sh "$(jq -r .version app/package.json)" /tmp/bundles
+```
 Shellcheck for the script lives in `backup-smoke.yml` with every other shell file
 in the repo.
 

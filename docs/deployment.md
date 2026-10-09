@@ -41,6 +41,7 @@ to every GitHub Release
 to `/opt/finance-stack/` and **is** the deployment:
 
 ```
+deploy.sh                install and upgrade
 compose.yml              the stack, every image pinned to ${APP_VERSION}
 .env.example             copy to .env, chmod 600, fill in
 finance-stack.service    systemd unit
@@ -51,6 +52,18 @@ imports/  importer/parsers/  backups/      data, bind-mounted
 
 Requirements on the host are Docker Engine and the Compose plugin. Nothing else —
 no source tree, no Node, no build toolchain.
+
+**An upgrade installs the next bundle, not just the next images**
+([#347](https://github.com/aellington89/finance-stack/issues/347)). Before #347,
+`deploy.sh` only moved `APP_VERSION`, so every host kept the `compose.yml` of the
+bundle it was first installed from. Third-party image updates, new services and
+new settings never arrived, and the health gate — which checks the app's version
+and nothing else — could not tell. Now `./deploy.sh X.Y.Z` fetches that release's
+tarball, verifies it, and installs its files alongside the new images. A host's
+own configuration stays its own: `.env`, `compose.override.yml` and the data
+directories are never touched, and an edited `compose.yml` or `Caddyfile` is
+handled as described in [Upgrading](#upgrading). `compose.yml`'s first line,
+`# finance-stack bundle: X.Y.Z`, records which release it came from.
 
 **The bundle carries its own copy of this runbook**, so the steps travel with the
 release they describe and work on a host that cannot reach GitHub. This page is
@@ -218,11 +231,30 @@ database restored.
 and upgrading ([#228](https://github.com/aellington89/finance-stack/issues/228)):
 
 ```sh
-cd /opt/finance-stack && ./deploy.sh 0.4.1
+cd /opt/finance-stack && ./deploy.sh X.Y.Z
 ```
 
-It is idempotent — re-running it at the already-deployed version converges the
-stack and changes nothing else.
+It installs that release's bundle as well as its images. The files are
+`compose.yml`, `.env.example`, `README.md`, `finance-stack.service`,
+`caddy/Caddyfile` and, once the deploy has succeeded, `deploy.sh` itself
+([#347](https://github.com/aellington89/finance-stack/issues/347)). It is
+idempotent — re-running it at the already-deployed version converges the stack
+and changes nothing else.
+
+**A host on a `deploy.sh` that predates #347 needs one manual step, once.** You
+can tell by the missing `DEPLOY_SCRIPT_VERSION=` line. That script cannot refresh
+anything, itself included, so copy the new release's `deploy.sh` over it by hand
+and run it as usual:
+
+```sh
+tar xzf finance-stack-X.Y.Z.tar.gz
+cp finance-stack-X.Y.Z/deploy.sh /opt/finance-stack/deploy.sh
+cd /opt/finance-stack && ./deploy.sh X.Y.Z
+```
+
+That run replaces the stale `compose.yml` and the rest, keeps the old copies in
+`.bundle-backup/`, and prints a notice saying so. From then on the script keeps
+itself current.
 
 **Read the release's `**Migration:**` marker first.** It is the first line of the
 release notes, on the GitHub Release and in [`CHANGELOG.md`](../CHANGELOG.md)
@@ -243,25 +275,55 @@ end up in.
 
 ### What it does, in order
 
-1. **Preflight** — Docker, the Compose plugin, `curl`, `.env`, and every required
-   variable actually set to something other than `changeme`.
-2. **Pull** — a nonexistent or bad version fails here, before anything running is
+1. **Preflight** — Docker, the Compose plugin, `curl`, `tar`, `sha256sum`, `.env`,
+   and every required variable actually set to something other than `changeme`.
+2. **Bundle** — the release's `finance-stack-X.Y.Z.tar.gz`, from `DEPLOY_BUNDLE`,
+   the cache in `.bundles/` or the GitHub release. It is verified against its
+   `.sha256`, unpacked into a scratch directory, and its `compose.yml` is checked
+   against your Compose plugin. The script works out what installing it changes
+   and reports what the release's `.env.example` adds. A missing or bad bundle,
+   an edit that would be lost, or a new required setting stops the deploy here,
+   with nothing changed.
+3. **Pull** — from the release's `compose.yml`, so new third-party images come
+   too. A nonexistent or bad version fails here, before anything running is
    touched and before `.env` is written.
-3. **Backup gate** — a fresh `pg_dump` into `backups/`, taken *before* `migrate`
+4. **Backup gate** — a fresh `pg_dump` into `backups/`, taken *before* `migrate`
    runs. **If the dump fails, the deploy aborts.** Skipped on a first install
-   (there is no database yet) and on a re-run of the deployed version (no schema
-   change is possible), and never skipped silently.
-4. **Pin** — writes `APP_VERSION` into `.env`, preserving its mode.
-5. **Apply** — `docker compose up -d`. Compose sequences it: postgres healthy →
-   migrate exits 0 → app and importer start.
-6. **Health gate** — polls `/api/health` for up to 180 seconds.
-7. **On failure** — prints the `migrate` and `finance-app` logs, re-pins the
-   previous version, brings it back up, re-polls, and tells you the dump path and
-   the exact restore command.
-8. **On success** — records the version in `.deployed-version` and removes image
-   tags older than the rollback target.
+   (there is no database yet) and on a re-run of the deployed version that
+   changes no files (no schema change is possible), and never skipped silently.
+5. **Pin and install** — writes `APP_VERSION` into `.env`, preserving its mode,
+   and installs the bundle's files, with every file it replaces copied aside
+   first.
+6. **Apply** — `docker compose up -d --remove-orphans`. Compose sequences it:
+   postgres healthy → migrate exits 0 → app and importer start.
+7. **Health gate** — polls `/api/health` for up to 180 seconds.
+8. **On failure** — prints the `migrate` and `finance-app` logs, puts back the
+   previous files and `APP_VERSION`, brings the previous version back up,
+   re-polls, and tells you the dump path and the exact restore command.
+9. **On success** — records the version in `.deployed-version`. It keeps the
+   replaced files in `.bundle-backup/` and the bundle in `.bundles/`, updates
+   `deploy.sh`, and prunes images and bundles older than the rollback target.
+   It then re-applies any running `--profile bi`/`errors`/`edge` service on the
+   new `compose.yml`.
 
-Three of those are worth understanding rather than just running.
+Four of those are worth understanding rather than just running.
+
+**The files move with the images, and edits are not silently dropped.** The
+point of #347 is that `compose.yml` belongs to the release. But operators edit
+things, and the docs ask for some edits — `tls internal` and an ACME `email` in
+the Caddyfile. The script tells an edit from staleness by comparing the file
+with the release it came from, then handles it as dpkg handles an edited
+configuration file:
+
+- An edited `compose.yml` that the release also changes **stops the upgrade**
+  (exit 1), because replacing it would drop the edit. The message shows how to
+  move the edit into `compose.override.yml`, which Compose merges in on its own
+  and the script never touches.
+- An edited `caddy/Caddyfile` is **kept**, since Caddy has no override file. The
+  release's copy is written beside it as `caddy/Caddyfile.dist`.
+- A file the release leaves alone keeps its edits either way.
+
+The bundle's README has the details under "Customizing the stack".
 
 **The dump is a gate, not a step.** It runs before `migrate` does, and a failed
 dump aborts the deploy with nothing changed. `drizzle-kit` generates no down
@@ -276,41 +338,48 @@ correct on a fresh boot and wrong on an upgrade, because the old container is
 still answering 200 with the old version while the new one starts.
 
 **Rollback restores the application, not the database.** On a failed gate the
-script re-pins the previous version, brings it back and re-polls — and then
-prints the pre-upgrade dump's path with the exact `restore.sh` invocation,
-because where the release carried a schema change the old app may not run against
-the schema now on disk.
+script puts back the previous files and `APP_VERSION`, brings the previous
+version back and re-polls. Then it prints the pre-upgrade dump's path with the
+exact `restore.sh` invocation, because where the release carried a schema change
+the old app may not run against the schema now on disk.
 
 The exit codes are meant to be branched on:
 
 | Code | Meaning |
 |---|---|
 | `0` | Deployed and healthy. |
-| `1` | Aborted before anything was applied — preflight, the pull, or the dump failed. The running stack and `.env` are untouched. |
-| `2` | The upgrade failed and was **rolled back**; the previous version is healthy again. |
+| `1` | Aborted before anything was applied — preflight, the bundle, the pull or the dump failed, or an edited `compose.yml` conflicts with the release. The running stack, `.env` and every file are untouched. |
+| `2` | The upgrade failed and was **rolled back**; the previous version is healthy again, on its own files. |
 | `3` | The upgrade failed **and the rollback failed**. Needs a human. |
 
-`.github/workflows/deploy-smoke.yml` exercises install → failed upgrade →
-automatic rollback on every PR that touches the script, using the same image
-tagged under a version it does not report as the "bad release".
+`.github/workflows/deploy-smoke.yml` runs on every PR that touches the script.
+It boots a packed bundle and exercises install, a same-version refresh, a failed
+upgrade with its automatic rollback, malformed bundles and edit conflicts. The
+"bad release" is the same image tagged under a version it does not report.
 
 The bundle's own `README.md` is the reference for the parts deliberately not
-repeated here: the `DEPLOY_SKIP_PULL` / `DEPLOY_HEALTH_TIMEOUT` /
-`DEPLOY_HEALTH_URL` overrides, the equivalent sequence done by hand, and the
-troubleshooting one-liners. It ships beside `deploy.sh` in the release you are
-running, so it is always the copy that matches.
+repeated here. Those are the `DEPLOY_*` overrides — `DEPLOY_BUNDLE` for a host
+that cannot reach GitHub, `DEPLOY_SKIP_BUNDLE` as the escape hatch, and the rest
+— plus the equivalent sequence done by hand and the troubleshooting one-liners.
+It ships beside `deploy.sh` in the release you are running, so it is always the
+copy that matches.
 
 ### Rolling back
 
-On a failed health gate there is nothing to run — the script has already re-pinned
-the previous version, brought it back and re-polled. Exit `2` means that worked
-and the previous version is healthy; exit `3` means it did not.
+On a failed health gate there is nothing to run. The script has already put back
+the previous files and `APP_VERSION`, brought the previous version back and
+re-polled. Exit `2` means that worked and the previous version is healthy; exit
+`3` means it did not.
 
 To go back deliberately, name the older version:
 
 ```sh
 ./deploy.sh 0.4.0
 ```
+
+That installs the older release's files as well. They come from `.bundles/` if
+it is the version you just left, so it works without the network. The newer
+`deploy.sh` stays in place, since it is the one that knows how to upgrade again.
 
 Either way you have restored the *application*. If the release you are leaving was
 marked `breaking`, the schema on disk is still the new one and the old app may not
@@ -360,13 +429,24 @@ nothing if everything was already in place.
 ## Backups on a deployment
 
 `pg-backup` starts with the stack and needs no configuration. It dumps every
-database in `BACKUP_DBS` (default `Finances,metabase`) into `./backups/` beside
-`compose.yml`, once at start and then every `BACKUP_INTERVAL_SECONDS` (daily by
-default), pruning dumps older than `BACKUP_RETENTION_DAYS` (14) while always
-keeping the newest of each database. Its healthcheck reports **unhealthy** if no
-dump is newer than 1.5× the interval, which is the quick signal that the loop has
-stalled. Configuration, formats and full disaster recovery are in
+database in `BACKUP_DBS` (default `Finances,metabase,glitchtip`) into `./backups/`
+beside `compose.yml`, once at start and then every `BACKUP_INTERVAL_SECONDS`
+(daily by default), pruning dumps older than `BACKUP_RETENTION_DAYS` (14) while
+always keeping the newest of each database. Its healthcheck reports **unhealthy**
+if no dump is newer than 1.5× the interval, which is the quick signal that the
+loop has stalled. Configuration, formats and full disaster recovery are in
 [Backups](backups.md).
+
+**`BACKUP_DBS` is set in `.env`, so that value wins over the default.** The
+template lists it explicitly, and a host set up before 1.1.0 copied
+`Finances,metabase` from it — without `glitchtip`, which arrived with #232. That
+is harmless while the `errors` profile is off, since a database that does not
+exist is skipped. Turn GlitchTip on, though, and its database goes unbacked-up
+until you add it. `deploy.sh` reports this kind of drift when a release changes a
+default your `.env` still carries
+([#347](https://github.com/aellington89/finance-stack/issues/347)). An upgrade
+made before that report existed left no warning, so check by hand:
+`grep ^BACKUP_DBS .env`.
 
 Two things matter more on a deployment host than they do on a laptop:
 
@@ -393,6 +473,13 @@ Metabase is behind the `bi` profile and does not start by default:
 ```sh
 docker compose --profile bi up -d
 ```
+
+Once it is running, upgrades keep it current. A plain `up -d` leaves a
+profile-gated container on the definition it was started with, so `deploy.sh`
+re-applies a running Metabase on each release's `compose.yml` after the app is
+healthy ([#347](https://github.com/aellington89/finance-stack/issues/347)). Each
+0.58.x bump then reaches the container rather than stopping at the file. The same
+goes for GlitchTip and Caddy.
 
 A fresh deploy starts it with an empty `metabase_data` volume and an empty
 metadata database, so **it has no analytics connection at all** — not a
@@ -499,6 +586,13 @@ its header comment.
 
 Certificates live in the `caddy_data` volume. Losing it just means re-issuing on
 next start.
+
+Edits to the Caddyfile survive upgrades
+([#347](https://github.com/aellington89/finance-stack/issues/347)). `deploy.sh`
+installs each release's files, but it keeps a Caddyfile you have changed. When
+the release changes it too, the script writes the release's copy beside yours as
+`caddy/Caddyfile.dist` and says so; merge what you need with
+`diff caddy/Caddyfile caddy/Caddyfile.dist`.
 
 Starting the `edge` profile does **not** change how you reach the app from a
 checkout: the repo's `docker-compose.yml` keeps its own all-interfaces `3001`

@@ -164,13 +164,37 @@ run log reports it, because the push itself succeeds.
 Every `vX.Y.Z` tag also attaches `finance-stack-X.Y.Z.tar.gz` to the Release,
 along with a `.sha256` checksum
 ([Issue #227](https://github.com/aellington89/finance-stack/issues/227)). It
-unpacks to a single `finance-stack-X.Y.Z/` directory containing `compose.yml`,
-`.env.example` (with `APP_VERSION` already stamped to that release),
-`finance-stack.service`, `caddy/Caddyfile`, a `README.md` runbook, and empty
-`imports/`, `importer/parsers/` and `backups/` directories for the bind mounts.
+unpacks to a single `finance-stack-X.Y.Z/` directory containing `deploy.sh`,
+`compose.yml`, `.env.example`, `finance-stack.service`, `caddy/Caddyfile`, a
+`README.md` runbook, and empty `imports/`, `importer/parsers/` and `backups/`
+directories for the bind mounts.
 
 That bundle is the whole deployment — a host needs Docker and nothing else. See
 [Deployment & Exposure](deployment.md#the-deployment-bundle).
+
+**`scripts/pack-bundle.sh X.Y.Z OUTDIR` packs it**, for `release.yml` and for
+`deploy-smoke.yml` alike ([#347](https://github.com/aellington89/finance-stack/issues/347)).
+It packs the git-tracked files under `deploy/`, so a file added there ships by
+existing, while a checkout's real `.env`, dumps and deploy state never can. It
+stamps three placeholders with the version and fails unless each lands exactly
+once:
+
+| File | Placeholder in git | Stamped for |
+|---|---|---|
+| `.env.example` | `APP_VERSION=changeme` | a first install that needs no edit |
+| `compose.yml` | `# finance-stack bundle: unreleased` (line 1) | `deploy.sh` telling which release a host's file came from, and whether it was edited since |
+| `deploy.sh` | `DEPLOY_SCRIPT_VERSION="unreleased"` | the script's forward-only self-update |
+
+Run it locally to rehearse an upgrade against the checkout rather than a release.
+
+**The bundle is now an interface that deployed hosts depend on.** Since #347
+`deploy.sh` downloads `vX.Y.Z/finance-stack-X.Y.Z.tar.gz` and its `.sha256` from
+the Release on every upgrade. It insists on the one top-level
+`finance-stack-X.Y.Z/` directory, plain files only, and a checksum line naming
+the tarball. Renaming the asset, changing its layout or changing the checksum
+format breaks every host's next upgrade. So does a release that ships the
+`unreleased` placeholders, which the script reads as a checkout and never
+installs.
 
 Two details of how the workflow builds it are worth knowing:
 

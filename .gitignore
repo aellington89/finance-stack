@@ -30,6 +30,10 @@ __pycache__/
 # Written by deploy/deploy.sh after a green health gate — the rollback target of
 # one specific host, not a repository fact (#228).
 /deploy/.deployed-version
+# Also deploy.sh's (#347): the verified bundles for one host's deployed and
+# previous releases, and the files its last successful run replaced.
+/deploy/.bundles/
+/deploy/.bundle-backup/
 
 # Next.js application (app/ directory)
 app/node_modules
