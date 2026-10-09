@@ -25,6 +25,12 @@ name: Deploy smoke
 # differs from deploy/ in ways that matter: it carries caddy/Caddyfile and the
 # version stamps deploy.sh reads to decide what to refresh.
 #
+# AND AN UPGRADE INSTALLS A BUNDLE (#347). The fixtures step below re-packs the
+# real bundle with deliberate edits, so each scenario can look for one on the
+# host or in a running container: a same-version refresh that must install
+# them, a failed upgrade that must take them back out, operator edits that must
+# survive, and malformed bundles that must change nothing at all.
+#
 # Shellcheck for deploy.sh lives in backup-smoke.yml with every other shell file
 # in the repo; this workflow owns behaviour only.
 
@@ -62,6 +68,11 @@ jobs:
       # 180s is right for a real host; here it is the floor on how long the
       # deliberately-failing run takes, and nothing needs 180s on a runner.
       DEPLOY_HEALTH_TIMEOUT: 60
+      # No step may lean on GitHub's releases (#347): every bundle here is packed
+      # from this checkout and handed over with DEPLOY_BUNDLE, or comes out of the
+      # host's cache. A reserved name that never resolves makes any download fail
+      # fast, rather than quietly testing the published release instead.
+      DEPLOY_RELEASE_URL: https://deploy-smoke.invalid/releases/download
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,6 +126,99 @@ jobs:
           head -n1 host/compose.yml
           grep '^DEPLOY_SCRIPT_VERSION=' host/deploy.sh
 
+      # Fixtures for the #347 scenarios: the real bundles, unpacked, edited and
+      # re-packed with a fresh checksum. Each edit is something a scenario then
+      # looks for on the host or in a running container.
+      #
+      #   vprime    $VER   finance-app and caddy gain a label; .env.example a
+      #                    commented key and a new BACKUP_DBS default; deploy.sh
+      #                    a line. A same-version refresh.
+      #   caddy     $VER   vprime with a changed Caddyfile
+      #   nine      9.9.9  finance-app labelled `nine`, a sidecar service added,
+      #                    deploy.sh changed. The upgrade that fails.
+      #   required  $VER   .env.example gains an active changeme key
+      #   badsum, othername, symlink, dotdot, nosha   $VER, each malformed
+      - name: Pack the scenario bundles
+        working-directory: .
+        run: |
+          scripts/pack-bundle.sh 9.9.9 "$BUNDLES/bogus" > /dev/null
+          BASE="$BUNDLES/finance-stack-$VER.tar.gz"
+          NAME="finance-stack-$VER.tar.gz"
+
+          # repack SRC VERSION OUT EDIT — EDIT runs inside the unpacked bundle.
+          repack() {
+            local src="$1" version="$2" out="$3" edit="$4" tmp
+            tmp="$(mktemp -d)"
+            tar -xzf "$src" -C "$tmp"
+            (cd "$tmp/finance-stack-$version" && "$edit")
+            mkdir -p "$out"
+            tar -czf "$out/finance-stack-$version.tar.gz" -C "$tmp" "finance-stack-$version"
+            (cd "$out" && sha256sum "finance-stack-$version.tar.gz" > "finance-stack-$version.tar.gz.sha256")
+            rm -rf "$tmp"
+          }
+          # label "<service's description label>" VALUE
+          label() {
+            sed -i "s|^      com.finance-stack.description: \"$1\"\$|&\n      com.finance-stack.smoke: \"$2\"|" compose.yml
+            grep -qF "com.finance-stack.smoke: \"$2\"" compose.yml
+          }
+          vprime() {
+            label "Next.js finance application" vprime
+            label "Caddy reverse proxy / TLS termination" vprime
+            printf '\n# Added by deploy-smoke.\n# SMOKE_NEW_OPTION=on\n' >> .env.example
+            sed -i 's/^BACKUP_DBS=.*/BACKUP_DBS=Finances,metabase,glitchtip,smoke/' .env.example
+            printf '# deploy-smoke: vprime\n' >> deploy.sh
+          }
+          caddy() {
+            printf '# deploy-smoke: a changed Caddyfile\n' >> caddy/Caddyfile
+          }
+          required() {
+            printf '\nSMOKE_REQUIRED_SECRET=changeme\n' >> .env.example
+          }
+          nine() {
+            label "Next.js finance application" nine
+            awk '/^volumes:$/ && !done { print "  smoke-sidecar:\n    image: ${IMAGE_REGISTRY}/finance-backup:${APP_VERSION}\n    entrypoint: [\"sleep\", \"infinity\"]\n    networks:\n      - appnet\n"; done = 1 } { print }' \
+              compose.yml > compose.yml.new
+            mv compose.yml.new compose.yml
+            grep -q '^  smoke-sidecar:$' compose.yml
+            printf '# deploy-smoke: nine\n' >> deploy.sh
+          }
+
+          repack "$BASE" "$VER" "$BUNDLES/vprime" vprime
+          repack "$BUNDLES/vprime/$NAME" "$VER" "$BUNDLES/caddy" caddy
+          repack "$BASE" "$VER" "$BUNDLES/required" required
+          repack "$BUNDLES/bogus/finance-stack-9.9.9.tar.gz" 9.9.9 "$BUNDLES/nine" nine
+
+          # Malformed, all claiming to be $VER.
+          mkdir -p "$BUNDLES/badsum" "$BUNDLES/othername" "$BUNDLES/symlink" "$BUNDLES/dotdot" "$BUNDLES/nosha"
+          # A checksum that is simply wrong.
+          cp "$BASE" "$BUNDLES/badsum/"
+          printf '%064d  %s\n' 0 "$NAME" > "$BUNDLES/badsum/$NAME.sha256"
+          # A correct checksum of a different file, beside a tarball that has
+          # been tampered with — what `sha256sum -c` would wave through.
+          cp "$BASE" "$BUNDLES/othername/decoy.tar.gz"
+          (cd "$BUNDLES/othername" && sha256sum decoy.tar.gz > "$NAME.sha256")
+          cp "$BASE" "$BUNDLES/othername/$NAME"
+          printf 'tampered' >> "$BUNDLES/othername/$NAME"
+          # A symlink member, and a member that climbs out with `..`.
+          for kind in symlink dotdot; do
+            tmp="$(mktemp -d)"
+            tar -xzf "$BASE" -C "$tmp"
+            if [ "$kind" = symlink ]; then
+              ln -s /etc/passwd "$tmp/finance-stack-$VER/passwd"
+              tar -czf "$BUNDLES/$kind/$NAME" -C "$tmp" "finance-stack-$VER"
+            else
+              # -P, or tar strips the `..` it is being asked to store.
+              printf 'escaped' > "$tmp/escape.txt"
+              tar -P -czf "$BUNDLES/$kind/$NAME" -C "$tmp" "finance-stack-$VER" "finance-stack-$VER/../escape.txt"
+            fi
+            (cd "$BUNDLES/$kind" && sha256sum "$NAME" > "$NAME.sha256")
+            rm -rf "$tmp"
+          done
+          # No checksum at all.
+          cp "$BASE" "$BUNDLES/nosha/"
+
+          find "$BUNDLES" -type f | sort
+
       # Stand the bundle up exactly as the README tells an operator to: copy the
       # template, replace every changeme, create the three bind-mount directories.
       - name: Configure the bundle
@@ -139,10 +243,13 @@ jobs:
       # pg-backup SERVICE runs its first dump the moment `up -d` starts it, so
       # backups/ is legitimately non-empty seconds after any install. Only the
       # log distinguishes "the gate was skipped" from "the gate ran".
+      #
+      # DEPLOY_BUNDLE is the bundle the host was unpacked from, so nothing needs
+      # installing (#347) — but it is verified, and kept as the host's cache.
       - name: First install
         working-directory: host
         run: |
-          ./deploy.sh 2>&1 | tee install.log
+          DEPLOY_BUNDLE="$BUNDLES/finance-stack-$VER.tar.gz" ./deploy.sh 2>&1 | tee install.log
 
           if ! grep -qF "skipping the backup gate — there is no database to dump yet" install.log; then
             echo "::error::the backup gate did not report itself skipped on a first install"
@@ -156,7 +263,15 @@ jobs:
             echo "::error::.deployed-version is '$(cat .deployed-version)', expected '$VER'"
             exit 1
           fi
-          echo "✓ installed $VER; the gate was skipped, not run"
+          if ! grep -qF "the files here already match the $VER bundle" install.log; then
+            echo "::error::a host unpacked from the $VER bundle was not recognised as already matching it"
+            exit 1
+          fi
+          if ! cmp -s ".bundles/finance-stack-$VER.tar.gz" "$BUNDLES/finance-stack-$VER.tar.gz"; then
+            echo "::error::the installed bundle was not kept in .bundles/"
+            exit 1
+          fi
+          echo "✓ installed $VER; the gate was skipped, not run; the bundle is cached"
 
       # AC (#288): the bundle can create the first user. Nothing on this runner
       # is used but the images and deploy/ — no checkout is on the PATH of this
@@ -244,7 +359,8 @@ jobs:
           fi
           echo "✓ finance_app is refused, as #130 intends"
 
-      # AC: re-running with the already-deployed version is a safe no-op.
+      # AC: re-running with the already-deployed version is a safe no-op. No
+      # DEPLOY_BUNDLE: the bundle comes out of the cache the install left (#347).
       - name: Re-run at the same version
         working-directory: host
         run: |
@@ -262,16 +378,127 @@ jobs:
             echo "::error::.deployed-version moved on a no-op re-run"
             exit 1
           fi
-          echo "✓ re-run at $VER changed nothing"
+          if ! grep -qF "from .bundles/" rerun.log; then
+            echo "::error::the re-run did not take its bundle from the cache"
+            exit 1
+          fi
+          echo "✓ re-run at $VER changed nothing, bundle from the cache"
+
+      # #347: with no bundle to be had — no DEPLOY_BUNDLE, no cache, and a release
+      # URL that cannot resolve — a host whose compose.yml is already stamped with
+      # the target converges as it is. One asked to move to a version it has no
+      # bundle for refuses, rather than run new images on an old stack definition.
+      - name: Without a bundle, converge on the stamp and refuse an upgrade
+        working-directory: host
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          fingerprint() {
+            sha256sum compose.yml .env .env.example README.md deploy.sh finance-stack.service \
+              caddy/Caddyfile .deployed-version
+          }
+          mv .bundles "$RUNNER_TEMP/bundles-cache"
+
+          ./deploy.sh 2>&1 | tee offline.log
+          grep -qF "compose.yml here is already ${VER}'s" offline.log \
+            || fail "an offline converge did not proceed on the stamp"
+
+          BEFORE="$(fingerprint)"
+          set +e
+          ./deploy.sh 9.9.9 > offline-upgrade.log 2>&1
+          rc=$?
+          set -e
+          cat offline-upgrade.log
+          [ "$rc" = 1 ] || fail "an upgrade with no bundle exited $rc, expected 1"
+          grep -qF "no 9.9.9 bundle — nothing has been changed" offline-upgrade.log \
+            || fail "the refusal did not say why"
+          [ "$(fingerprint)" = "$BEFORE" ] || fail "a refused upgrade changed files"
+
+          rm -rf .bundles
+          mv "$RUNNER_TEMP/bundles-cache" .bundles
+          echo "✓ converged offline on the stamp; refused 9.9.9 with nothing changed"
+
+      # #347: a bundle that fails its checksum, names another file in its
+      # checksum, carries a symlink or a `..` member, has no checksum beside it,
+      # or adds a required setting .env lacks — each is refused with exit 1
+      # before a single file here changes.
+      - name: Bad bundles are refused before anything changes
+        working-directory: host
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          fingerprint() {
+            sha256sum compose.yml .env .env.example README.md deploy.sh finance-stack.service \
+              caddy/Caddyfile .deployed-version
+          }
+          for kind in badsum othername symlink dotdot nosha required; do
+            BEFORE="$(fingerprint)"
+            set +e
+            DEPLOY_BUNDLE="$BUNDLES/$kind/finance-stack-$VER.tar.gz" ./deploy.sh "$VER" > "bad-$kind.log" 2>&1
+            rc=$?
+            set -e
+            if [ "$rc" != 1 ]; then
+              cat "bad-$kind.log"
+              fail "the $kind bundle exited $rc, expected 1"
+            fi
+            [ "$(fingerprint)" = "$BEFORE" ] || fail "the $kind bundle changed files on its way to being refused"
+            echo "✓ $kind: $(grep -F 'ERROR' "bad-$kind.log" | tail -n1)"
+          done
+          grep -qF SMOKE_REQUIRED_SECRET bad-required.log \
+            || fail "the refusal of a new required setting does not name it"
+
+      # #347, the core of it: a bundle whose compose.yml, .env.example and
+      # deploy.sh differ from the installed ones, at the version already
+      # deployed — so the health gate passes and the install is what is under
+      # test. caddy is started first, under --profile edge: a plain `up -d`
+      # leaves it on the definition it started with, so deploy.sh has to
+      # re-apply it once the app is healthy.
+      - name: A same-version refresh installs the bundle's files and re-applies a running optional service
+        working-directory: host
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          smoke_label() { docker inspect -f '{{ index .Config.Labels "com.finance-stack.smoke" }}' "$1"; }
+
+          echo "PUBLIC_HOSTNAME=localhost" >> .env
+          docker compose --profile edge up -d caddy
+          cp compose.yml "$RUNNER_TEMP/compose.before"
+          cp deploy.sh "$RUNNER_TEMP/deploy.before"
+
+          DEPLOY_BUNDLE="$BUNDLES/vprime/finance-stack-$VER.tar.gz" ./deploy.sh "$VER" 2>&1 | tee refresh.log
+
+          mkdir -p "$RUNNER_TEMP/vprime"
+          tar -xzf "$BUNDLES/vprime/finance-stack-$VER.tar.gz" -C "$RUNNER_TEMP/vprime" --strip-components=1
+          cmp -s compose.yml "$RUNNER_TEMP/vprime/compose.yml" || fail "compose.yml is not the bundle's"
+          cmp -s .env.example "$RUNNER_TEMP/vprime/.env.example" || fail ".env.example is not the bundle's"
+          cmp -s .bundle-backup/compose.yml "$RUNNER_TEMP/compose.before" \
+            || fail "the replaced compose.yml was not kept in .bundle-backup/"
+          grep -qF "pre-upgrade dump:" refresh.log \
+            || fail "compose.yml changed at the deployed version, but the backup gate did not run"
+          [ "$(smoke_label finance-app)" = vprime ] || fail "finance-app was not recreated on the new compose.yml"
+          [ "$(smoke_label caddy)" = vprime ] || fail "the running caddy was not re-applied on the new compose.yml"
+          grep -qF "new:              SMOKE_NEW_OPTION" refresh.log \
+            || fail "the .env.example report did not name the new key"
+          grep -qF "default changed:  BACKUP_DBS" refresh.log \
+            || fail "the .env.example report did not flag the BACKUP_DBS default .env still carries"
+          if grep -qF deploy-smoke-secret refresh.log; then
+            fail "a value from .env was printed"
+          fi
+          cmp -s deploy.sh "$RUNNER_TEMP/vprime/deploy.sh" || fail "deploy.sh was not replaced by the bundle's"
+          cmp -s .bundle-backup/deploy.sh "$RUNNER_TEMP/deploy.before" || fail "the replaced deploy.sh was not kept"
+          echo "✓ compose.yml, .env.example and deploy.sh refreshed; finance-app and caddy run the new definition"
 
       # The heart of it. 9.9.9 is the same image, so it pulls, starts, migrates
       # and answers 200 — and reports $VER. Only the version half of the health
-      # condition can fail here, which is precisely what is being tested.
+      # condition can fail here, which is precisely what is being tested. Its
+      # bundle changes compose.yml and adds a service (#347), so the rollback
+      # also has to take the files back and the new service out.
       - name: Upgrade to a version that reports the wrong build, and roll back
         working-directory: host
         run: |
+          cp compose.yml "$RUNNER_TEMP/compose.pre-nine"
+          cp .env.example "$RUNNER_TEMP/env-example.pre-nine"
+          cp deploy.sh "$RUNNER_TEMP/deploy.pre-nine"
+
           set +e
-          ./deploy.sh 9.9.9 > upgrade.log 2>&1
+          DEPLOY_BUNDLE="$BUNDLES/nine/finance-stack-9.9.9.tar.gz" ./deploy.sh 9.9.9 > upgrade.log 2>&1
           rc=$?
           set -e
           cat upgrade.log
@@ -329,7 +556,20 @@ jobs:
             echo "::error::/api/health reports '$GOT' after rollback, expected '$VER'"
             exit 1
           fi
-          echo "✓ rolled back to $VER, healthy, restore command printed"
+
+          # #347: the files went back with .env, and the stack with them.
+          fail() { echo "::error::$*"; exit 1; }
+          cmp -s compose.yml "$RUNNER_TEMP/compose.pre-nine" || fail "compose.yml was not restored by the rollback"
+          cmp -s .env.example "$RUNNER_TEMP/env-example.pre-nine" || fail ".env.example was not restored by the rollback"
+          cmp -s deploy.sh "$RUNNER_TEMP/deploy.pre-nine" || fail "deploy.sh changed although the upgrade failed"
+          grep -qF "were put back as well" upgrade.log || fail "the rollback did not report the files restored"
+          grep -qF "smoke-sidecar" upgrade.log || fail "the failed attempt never started the sidecar, so its removal proves nothing"
+          [ -z "$(docker ps -aq --filter label=com.docker.compose.service=smoke-sidecar)" ] \
+            || fail "the service the failed release added survived the rollback"
+          [ "$(docker inspect -f '{{ index .Config.Labels "com.finance-stack.smoke" }}' finance-app)" = vprime ] \
+            || fail "finance-app is not back on the restored compose.yml"
+          [ ! -e .bundles/finance-stack-9.9.9.tar.gz ] || fail "the bundle of a failed upgrade was cached"
+          echo "✓ rolled back to $VER, healthy, restore command printed, files and services restored"
 
       # The gate is only worth having if what it produces is restorable. Restores
       # into a throwaway database, so no --force is needed and Finances is not
@@ -341,7 +581,77 @@ jobs:
             "/backups/$(basename "$DUMP")" Finances_Restore_Check
           echo "✓ the dump deploy.sh gated on actually restores"
 
+      # #347: what an operator's own edits get. A compose.yml edited here that
+      # the release also changes stops the upgrade with nothing changed —
+      # dropping the edit silently is the very bug. A Caddyfile edited here is
+      # kept, because the docs tell operators to edit it and nothing like
+      # compose.override.yml exists for it; the release's copy lands beside it.
+      - name: Edited files are not silently replaced
+        working-directory: host
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          fingerprint() {
+            sha256sum compose.yml .env .env.example README.md deploy.sh finance-stack.service \
+              caddy/Caddyfile .deployed-version
+          }
+
+          printf '# edited on this host\n' >> compose.yml
+          BEFORE="$(fingerprint)"
+          set +e
+          DEPLOY_BUNDLE="$BUNDLES/nine/finance-stack-9.9.9.tar.gz" ./deploy.sh 9.9.9 > conflict.log 2>&1
+          rc=$?
+          set -e
+          cat conflict.log
+          [ "$rc" = 1 ] || fail "an edited compose.yml that the release changes exited $rc, expected 1"
+          grep -qF "compose.yml conflicts with the 9.9.9 release" conflict.log || fail "the refusal did not say why"
+          grep -qF "compose.override.yml" conflict.log || fail "the refusal does not point at compose.override.yml"
+          [ "$(fingerprint)" = "$BEFORE" ] || fail "a refused upgrade changed files"
+          # Put the shipped copy back, as the message says to.
+          tar -xzOf ".bundles/finance-stack-$VER.tar.gz" "finance-stack-$VER/compose.yml" > compose.yml
+
+          printf '# edited on this host\n' >> caddy/Caddyfile
+          cp caddy/Caddyfile "$RUNNER_TEMP/Caddyfile.edited"
+          DEPLOY_BUNDLE="$BUNDLES/caddy/finance-stack-$VER.tar.gz" ./deploy.sh "$VER" 2>&1 | tee caddyfile.log
+          mkdir -p "$RUNNER_TEMP/caddy-bundle"
+          tar -xzf "$BUNDLES/caddy/finance-stack-$VER.tar.gz" -C "$RUNNER_TEMP/caddy-bundle" --strip-components=1
+          cmp -s caddy/Caddyfile "$RUNNER_TEMP/Caddyfile.edited" || fail "the edited Caddyfile was replaced"
+          cmp -s caddy/Caddyfile.dist "$RUNNER_TEMP/caddy-bundle/caddy/Caddyfile" \
+            || fail "the release's Caddyfile was not written as caddy/Caddyfile.dist"
+          echo "✓ an edited compose.yml stopped the upgrade; an edited Caddyfile was kept beside the release's"
+
+      # The abort trap (#228, extended by #347): interrupted once the bundle's
+      # files are in, deploy.sh puts them and .env back on its way out. Where in
+      # the run the interrupt lands varies; what has to hold does not. Then the
+      # stack must converge back from wherever it was left.
+      - name: Interrupting an upgrade puts the files and .env back
+        working-directory: host
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          cp compose.yml "$RUNNER_TEMP/compose.pre-int"
+          cp .env "$RUNNER_TEMP/env.pre-int"
+
+          set +e
+          DEPLOY_BUNDLE="$BUNDLES/nine/finance-stack-9.9.9.tar.gz" \
+            timeout --preserve-status -s INT 75 ./deploy.sh 9.9.9 > interrupted.log 2>&1
+          rc=$?
+          set -e
+          cat interrupted.log
+          [ "$rc" != 0 ] || fail "the interrupted run exited 0"
+          cmp -s compose.yml "$RUNNER_TEMP/compose.pre-int" || fail "compose.yml was not put back"
+          cmp -s .env "$RUNNER_TEMP/env.pre-int" || fail ".env was not put back"
+          if find . -name '*.deploy.tmp' | grep -q .; then
+            fail "a temporary file was left behind"
+          fi
+
+          ./deploy.sh "$VER" 2>&1 | tee reconverge.log
+          [ "$(curl -fsS http://127.0.0.1:3001/api/health | jq -r .build.version)" = "$VER" ] \
+            || fail "the stack did not converge back to $VER"
+          [ -z "$(docker ps -aq --filter label=com.docker.compose.service=smoke-sidecar)" ] \
+            || fail "the sidecar outlived the reconverge"
+          echo "✓ interrupted at exit $rc with files and .env restored; converged back to $VER"
+
+      # Every profile, so caddy (started above under --profile edge) goes too.
       - name: Tear down
         if: always()
         working-directory: host
-        run: docker compose down -v --remove-orphans || true
+        run: docker compose --profile bi --profile edge --profile errors --profile init down -v --remove-orphans || true
