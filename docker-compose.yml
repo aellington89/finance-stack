@@ -518,7 +518,7 @@ services:
   # host is genuinely internet-facing, rebind it to 127.0.0.1:3001:3001 so the
   # proxy is the only public listener — the #130 pattern, applied to the app tier.
   caddy:
-    image: caddy:2.11.4-alpine
+    image: caddy:2.11.6-alpine
     container_name: caddy
     profiles: ["edge"]                 # Not started by default; run with --profile edge
     restart: unless-stopped
