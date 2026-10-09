@@ -30,6 +30,9 @@ on:
       # deploy-smoke.yml; this job is still where it gets linted, so an edit to
       # it has to be able to trigger the lint.
       - 'deploy/deploy.sh'
+      # And again (#347): the bundle's only producer, run by release.yml and
+      # deploy-smoke.yml.
+      - 'scripts/pack-bundle.sh'
       # And again (#291). This one runs in ci.yml's image job, not here.
       - 'scripts/check-trivy-suppressions.sh'
       - 'app/scripts/*.sh'
@@ -84,7 +87,7 @@ jobs:
         run: |
           shellcheck scripts/backup.sh scripts/restore.sh scripts/verify-db-roles.sh \
                      scripts/build.sh scripts/check-deploy-parity.sh \
-                     scripts/check-trivy-suppressions.sh \
+                     scripts/check-trivy-suppressions.sh scripts/pack-bundle.sh \
                      deploy/deploy.sh \
                      app/scripts/migrate-and-seed.sh app/scripts/preflight-superuser.sh
 

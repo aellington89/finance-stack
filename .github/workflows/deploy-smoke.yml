@@ -19,6 +19,12 @@ name: Deploy smoke
 # all there is, so the command either works from the published image or it does
 # not.
 #
+# THE HOST IS A PACKED BUNDLE, NOT THE CHECKOUT (#347). Every step runs in
+# host/, unpacked from the tarball scripts/pack-bundle.sh produces — the same
+# script release.yml publishes with. That is what an operator receives, and it
+# differs from deploy/ in ways that matter: it carries caddy/Caddyfile and the
+# version stamps deploy.sh reads to decide what to refresh.
+#
 # Shellcheck for deploy.sh lives in backup-smoke.yml with every other shell file
 # in the repo; this workflow owns behaviour only.
 
@@ -39,6 +45,10 @@ on:
       # makes its @/… imports resolve (#288). A change there can break the first
       # -user step below without touching anything else in this list.
       - 'app/Dockerfile'
+      # The host every step runs on is packed by this script, and the bundle
+      # carries the Caddyfile (#347).
+      - 'scripts/pack-bundle.sh'
+      - 'caddy/Caddyfile'
       - '.github/workflows/deploy-smoke.yml'
 
 jobs:
@@ -75,10 +85,40 @@ jobs:
             docker tag "$IMG:latest" "local/$IMG:9.9.9"
           done
 
+      # The bundle exactly as release.yml packs it, unpacked the way the README
+      # tells an operator to. The tarballs live in $RUNNER_TEMP, outside the
+      # host, the way a downloaded release sits outside /opt/finance-stack.
+      #
+      # The member list is asserted, not just printed. Since #347 deploy.sh
+      # installs every file a bundle ships onto every host it upgrades, so a
+      # file appearing here is a change to every deployment — one a reviewer
+      # should have seen in this list.
+      - name: Pack the bundle and unpack it as the host
+        working-directory: .
+        run: |
+          BUNDLES="$RUNNER_TEMP/bundles"
+          echo "BUNDLES=$BUNDLES" >> "$GITHUB_ENV"
+          scripts/pack-bundle.sh "$VER" "$BUNDLES"
+
+          tar -tzf "$BUNDLES/finance-stack-$VER.tar.gz" \
+            | sed "s|^finance-stack-$VER/||" | LC_ALL=C sort > "$RUNNER_TEMP/members.actual"
+          printf '%s\n' '' .env.example README.md backups/ caddy/ caddy/Caddyfile compose.yml \
+              deploy.sh finance-stack.service importer/ importer/parsers/ imports/ \
+            | LC_ALL=C sort > "$RUNNER_TEMP/members.expected"
+          if ! diff -u "$RUNNER_TEMP/members.expected" "$RUNNER_TEMP/members.actual"; then
+            echo "::error::the bundle's file list changed — deploy.sh installs every file in it on every host it upgrades (#347), so update this list deliberately"
+            exit 1
+          fi
+
+          mkdir host
+          tar -xzf "$BUNDLES/finance-stack-$VER.tar.gz" -C host --strip-components=1
+          head -n1 host/compose.yml
+          grep '^DEPLOY_SCRIPT_VERSION=' host/deploy.sh
+
       # Stand the bundle up exactly as the README tells an operator to: copy the
       # template, replace every changeme, create the three bind-mount directories.
       - name: Configure the bundle
-        working-directory: deploy
+        working-directory: host
         run: |
           sed -e "s/^APP_VERSION=.*/APP_VERSION=${VER}/" \
               -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=local|' \
@@ -100,7 +140,7 @@ jobs:
       # backups/ is legitimately non-empty seconds after any install. Only the
       # log distinguishes "the gate was skipped" from "the gate ran".
       - name: First install
-        working-directory: deploy
+        working-directory: host
         run: |
           ./deploy.sh 2>&1 | tee install.log
 
@@ -127,7 +167,7 @@ jobs:
       # operator on a real host gets the prompt: `docker compose run` allocates a
       # TTY by default.
       - name: The bundle can create the first user
-        working-directory: deploy
+        working-directory: host
         run: |
           set -o pipefail
 
@@ -153,7 +193,7 @@ jobs:
       # AC (#288): re-running upserts on username — this is the password-reset
       # path, not a second account.
       - name: Re-running the CLI resets the password
-        working-directory: deploy
+        working-directory: host
         run: |
           BEFORE="$(docker compose run --rm -T --entrypoint psql migrate \
             -d Finances -tAc "select password_hash from users where username='smokeuser'" | tr -d '[:space:]')"
@@ -183,7 +223,7 @@ jobs:
       # it is the reason the documented command uses the superuser DATABASE_URL
       # the migrate service already carries.
       - name: Creating a user as finance_app is refused
-        working-directory: deploy
+        working-directory: host
         run: |
           set +e
           docker compose run --rm -T \
@@ -206,7 +246,7 @@ jobs:
 
       # AC: re-running with the already-deployed version is a safe no-op.
       - name: Re-run at the same version
-        working-directory: deploy
+        working-directory: host
         run: |
           ./deploy.sh "$VER" 2>&1 | tee rerun.log
 
@@ -228,7 +268,7 @@ jobs:
       # and answers 200 — and reports $VER. Only the version half of the health
       # condition can fail here, which is precisely what is being tested.
       - name: Upgrade to a version that reports the wrong build, and roll back
-        working-directory: deploy
+        working-directory: host
         run: |
           set +e
           ./deploy.sh 9.9.9 > upgrade.log 2>&1
@@ -295,7 +335,7 @@ jobs:
       # into a throwaway database, so no --force is needed and Finances is not
       # touched — the same shape as backup-smoke.yml's round trip.
       - name: The pre-upgrade dump is restorable
-        working-directory: deploy
+        working-directory: host
         run: |
           docker compose run --rm -T --no-deps --entrypoint /scripts/restore.sh pg-backup \
             "/backups/$(basename "$DUMP")" Finances_Restore_Check
@@ -303,5 +343,5 @@ jobs:
 
       - name: Tear down
         if: always()
-        working-directory: deploy
+        working-directory: host
         run: docker compose down -v --remove-orphans || true

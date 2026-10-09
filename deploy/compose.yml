@@ -1,3 +1,12 @@
+# finance-stack bundle: unreleased
+#
+# The line above records which release this file was packed from.
+# scripts/pack-bundle.sh stamps it (#347), and deploy.sh reads it on every run
+# to decide whether this file needs refreshing and whether it has been edited
+# since. In a git checkout it stays `unreleased`, which deploy.sh treats as a
+# working copy it never replaces. It is a comment, so Compose and the parity
+# gate never see it.
+#
 # Production deployment definition for the finance stack (Issue #227).
 #
 # This is the compose file that SHIPS. It is packed into

@@ -68,6 +68,10 @@
 # ------------------------------------------------------------
 set -euo pipefail
 
+# The release this script was packed from. scripts/pack-bundle.sh stamps it
+# (#347); a checkout's copy says `unreleased`.
+DEPLOY_SCRIPT_VERSION="unreleased"
+
 # Resolve the script's own path BEFORE the cd, so --help can still read it: $0 is
 # whatever the caller typed, and a relative path stops resolving the moment the
 # working directory changes.
@@ -253,7 +257,7 @@ fi
 # ------------------------------------------------------------
 # 2. Preflight
 # ------------------------------------------------------------
-log "preflight…"
+log "preflight… (deploy.sh ${DEPLOY_SCRIPT_VERSION})"
 
 command -v docker >/dev/null 2>&1 || die "docker is not installed or not on PATH"
 docker compose version >/dev/null 2>&1 || die "the docker compose plugin is not available (\`docker compose version\` failed)"
