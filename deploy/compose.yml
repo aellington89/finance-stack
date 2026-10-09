@@ -33,6 +33,12 @@
 # EDITING THIS FILE: make the same edit in the repo-root docker-compose.yml, or
 # CI rejects the PR. That is deliberate — two files describing one stack drift
 # otherwise.
+#
+# ON A DEPLOYMENT HOST, DO NOT EDIT IT. deploy.sh installs each release's copy
+# when it upgrades (#347), and refuses an upgrade that would drop local edits.
+# Put local changes in compose.override.yml beside it instead: Compose merges
+# that file in on its own, and deploy.sh never touches it. See README.md,
+# "Customizing the stack".
 
 name: finance-stack                    # Ensures consistent container/volume naming regardless of directory
 
