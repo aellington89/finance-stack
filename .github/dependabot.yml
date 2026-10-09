@@ -74,10 +74,11 @@ updates:
       # contextOrFilename.getFilename is not a function" before it lints a
       # single file (PR #247).
       #
-      # This is not one stale plugin. Of the four eslint-config-next 16.3.0
-      # vendors, only @next/eslint-plugin-next accepts ESLint 10 —
-      # eslint-plugin-react caps its peer at ^9.7, eslint-plugin-import and
-      # eslint-plugin-jsx-a11y at ^9, eslint-plugin-react-hooks at ^9.0.0. Nor
+      # This is not one stale plugin. Of the five plugins eslint-config-next
+      # 16.3.0 vendors, two accept ESLint 10: @next/eslint-plugin-next, and
+      # eslint-plugin-react-hooks since 7.1.0 widened its peer (resolved here
+      # since #193). The other three do not — eslint-plugin-react caps its peer
+      # at ^9.7, eslint-plugin-import and eslint-plugin-jsx-a11y at ^9. Nor
       # is a config bump the way out: eslint-config-next 16.3.0 still depends on
       # `eslint-plugin-react: ^7.37.0`, and 7.37.5 — still `latest` — is the only
       # release satisfying it. No version of the Next lint config runs on

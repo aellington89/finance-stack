@@ -104,6 +104,16 @@ function parseDate(s?: string): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d
 }
 
+// Never notifies. The value only ever changes from server to client, and React
+// handles that itself by re-rendering once hydration finishes.
+const subscribeToNothing = () => () => {}
+
+// false in server HTML and during hydration, true afterwards. A component that
+// mounts on the client after hydration gets true on its first render.
+function useHydrated() {
+  return React.useSyncExternalStore(subscribeToNothing, () => true, () => false)
+}
+
 const SCOPES: { value: Scope; label: string }[] = [
   { value: "last", label: "Last" },
   { value: "this", label: "This" },
@@ -125,16 +135,17 @@ function QuickSelect({
   const [count, setCount] = React.useState(30)
   const [unit, setUnit] = React.useState<Unit>("days")
 
-  const [userMacros, setUserMacros] = React.useState<Macro[]>([])
-  const [hydrated, setHydrated] = React.useState(false)
+  // Saved macros are read from localStorage at mount (loadMacros returns []
+  // without a window), and everything derived from them is gated on
+  // `hydrated`, so server HTML and the hydration render agree on showing none
+  // (Issue #193). QuickSelect mounts only once the popover opens, so on the
+  // client the gate is already open by its first render: it guards a popover
+  // that is ever server-rendered (keepMounted), not today's.
+  const [userMacros, setUserMacros] = React.useState<Macro[]>(loadMacros)
+  const hydrated = useHydrated()
   const [isSaving, setIsSaving] = React.useState(false)
   const [saveName, setSaveName] = React.useState("")
   const [saveError, setSaveError] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    setUserMacros(loadMacros())
-    setHydrated(true)
-  }, [])
 
   const applyConfig = (config: { scope: Scope; count: number; unit: Unit }) => {
     const range = computeQuickRange(config.scope, config.count, config.unit)
@@ -176,7 +187,7 @@ function QuickSelect({
     saveMacros(next)
   }
 
-  const atLimit = userMacros.length >= MACRO_LIMIT
+  const atLimit = hydrated && userMacros.length >= MACRO_LIMIT
 
   return (
     <div className="w-52 space-y-2 p-2">
