@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`deploy.sh` can upgrade a host that cannot reach GitHub, and reports what a release's `.env.example` changes.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) There are three new overrides:
+  - `DEPLOY_BUNDLE` takes a local tarball, with its `.sha256` beside it.
+  - `DEPLOY_RELEASE_URL` points at a fork or a mirror.
+  - `DEPLOY_SKIP_BUNDLE=1` keeps the old behaviour as an escape hatch.
+
+  `.bundles/` keeps the deployed and previous releases' bundles, the way old images are kept, so rolling back to the previous version needs no network. When no bundle can be had, a `compose.yml` already stamped with the target (its new first line, `# finance-stack bundle: X.Y.Z`) is used as it is; anything else stops the deploy. Each upgrade lists the keys the release's `.env.example` adds or retires, and the defaults it changes that your `.env` still carries, without printing a value from `.env`. A new setting the template marks as required with a `changeme` placeholder stops the deploy until `.env` has it. `scripts/pack-bundle.sh` packs the bundle, and `deploy-smoke.yml` now boots the packed tarball rather than the checkout.
+
+### Changed
+
+- **Local changes to the stack belong in `compose.override.yml`.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) Compose merges that file in on its own, and `deploy.sh` never touches it. An upgrade that would replace an edited `compose.yml` stops with exit 1 and nothing changed, and says how to move the edit across. An edit the release leaves alone is kept, with a reminder. An edited `caddy/Caddyfile`, which the TLS docs tell you to edit, is kept. When the release changes the Caddyfile too, its copy is written beside yours as `caddy/Caddyfile.dist`. The bundle README's new "Customizing the stack" section has the details, including moving the app's port with `!override` (Compose 2.24.4 or later).
+
+- **The backup gate also runs when an upgrade changes `compose.yml` at the deployed version.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) Re-running `./deploy.sh` at the deployed version skipped the dump, since no schema change was possible. A new `postgres` image can now arrive that way and restart the database, so the dump runs unless the run changes no files at all.
+
+### Fixed
+
+- **An upgrade now brings the release's `compose.yml` with it, not just its images.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) `./deploy.sh X.Y.Z` used to re-pin `APP_VERSION` and change nothing else. A host therefore kept the `compose.yml`, `.env.example`, `Caddyfile`, `README.md` and `deploy.sh` of whichever bundle it was first installed from. Third-party image updates (the Metabase bumps in 1.1.0 and 1.2.0), new services (GlitchTip) and new settings (`ERROR_DSN`) never reached it. Nothing noticed, because the health gate checks only the app's version. `deploy.sh` now fetches the release's `finance-stack-X.Y.Z.tar.gz`, checks it against its `.sha256`, and installs its files at the moment it pins `APP_VERSION`. A failed upgrade puts them back along with `.env`, and `--remove-orphans` takes out any service the failed release added. `.env` beyond `APP_VERSION`, `compose.override.yml`, `imports/`, `importer/parsers/` and `backups/` are never touched. The files a run replaces are kept in `.bundle-backup/`.
+
+  **A host on an older `deploy.sh` needs one manual step, once.** That script cannot refresh anything, itself included. Extract this release's bundle, copy its `deploy.sh` over yours, and run `./deploy.sh X.Y.Z` as usual. It replaces the stale files, keeps the old copies, and prints a notice. After that, `deploy.sh` updates itself — after a successful deploy, and never to an older script. A deliberate rollback therefore keeps the script that knows how to upgrade again.
+
+- **Running optional services now follow an upgrade.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) A plain `docker compose up -d` leaves a running `--profile bi`, `errors` or `edge` service on whatever definition started it. Even a refreshed `compose.yml` would not have moved a running Metabase. Once the app is healthy, `deploy.sh` re-applies any running optional service on the new definition. A failure there is a warning, not a rollback.
+
 ## [1.2.0] - 2026-10-07
 
 **Migration:** none

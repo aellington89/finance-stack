@@ -9,9 +9,9 @@ finance-stack/
 ├── docker-compose.yml                    # Infrastructure definition (development — builds from source)
 ├── .env.example                          # Template for credentials (copy to .env)
 ├── .dockerignore                         # Excludes files from Docker build context
-├── deploy/                               # Deployment bundle — packed as finance-stack-X.Y.Z.tar.gz per release (#227)
-│   ├── deploy.sh                         # Install + upgrade: backup gate, health gate, automatic rollback (#228)
-│   ├── compose.yml                       # Production stack: images pinned to ${APP_VERSION}, no build:, finance-app on 127.0.0.1
+├── deploy/                               # Deployment bundle — packed as finance-stack-X.Y.Z.tar.gz per release by scripts/pack-bundle.sh (#227, #347)
+│   ├── deploy.sh                         # Install + upgrade: installs the release's bundle, backup gate, health gate, automatic rollback (#228, #347)
+│   ├── compose.yml                       # Production stack: images pinned to ${APP_VERSION}, no build:, finance-app on 127.0.0.1; line 1 is the bundle stamp
 │   ├── .env.example                      # Deploy-time env — the root template plus APP_VERSION and IMAGE_REGISTRY
 │   ├── finance-stack.service             # systemd unit (oneshot around `docker compose up -d`)
 │   └── README.md                         # Install + upgrade runbook; ships with the release it describes
@@ -238,7 +238,7 @@ finance-stack/
 ├── .github/workflows/ci.yml             # CI: schema-drift + seed-reference gates, lint, unit + integration + importer tests, E2E job
 ├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
 ├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122); also the repo's shellcheck step
-├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh install → failed upgrade → automatic rollback (#228)
+├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh from a packed bundle — install, refresh, failed upgrade → rollback, refusals (#228, #347)
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── caddy/
 │   └── Caddyfile                         # Reverse proxy / automatic TLS for exposed deployments (--profile edge, #182)
@@ -261,6 +261,7 @@ finance-stack/
     ├── backup.sh                            # Scheduled pg_dump with retention pruning (pg-backup service) — baked at /scripts
     ├── restore.sh                           # Restore a dump into a clean database (#122) — baked at /scripts
     ├── check-deploy-parity.sh               # CI gate: deploy/compose.yml still matches docker-compose.yml (#227)
+    ├── pack-bundle.sh                       # Packs + stamps finance-stack-X.Y.Z.tar.gz — release.yml and deploy-smoke.yml (#347)
     ├── check-trivy-suppressions.sh          # CI report: .trivyignore entries that no longer match a finding (#291) — never fails the build
     └── verify-db-roles.sh                   # Grant matrix + behavioural privilege check per role (#130) — baked into finance-migrate
 ```
