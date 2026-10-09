@@ -702,9 +702,9 @@ template_report() {
     fi
 
     if [ "${#required[@]}" -gt 0 ]; then
-        warn "${TARGET} needs ${required[*]} in ${ENV_FILE}: its .env.example sets them to a changeme placeholder, which marks a value you must supply. Read what each is for with:"
+        warn "${TARGET}'s .env.example gives ${required[*]} a changeme placeholder, which marks a value you must supply. What each one is for:"
         warn "  $(bundle_show_cmd "$BUNDLE_TGZ" "$BUNDLE_FROM" "$TARGET" .env.example)"
-        die "${ENV_FILE} lacks ${required[*]}, which ${TARGET} requires — add them, then re-run. Nothing has been changed."
+        die "${ENV_FILE} does not set ${required[*]}, which ${TARGET} requires. Copy each from that .env.example, give it a real value, and re-run — nothing has been changed."
     fi
 }
 
