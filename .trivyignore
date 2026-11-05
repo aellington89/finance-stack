@@ -64,7 +64,21 @@
 # remove, along with their comment.
 
 # --- debian OS packages (finance-backup, finance-importer) -------------------
-# EMPTY, BECAUSE THE BASE CAUGHT UP. This block held three entries from #352,
+CVE-2026-109518 exp:2026-11-18
+# apt 3.0.3 and libapt-pkg7.0 3.0.3, fixed in 3.0.4 (DSA-6607-1, in
+# trixie-security). Reported by both debian images. NVD published it on
+# 2026-11-04, after the last upstream rebuilds Docker Hub reports
+# (python:3.14-slim 2026-11-02, postgres:18.6 2026-10-31), so both bases still
+# carry 3.0.3 and only a rebuild clears it. The vulnerable path is not taken
+# here: the advisory needs apt to *install* a package over HTTP that an on-path
+# attacker, mirror or proxy can manipulate, with Acquire::Retries above zero.
+# Neither image runs apt at all. importer/Dockerfile and scripts/Dockerfile have
+# no apt-get step, and nothing at runtime (`python poll.py`, `pg_dump`) calls
+# it. Dated weeks out, per the note below. Expect
+# scripts/check-trivy-suppressions.sh to name it stale once both tags rebuild.
+#
+# EMPTIED ONCE ALREADY, BECAUSE THE BASE CAUGHT UP. Before the entry above,
+# this block held three entries from #352,
 # all debian 13.7 packages already fixed in -deb13u3 and waiting only on a base
 # rebuild to carry it: CVE-2026-75804 and CVE-2026-84782 (OpenSSL
 # 3.5.7-1~deb13u2: QUIC flow control, DTLS retransmission) and CVE-2026-103111
@@ -134,6 +148,28 @@ CVE-2026-102278 exp:2026-11-17
 # brace-expansion 5.0.7, fixed in 5.0.11. npm-vendored, as above.
 CVE-2026-19534 exp:2026-11-17
 # undici 6.27.0, fixed in 6.28.1. npm-vendored, as above.
+CVE-2026-109383 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-2m5v-pch6-74hx, TLS certificate
+# validation bypass via dropped tls options). npm-vendored, as above.
+CVE-2026-109869 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-xjj6-f33q-929c, denial of service via
+# an unhandled error on excessive content-encodings). npm-vendored, as above.
+CVE-2026-87018 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-qrxm-fqhp-jwvm, denial of service via
+# TLS 1.2 renegotiation with a mismatched certificate). npm-vendored, as above.
+#
+# Trivy now reads the vendored copy as 6.28.0 rather than 6.27.0. That still
+# sits below CVE-2026-19534's 6.28.1, so that entry keeps matching. The first
+# two IDs were also reported against the application tree's undici 7.30.0 and
+# jsdom's 8.11.2. Those are lockfile copies, so they were bumped (7.30.1,
+# 8.12.2) and are not what these lines cover. Because an ID entry widens, these
+# would also hide a lockfile regression from this scan. The npm audit gate
+# still catches that on the GHSAs.
+#
+# All three arrived together, and the first attempt listed only one. Trivy
+# prints several CVEs against one installed version as a single row, with the
+# version cell merged, so reading only the rows that name a version undercounts.
+# Count the IDs under the scan's "Total:" line, not the version cells.
 #
 # THE LAST THREE ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
 # TO VENDORED COPIES, which is worth recording because it is the distinction the
