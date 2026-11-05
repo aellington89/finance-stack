@@ -24,12 +24,12 @@ const onlyAccount = (rows: AssetPerformanceRow[]) =>
 
 describe("buildAssetPerformance", () => {
   describe("empty input", () => {
-    it("returns zero totals and no categories", () => {
+    it("returns zero totals, an undefined total % change and no categories", () => {
       expect(buildAssetPerformance([])).toEqual({
         totalCurrentValue: 0,
         totalStartValue: 0,
         totalChange: 0,
-        totalPercentChange: 0,
+        totalPercentChange: null,
         categories: [],
       });
     });
@@ -105,10 +105,27 @@ describe("buildAssetPerformance", () => {
 
       expect(account.startValue).toBe(0);
       expect(account.change).toBe(500);
-      // KNOWN WRONG (Issue #143): a rate of change against a zero start is
-      // undefined, but pct() reports it as 0.00%.
-      expect(account.percentChange).toBe(0);
-      expect(result.totalPercentChange).toBe(0);
+      // A rate of change against a zero start is undefined: null, shown as
+      // "—". Until Issue #143 this read 0.00%.
+      expect(account.percentChange).toBeNull();
+      expect(result.categories[0].percentChange).toBeNull();
+      expect(result.categories[0].accountTypes[0].percentChange).toBeNull();
+      expect(result.totalPercentChange).toBeNull();
+    });
+
+    it("leaves a zero-start account's siblings with a real % change", () => {
+      const result = buildAssetPerformance([
+        row({ account_id: 1, account_name: "Old", start_balance: "1000.00", end_balance: "1100.00" }),
+        row({ account_id: 2, account_name: "New", start_balance: "0", end_balance: "500.00" }),
+      ]);
+      const type = result.categories[0].accountTypes[0];
+
+      expect(type.accounts.map((a) => [a.accountName, a.percentChange])).toEqual([
+        ["Old", 10],
+        ["New", null],
+      ]);
+      // The parent has a non-zero start, so its rate is defined: +600 on 1000.
+      expect(type.percentChange).toBe(60);
     });
 
     it("reads an account with no end-date row as start → 0", () => {
@@ -127,25 +144,28 @@ describe("buildAssetPerformance", () => {
   });
 
   describe("a negative start balance", () => {
-    it("KNOWN WRONG (Issue #143): an overdrawn account's recovery reads as a loss", () => {
-      // -$100 → +$50 is a gain of $150, but dividing by the signed start
-      // flips it: -150%, which the table draws red with a down arrow.
+    it("signs an overdrawn account's recovery as a gain", () => {
+      // -$100 → +$50 is a gain of $150. Dividing by |start| keeps the sign of
+      // the change; until Issue #143 the signed start flipped it to -150%,
+      // which the table drew red with a down arrow.
       const result = buildAssetPerformance([
         row({ start_balance: "-100.00", end_balance: "50.00" }),
       ]);
       const account = result.categories[0].accountTypes[0].accounts[0];
 
       expect(account.change).toBe(150);
-      expect(account.percentChange).toBe(-150);
-      expect(result.totalPercentChange).toBe(-150);
+      expect(account.percentChange).toBe(150);
+      expect(result.categories[0].percentChange).toBe(150);
+      expect(result.categories[0].accountTypes[0].percentChange).toBe(150);
+      expect(result.totalPercentChange).toBe(150);
     });
 
-    it("KNOWN WRONG (Issue #143): sinking further below zero reads as a gain", () => {
+    it("signs sinking further below zero as a loss", () => {
       const account = onlyAccount([
         row({ start_balance: "-100.00", end_balance: "-200.00" }),
       ]);
       expect(account.change).toBe(-100);
-      expect(account.percentChange).toBe(100);
+      expect(account.percentChange).toBe(-100);
     });
 
     it("signs a fall from positive to negative as a loss", () => {

@@ -3,7 +3,7 @@ import type {
   PerformanceCategory,
   PerformanceData,
 } from "@/lib/queries/assets-drilldown";
-import { pct } from "@/lib/queries/_percent";
+import { pct, pctOrNull } from "@/lib/queries/_percent";
 
 /**
  * One row of getAssetPerformance's query: a single asset account with its
@@ -33,6 +33,13 @@ export type AssetPerformanceRow = {
  * the unit project can reach every edge case directly — the integration suite
  * can only get here through real rows in Finances_Test. getAssetPerformance is
  * now the query plus a call to this.
+ *
+ * `% Change` divides by `|startValue|`, as getLiabilityPerformance does, so it
+ * always has the sign of `change`. Dividing by the signed start made an
+ * overdrawn account's recovery (-$100 → +$50) read -150%, drawn red with a
+ * down arrow. A zero start (an account opened mid-period) gives `null`, which
+ * the table shows as "—" rather than a misleading 0.00%. The share columns
+ * keep `pct`: a share of a zero parent is 0.
  *
  * Every level is sorted by `currentValue`, largest first; ties keep row order.
  */
@@ -132,7 +139,7 @@ export function buildAssetPerformance(
                 currentValue: a.currentValue,
                 startValue: a.startValue,
                 change,
-                percentChange: pct(change, a.startValue),
+                percentChange: pctOrNull(change, Math.abs(a.startValue)),
                 percentOfParent: pct(a.currentValue, t.currentValue),
                 percentOfTotal: pct(a.currentValue, totalCurrentValue),
               };
@@ -145,7 +152,7 @@ export function buildAssetPerformance(
             currentValue: t.currentValue,
             startValue: t.startValue,
             change: typeChange,
-            percentChange: pct(typeChange, t.startValue),
+            percentChange: pctOrNull(typeChange, Math.abs(t.startValue)),
             percentOfParent: pct(t.currentValue, cat.currentValue),
             percentOfTotal: pct(t.currentValue, totalCurrentValue),
             accounts,
@@ -159,7 +166,7 @@ export function buildAssetPerformance(
         currentValue: cat.currentValue,
         startValue: cat.startValue,
         change: catChange,
-        percentChange: pct(catChange, cat.startValue),
+        percentChange: pctOrNull(catChange, Math.abs(cat.startValue)),
         percentOfTotal: pct(cat.currentValue, totalCurrentValue),
         accountTypes,
       };
@@ -170,7 +177,7 @@ export function buildAssetPerformance(
     totalCurrentValue,
     totalStartValue,
     totalChange,
-    totalPercentChange: pct(totalChange, totalStartValue),
+    totalPercentChange: pctOrNull(totalChange, Math.abs(totalStartValue)),
     categories,
   };
 }

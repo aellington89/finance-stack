@@ -50,7 +50,7 @@ export interface PerformanceAccount {
   currentValue: number;
   startValue: number;
   change: number;
-  percentChange: number;
+  percentChange: number | null;
   percentOfParent: number;
   percentOfTotal: number;
 }
@@ -61,7 +61,7 @@ export interface PerformanceAccountType {
   currentValue: number;
   startValue: number;
   change: number;
-  percentChange: number;
+  percentChange: number | null;
   percentOfParent: number;
   percentOfTotal: number;
   accounts: PerformanceAccount[];
@@ -73,7 +73,7 @@ export interface PerformanceCategory {
   currentValue: number;
   startValue: number;
   change: number;
-  percentChange: number;
+  percentChange: number | null;
   percentOfTotal: number;
   accountTypes: PerformanceAccountType[];
 }
@@ -82,7 +82,7 @@ export interface PerformanceData {
   totalCurrentValue: number;
   totalStartValue: number;
   totalChange: number;
-  totalPercentChange: number;
+  totalPercentChange: number | null;
   categories: PerformanceCategory[];
 }
 
@@ -245,6 +245,13 @@ export async function getAssetAllocation(
  * Hierarchical period-over-period change (category → type → account) for
  * asset categories only. "Return" is proxied by cumulative_balance delta;
  * the schema does not track cost basis.
+ *
+ * `% Change` is computed against `|startValue|`, the same rule as
+ * getLiabilityPerformance, so its sign always matches `change`: an overdrawn
+ * account climbing from -$100 to +$50 reads +150%, not -150%. It is `null`
+ * when the start balance is zero (an account opened mid-period), which the
+ * table renders as "—". The tree itself is built by buildAssetPerformance
+ * (asset-performance.ts), where both cases are unit-tested.
  */
 export async function getAssetPerformance(
   dateFrom: string,

@@ -4,7 +4,7 @@ import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import type { PerformanceData } from "@/lib/queries/assets-drilldown";
 import {
   signedCurrency,
-  signedPercent,
+  formatPercentChange,
 } from "@/lib/format/financial";
 import {
   Table,
@@ -112,7 +112,7 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <SignedChange value={cat.percentChange}>
-                        {signedPercent(cat.percentChange)}
+                        {formatPercentChange(cat.percentChange)}
                       </SignedChange>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -149,7 +149,7 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               <SignedChange value={type.percentChange}>
-                                {signedPercent(type.percentChange)}
+                                {formatPercentChange(type.percentChange)}
                               </SignedChange>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
@@ -175,7 +175,7 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   <SignedChange value={acc.percentChange}>
-                                    {signedPercent(acc.percentChange)}
+                                    {formatPercentChange(acc.percentChange)}
                                   </SignedChange>
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
@@ -203,7 +203,7 @@ export function AssetPerformanceTable({ data }: AssetPerformanceTableProps) {
               </TableCell>
               <TableCell className="text-right font-bold tabular-nums">
                 <SignedChange value={data.totalPercentChange}>
-                  {signedPercent(data.totalPercentChange)}
+                  {formatPercentChange(data.totalPercentChange)}
                 </SignedChange>
               </TableCell>
               <TableCell className="text-right font-bold tabular-nums">
