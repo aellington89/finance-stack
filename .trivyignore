@@ -134,18 +134,10 @@ CVE-2026-109518 exp:2026-11-18
 # in /usr/local/lib/node_modules/npm/node_modules/ and are fixed only when
 # node:24-alpine ships a newer bundled npm; no application-level bump reaches
 # them, and `npm update` inside the image would defeat the pinned build.
-CVE-2026-14257 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.8. npm-vendored, as above.
-CVE-2026-69152 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.9. npm-vendored, as above.
-CVE-2026-69192 exp:2026-11-17
-# ip-address 10.2.0, fixed in 10.3.1. npm-vendored, as above.
-CVE-2026-73566 exp:2026-11-17
-# tar 7.5.19, fixed in 7.5.21. npm-vendored, as above (#291).
 CVE-2026-102276 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.10. npm-vendored, as above.
+# brace-expansion 5.0.9, fixed in 5.0.10. npm-vendored, as above.
 CVE-2026-102278 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.11. npm-vendored, as above.
+# brace-expansion 5.0.9, fixed in 5.0.11. npm-vendored, as above.
 CVE-2026-19534 exp:2026-11-17
 # undici 6.27.0, fixed in 6.28.1. npm-vendored, as above.
 CVE-2026-109383 exp:2026-11-17
@@ -171,7 +163,8 @@ CVE-2026-87018 exp:2026-11-17
 # version cell merged, so reading only the rows that name a version undercounts.
 # Count the IDs under the scan's "Total:" line, not the version cells.
 #
-# THE LAST THREE ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
+# THE 2026-10-03 THREE (CVE-2026-102276, CVE-2026-102278 AND CVE-2026-19534)
+# ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
 # TO VENDORED COPIES, which is worth recording because it is the distinction the
 # block is easiest to get wrong about. finance-migrate reported 15 HIGH in
 # node-pkg on 2026-10-03: this image carries app/node_modules so that the
@@ -196,6 +189,21 @@ CVE-2026-87018 exp:2026-11-17
 # version here before assuming a comment is still true — brace-expansion and
 # undici now carry two generations of advisory each, against one installed
 # version apiece.
+#
+# IT HAPPENED AGAIN BY 2026-11-05, in both directions at once. node:24-alpine
+# has been rebuilt since this block was last pruned (Docker Hub's latest is
+# 2026-10-28), and its bundled npm moved the vendored copies far enough to kill
+# four entries. PR #382's run named them as matching nothing in any image, and
+# they are deleted here with their comments on that verdict:
+#   CVE-2026-14257  brace-expansion, fixed in 5.0.8
+#   CVE-2026-69152  brace-expansion, fixed in 5.0.9
+#   CVE-2026-69192  ip-address, fixed in 10.3.1
+#   CVE-2026-73566  tar, fixed in 7.5.21 (#291)
+# Over the same stretch undici moved only 6.27.0 -> 6.28.0, which cleared
+# nothing and left it exposed to the three 6.29.1 advisories above. brace-expansion's version
+# is inferred rather than read: 5.0.9's fix went dead while 5.0.10's still
+# matches, so the vendored copy is 5.0.9, and the two comments say so. The
+# block is now six entries, against two installed versions.
 
 # Not listed here, and excluded at the scanner instead: the Go stdlib CVEs
 # reported against drizzle-kit's vendored `esbuild` and the postgres image's
