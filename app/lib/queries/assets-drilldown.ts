@@ -1,6 +1,11 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { balanceAtDate } from "@/lib/queries/_aggregates";
+import { pct } from "@/lib/queries/_percent";
+import {
+  buildAssetPerformance,
+  type AssetPerformanceRow,
+} from "@/lib/queries/asset-performance";
 
 // Asset categories: Current Asset (1), Restricted Asset (2), Fixed Asset (3),
 // Investment (4). Liabilities (5, 6) are excluded. Restricted is kept in the
@@ -45,7 +50,7 @@ export interface PerformanceAccount {
   currentValue: number;
   startValue: number;
   change: number;
-  percentChange: number;
+  percentChange: number | null;
   percentOfParent: number;
   percentOfTotal: number;
 }
@@ -56,7 +61,7 @@ export interface PerformanceAccountType {
   currentValue: number;
   startValue: number;
   change: number;
-  percentChange: number;
+  percentChange: number | null;
   percentOfParent: number;
   percentOfTotal: number;
   accounts: PerformanceAccount[];
@@ -68,7 +73,7 @@ export interface PerformanceCategory {
   currentValue: number;
   startValue: number;
   change: number;
-  percentChange: number;
+  percentChange: number | null;
   percentOfTotal: number;
   accountTypes: PerformanceAccountType[];
 }
@@ -77,7 +82,7 @@ export interface PerformanceData {
   totalCurrentValue: number;
   totalStartValue: number;
   totalChange: number;
-  totalPercentChange: number;
+  totalPercentChange: number | null;
   categories: PerformanceCategory[];
 }
 
@@ -106,10 +111,6 @@ export interface AssetDecompositionPoint {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const pct = (num: number, den: number) =>
-  den !== 0 ? round2((num / den) * 100) : 0;
 
 const normalizeLiquidity = (raw: string | null): LiquidityClass => {
   if (
@@ -244,6 +245,13 @@ export async function getAssetAllocation(
  * Hierarchical period-over-period change (category → type → account) for
  * asset categories only. "Return" is proxied by cumulative_balance delta;
  * the schema does not track cost basis.
+ *
+ * `% Change` is computed against `|startValue|`, the same rule as
+ * getLiabilityPerformance, so its sign always matches `change`: an overdrawn
+ * account climbing from -$100 to +$50 reads +150%, not -150%. It is `null`
+ * when the start balance is zero (an account opened mid-period), which the
+ * table renders as "—". The tree itself is built by buildAssetPerformance
+ * (asset-performance.ts), where both cases are unit-tested.
  */
 export async function getAssetPerformance(
   dateFrom: string,
@@ -275,153 +283,7 @@ export async function getAssetPerformance(
     ORDER BY atc.account_type_category_id, at.account_type_id, a.account_id
   `);
 
-  type Row = {
-    category_id: number;
-    category_name: string;
-    account_type_id: number;
-    account_type_name: string;
-    account_id: number;
-    account_name: string;
-    start_balance: string;
-    end_balance: string;
-  };
-
-  const rows = result.rows as Row[];
-
-  const catMap = new Map<
-    number,
-    {
-      categoryId: number;
-      categoryName: string;
-      currentValue: number;
-      startValue: number;
-      types: Map<
-        number,
-        {
-          accountTypeId: number;
-          accountTypeName: string;
-          currentValue: number;
-          startValue: number;
-          accounts: {
-            accountId: number;
-            accountName: string;
-            currentValue: number;
-            startValue: number;
-          }[];
-        }
-      >;
-    }
-  >();
-
-  for (const row of rows) {
-    const startValue = parseFloat(row.start_balance) || 0;
-    const currentValue = parseFloat(row.end_balance) || 0;
-
-    let cat = catMap.get(row.category_id);
-    if (!cat) {
-      cat = {
-        categoryId: row.category_id,
-        categoryName: row.category_name,
-        currentValue: 0,
-        startValue: 0,
-        types: new Map(),
-      };
-      catMap.set(row.category_id, cat);
-    }
-    cat.currentValue += currentValue;
-    cat.startValue += startValue;
-
-    let type = cat.types.get(row.account_type_id);
-    if (!type) {
-      type = {
-        accountTypeId: row.account_type_id,
-        accountTypeName: row.account_type_name,
-        currentValue: 0,
-        startValue: 0,
-        accounts: [],
-      };
-      cat.types.set(row.account_type_id, type);
-    }
-    type.currentValue += currentValue;
-    type.startValue += startValue;
-    type.accounts.push({
-      accountId: row.account_id,
-      accountName: row.account_name,
-      currentValue,
-      startValue,
-    });
-  }
-
-  const totalCurrentValue = Array.from(catMap.values()).reduce(
-    (s, c) => s + c.currentValue,
-    0
-  );
-  const totalStartValue = Array.from(catMap.values()).reduce(
-    (s, c) => s + c.startValue,
-    0
-  );
-  const totalChange = totalCurrentValue - totalStartValue;
-
-  const categories: PerformanceCategory[] = Array.from(catMap.values())
-    .map((cat) => {
-      const catChange = cat.currentValue - cat.startValue;
-
-      const accountTypes: PerformanceAccountType[] = Array.from(
-        cat.types.values()
-      )
-        .map((t) => {
-          const typeChange = t.currentValue - t.startValue;
-
-          const accounts = t.accounts
-            .map((a) => {
-              const change = a.currentValue - a.startValue;
-              return {
-                accountId: a.accountId,
-                accountName: a.accountName,
-                currentValue: a.currentValue,
-                startValue: a.startValue,
-                change,
-                percentChange: pct(change, a.startValue),
-                percentOfParent: pct(a.currentValue, t.currentValue),
-                percentOfTotal: pct(a.currentValue, totalCurrentValue),
-              };
-            })
-            .sort((x, y) => y.currentValue - x.currentValue);
-
-          return {
-            accountTypeId: t.accountTypeId,
-            accountTypeName: t.accountTypeName,
-            currentValue: t.currentValue,
-            startValue: t.startValue,
-            change: typeChange,
-            percentChange: pct(typeChange, t.startValue),
-            percentOfParent: pct(t.currentValue, cat.currentValue),
-            percentOfTotal: pct(t.currentValue, totalCurrentValue),
-            accounts,
-          };
-        })
-        .sort((x, y) => y.currentValue - x.currentValue);
-
-      return {
-        categoryId: cat.categoryId,
-        categoryName: cat.categoryName,
-        currentValue: cat.currentValue,
-        startValue: cat.startValue,
-        change: catChange,
-        percentChange: pct(catChange, cat.startValue),
-        percentOfTotal: pct(cat.currentValue, totalCurrentValue),
-        accountTypes,
-      };
-    })
-    .sort((x, y) => y.currentValue - x.currentValue);
-
-  return {
-    totalCurrentValue,
-    totalStartValue,
-    totalChange,
-    totalPercentChange: pct(totalChange, totalStartValue),
-    categories,
-  };
+  return buildAssetPerformance(result.rows as AssetPerformanceRow[]);
 }
 
 /**

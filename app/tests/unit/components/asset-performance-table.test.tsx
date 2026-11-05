@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { AssetPerformanceTable } from "@/components/dashboard/asset-performance-table";
 import type { PerformanceData } from "@/lib/queries/assets-drilldown";
 
-// Note the asymmetry with the liability side: here percentChange is `number`,
-// not `number | null`, so this table has no em-dash path to cover.
+// percentChange is `number | null` here as on the liability side since Issue
+// #143: null (a zero start balance) renders as an em-dash — see the test below.
 const data: PerformanceData = {
   totalCurrentValue: 11_000,
   totalStartValue: 10_000,
@@ -138,5 +138,90 @@ describe("AssetPerformanceTable", () => {
     await user.keyboard(" ");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
+  });
+
+  // Issue #143. An account opened mid-range has a zero start balance, so its
+  // % change is undefined. It used to read 0.00%; it must read "—", with no
+  // colour and no trend icon, at every level and in the footer.
+  it("renders an em-dash for a null percent change", async () => {
+    const user = userEvent.setup();
+    const cat = data.categories[0];
+    const type = cat.accountTypes[0];
+    render(
+      <AssetPerformanceTable
+        data={{
+          ...data,
+          totalStartValue: 0,
+          totalPercentChange: null,
+          categories: [
+            {
+              ...cat,
+              startValue: 0,
+              percentChange: null,
+              accountTypes: [
+                {
+                  ...type,
+                  startValue: 0,
+                  percentChange: null,
+                  accounts: [
+                    { ...type.accounts[0], startValue: 0, percentChange: null },
+                  ],
+                },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+    await user.click(screen.getByTestId("row-cat:1"));
+    await user.click(screen.getByTestId("row-type:1:2"));
+
+    // Columns are Name | Value | Change | % Change | % of Total. Assert on the
+    // % Change cell itself: the row's "100.00%" in % of Total contains
+    // "0.00%" as a substring.
+    const rows = [
+      screen.getByTestId("row-cat:1"),
+      screen.getByTestId("row-type:1:2"),
+      screen.getByTestId("row-acc:7"),
+      screen.getByText("Total").closest("tr") as HTMLElement,
+    ];
+    for (const tr of rows) {
+      const cell = tr.querySelectorAll("td")[3];
+      expect(cell).toHaveTextContent("—");
+      expect(cell.textContent).not.toContain("%");
+      expect(cell.querySelector("svg")).toBeNull();
+      expect(cell.querySelector(".text-green-600, .text-red-600")).toBeNull();
+    }
+  });
+
+  // Issue #143. -$100 → +$50 is a gain; % change against |start| keeps that
+  // sign, so it reads +150.00% in green with an up arrow, not -150.00% in red.
+  it("draws an overdrawn account's recovery as a gain", () => {
+    const cat = data.categories[0];
+    render(
+      <AssetPerformanceTable
+        data={{
+          ...data,
+          totalCurrentValue: 50,
+          totalStartValue: -100,
+          totalChange: 150,
+          totalPercentChange: 150,
+          categories: [
+            {
+              ...cat,
+              currentValue: 50,
+              startValue: -100,
+              change: 150,
+              percentChange: 150,
+            },
+          ],
+        }}
+      />
+    );
+
+    const pctCell = screen.getByTestId("row-cat:1").querySelectorAll("td")[3];
+    const figure = within(pctCell).getByText("+150.00%");
+    expect(figure).toHaveClass("text-green-600");
+    expect(figure.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
   });
 });

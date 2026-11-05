@@ -170,12 +170,15 @@ finance-stack/
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
 │   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list)
+│   │   ├── queries/_percent.ts           # Shared percent math (round2, pct, pctOrNull) for the drilldown queries
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │   │   ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │   │   ├── queries/work-expenses.ts      # Work expense queries (period totals, time series, category breakdown)
 │   │   ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │   │   ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
+│   │   ├── queries/net-worth-drivers.ts  # Pure builder for the drivers tree (category → type → account), unit-tested
 │   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
+│   │   ├── queries/asset-performance.ts  # Pure builder for the asset performance tree, unit-tested
 │   │   ├── queries/liabilities-drilldown.ts # Liabilities drill-down queries (allocation, performance, decomposition, debt service, waterfall)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild

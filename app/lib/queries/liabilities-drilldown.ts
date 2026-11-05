@@ -11,6 +11,7 @@ import {
   DEBT_SERVICE_ROLES,
 } from "@/lib/constants/reporting-roles";
 import { balanceAtDate, categoryIdsWithRoles, valueList } from "@/lib/queries/_aggregates";
+import { pct, pctOrNull } from "@/lib/queries/_percent";
 
 // Sign convention: liability balances are stored as negative numbers in
 // account_balance_history. We preserve that sign throughout — this module
@@ -153,17 +154,6 @@ export interface DebtWaterfallData {
   interestAccrued: number;
   other: number;
 }
-
-// ── Helpers ────────────────────────────────────────────────────────
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const pct = (num: number, den: number) =>
-  den !== 0 ? round2((num / den) * 100) : 0;
-
-// `% Change` is undefined when the start balance is zero (e.g. an account
-// opened mid-period). Return null so the UI can render "—".
-const pctOrNull = (num: number, den: number): number | null =>
-  den !== 0 ? round2((num / den) * 100) : null;
 
 // ── Queries ────────────────────────────────────────────────────────
 

@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Running optional services now follow an upgrade.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) A plain `docker compose up -d` leaves a running `--profile bi`, `errors` or `edge` service on whatever definition started it. Even a refreshed `compose.yml` would not have moved a running Metabase. Once the app is healthy, `deploy.sh` re-applies any running optional service on the new definition. A failure there is a warning, not a rollback.
 
+- **Asset Performance's % Change no longer shows a gain as a loss, or 0.00% where there is no rate to show.** ([Issue #143](https://github.com/aellington89/finance-stack/issues/143)) An account that started the range overdrawn and climbed back, from -$100 to +$50 say, read -150% in red with a down arrow. It now reads +150% in green. An account with no balance at the start of the range, such as one opened partway through it, read 0.00%. It now shows a dash (—), the way the Liabilities table already shows the same case. Both now follow the Liabilities rule: the change is measured against the size of the starting balance, so its sign always matches the Change column.
+
 ### Security
 
 - **`next` 16.4.3 closes two CRITICAL advisories and a HIGH one, and the HIGH one was reachable here.** ([PR #382](https://github.com/aellington89/finance-stack/pull/382)) `next` moves from 16.3.8 to 16.4.3.
