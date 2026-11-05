@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { balanceAtDate } from "@/lib/queries/_aggregates";
+import { pct } from "@/lib/queries/_percent";
 
 // Asset categories: Current Asset (1), Restricted Asset (2), Fixed Asset (3),
 // Investment (4). Liabilities (5, 6) are excluded. Restricted is kept in the
@@ -106,10 +107,6 @@ export interface AssetDecompositionPoint {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const pct = (num: number, den: number) =>
-  den !== 0 ? round2((num / den) * 100) : 0;
 
 const normalizeLiquidity = (raw: string | null): LiquidityClass => {
   if (

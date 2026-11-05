@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { RESTRICTED_ASSET_CATEGORY } from "@/lib/constants/reference-ids";
 import { balanceAtDate } from "@/lib/queries/_aggregates";
+import { pct } from "@/lib/queries/_percent";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -164,10 +165,6 @@ export async function getNetWorthDrivers(
   };
 
   const rows = result.rows as Row[];
-
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  const pct = (num: number, den: number) =>
-    den !== 0 ? round2((num / den) * 100) : 0;
 
   const catMap = new Map<
     number,

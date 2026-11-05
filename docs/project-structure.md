@@ -170,6 +170,7 @@ finance-stack/
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
 │   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list)
+│   │   ├── queries/_percent.ts           # Shared percent math (round2, pct, pctOrNull) for the drilldown queries
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │   │   ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
 │   │   ├── queries/work-expenses.ts      # Work expense queries (period totals, time series, category breakdown)
