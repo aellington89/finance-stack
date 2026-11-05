@@ -4,7 +4,7 @@
 #
 # Tracked by Dependabot's `pip` ecosystem alongside requirements.txt; see
 # CONTRIBUTING.md#dependabot-prs.
-pytest==9.1.1
+pytest==9.2.0
 
 # The suite imports poll.py, which imports psycopg2 at module scope, and the
 # integration tests connect for real. Must match the pin in requirements.txt.

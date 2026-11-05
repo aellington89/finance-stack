@@ -28,7 +28,7 @@
 # Two of the four bases are not freely bumpable, which is worth knowing before
 # reaching for an entry. postgres:18.6 (finance-backup) must stay version-matched
 # to the server, so moving it means moving docker-compose.yml and the workflow
-# service containers with it. Both it and python:3.14-slim (finance-importer) are
+# service containers with it. Both it and python:3.15-slim (finance-importer) are
 # rebuilt upstream under the same tag, so for an OS-package finding on either,
 # re-running the job after upstream rebuilds is frequently the entire fix — check
 # that before suppressing anything.
@@ -64,7 +64,22 @@
 # remove, along with their comment.
 
 # --- debian OS packages (finance-backup, finance-importer) -------------------
-# EMPTY, BECAUSE THE BASE CAUGHT UP. This block held three entries from #352,
+CVE-2026-109518 exp:2026-11-18
+# apt 3.0.3 and libapt-pkg7.0 3.0.3, fixed in 3.0.4 (DSA-6607-1, in
+# trixie-security). Reported by both debian images. NVD published it on
+# 2026-11-04, after the last upstream rebuilds Docker Hub reports. Those were
+# 2026-11-02 for python:3.14-slim and for python:3.15-slim (the importer's base
+# since #384), and 2026-10-31 for postgres:18.6. Both bases therefore still
+# carry 3.0.3, and only a rebuild clears it. The vulnerable path is not taken
+# here: the advisory needs apt to *install* a package over HTTP that an on-path
+# attacker, mirror or proxy can manipulate, with Acquire::Retries above zero.
+# Neither image runs apt at all. importer/Dockerfile and scripts/Dockerfile have
+# no apt-get step, and nothing at runtime (`python poll.py`, `pg_dump`) calls
+# it. Dated weeks out, per the note below. Expect
+# scripts/check-trivy-suppressions.sh to name it stale once both tags rebuild.
+#
+# EMPTIED ONCE ALREADY, BECAUSE THE BASE CAUGHT UP. Before the entry above,
+# this block held three entries from #352,
 # all debian 13.7 packages already fixed in -deb13u3 and waiting only on a base
 # rebuild to carry it: CVE-2026-75804 and CVE-2026-84782 (OpenSSL
 # 3.5.7-1~deb13u2: QUIC flow control, DTLS retransmission) and CVE-2026-103111
@@ -83,7 +98,7 @@
 # because only the tail of the job log was read: finance-backup is the last of
 # the four scans, and finance-migrate and finance-importer had failed above it.
 
-# --- python:3.14-slim bundled packages (finance-importer) -------------------
+# --- python:3.15-slim bundled packages (finance-importer) -------------------
 # EMPTY, AND THAT IS THE POINT. This block held CVE-2025-47273 (setuptools
 # 70.3.0) and GHSA-6v7p-g79w-8964 (msgpack 1.1.2), both of them there because
 # the image shipped pip. importer/Dockerfile now removes pip after the install
@@ -120,22 +135,37 @@
 # in /usr/local/lib/node_modules/npm/node_modules/ and are fixed only when
 # node:24-alpine ships a newer bundled npm; no application-level bump reaches
 # them, and `npm update` inside the image would defeat the pinned build.
-CVE-2026-14257 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.8. npm-vendored, as above.
-CVE-2026-69152 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.9. npm-vendored, as above.
-CVE-2026-69192 exp:2026-11-17
-# ip-address 10.2.0, fixed in 10.3.1. npm-vendored, as above.
-CVE-2026-73566 exp:2026-11-17
-# tar 7.5.19, fixed in 7.5.21. npm-vendored, as above (#291).
 CVE-2026-102276 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.10. npm-vendored, as above.
+# brace-expansion 5.0.9, fixed in 5.0.10. npm-vendored, as above.
 CVE-2026-102278 exp:2026-11-17
-# brace-expansion 5.0.7, fixed in 5.0.11. npm-vendored, as above.
+# brace-expansion 5.0.9, fixed in 5.0.11. npm-vendored, as above.
 CVE-2026-19534 exp:2026-11-17
 # undici 6.27.0, fixed in 6.28.1. npm-vendored, as above.
+CVE-2026-109383 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-2m5v-pch6-74hx, TLS certificate
+# validation bypass via dropped tls options). npm-vendored, as above.
+CVE-2026-109869 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-xjj6-f33q-929c, denial of service via
+# an unhandled error on excessive content-encodings). npm-vendored, as above.
+CVE-2026-87018 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-qrxm-fqhp-jwvm, denial of service via
+# TLS 1.2 renegotiation with a mismatched certificate). npm-vendored, as above.
 #
-# THE LAST THREE ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
+# Trivy now reads the vendored copy as 6.28.0 rather than 6.27.0. That still
+# sits below CVE-2026-19534's 6.28.1, so that entry keeps matching. The first
+# two IDs were also reported against the application tree's undici 7.30.0 and
+# jsdom's 8.11.2. Those are lockfile copies, so they were bumped (7.30.1,
+# 8.12.2) and are not what these lines cover. Because an ID entry widens, these
+# would also hide a lockfile regression from this scan. The npm audit gate
+# still catches that on the GHSAs.
+#
+# All three arrived together, and the first attempt listed only one. Trivy
+# prints several CVEs against one installed version as a single row, with the
+# version cell merged, so reading only the rows that name a version undercounts.
+# Count the IDs under the scan's "Total:" line, not the version cells.
+#
+# THE 2026-10-03 THREE (CVE-2026-102276, CVE-2026-102278 AND CVE-2026-19534)
+# ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
 # TO VENDORED COPIES, which is worth recording because it is the distinction the
 # block is easiest to get wrong about. finance-migrate reported 15 HIGH in
 # node-pkg on 2026-10-03: this image carries app/node_modules so that the
@@ -160,6 +190,21 @@ CVE-2026-19534 exp:2026-11-17
 # version here before assuming a comment is still true — brace-expansion and
 # undici now carry two generations of advisory each, against one installed
 # version apiece.
+#
+# IT HAPPENED AGAIN BY 2026-11-05, in both directions at once. node:24-alpine
+# has been rebuilt since this block was last pruned (Docker Hub's latest is
+# 2026-10-28), and its bundled npm moved the vendored copies far enough to kill
+# four entries. PR #382's run named them as matching nothing in any image, and
+# they are deleted here with their comments on that verdict:
+#   CVE-2026-14257  brace-expansion, fixed in 5.0.8
+#   CVE-2026-69152  brace-expansion, fixed in 5.0.9
+#   CVE-2026-69192  ip-address, fixed in 10.3.1
+#   CVE-2026-73566  tar, fixed in 7.5.21 (#291)
+# Over the same stretch undici moved only 6.27.0 -> 6.28.0, which cleared
+# nothing and left it exposed to the three 6.29.1 advisories above. brace-expansion's version
+# is inferred rather than read: 5.0.9's fix went dead while 5.0.10's still
+# matches, so the vendored copy is 5.0.9, and the two comments say so. The
+# block is now six entries, against two installed versions.
 
 # Not listed here, and excluded at the scanner instead: the Go stdlib CVEs
 # reported against drizzle-kit's vendored `esbuild` and the postgres image's

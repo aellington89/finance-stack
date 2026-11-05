@@ -27,8 +27,9 @@
 # both when an advisory names it and when it only depends on something
 # vulnerable. An entry clears the advisory everywhere it is reported, including
 # every package that merely inherits it, and a *new* advisory against any of
-# those packages still goes red. So the entry below is one line for eight
-# reported packages, and it is not a blanket over those eight.
+# those packages still goes red. So the braces entry this file first held was
+# one line for eight reported packages, and it was not a blanket over those
+# eight.
 #
 # THE RUNTIME GATE NEEDS AN EXPLICIT MARKER. A bare entry covers the build-time
 # gate only. To suppress something in the tree that ships inside the image, the
@@ -64,54 +65,19 @@
 #
 # Populate only from real findings, never pre-emptively.
 
-GHSA-vfj7-8cjw-p6xm exp:2026-11-14
-# braces: stack-exhaustion denial of service through deeply nested patterns.
-# Affected range <=3.0.3, and 3.0.3 is the newest version published, so there is
-# no fix to take — this is the finding that made this file necessary.
+# EMPTY, BECAUSE THE ADVISORY WAS WITHDRAWN. This file held one entry,
+# GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, stack-exhaustion denial of service). It
+# was the finding that made the file necessary: 3.0.3 is the newest braces, so
+# there was no fix to take. GitHub withdrew the advisory on 2026-10-23. braces
+# 3.0.3 is still in the tree, but npm audit no longer reports it, and the
+# build-time gate on PR #382 named the entry as matching nothing. It was deleted
+# on that verdict, as the stale-entry note above asks.
 #
-# WHY A BUMP CANNOT CLEAR IT, checked rather than assumed. `npm view braces
-# versions` ends at 3.0.3. npm offers two "fixes" and both are major downgrades
-# of direct dependencies: eslint-config-next 16.3.6 -> 14.2.35 and
-# shadcn ^4.21.0 -> 1.0.0. eslint-config-next 14 against next 16.3.6 would trade
-# an audit failure for a lint failure, which is not a fix. Dropping one
-# dependency does not work either: braces is reached through two independent
-# paths, eslint-config-next -> @next/eslint-plugin-next -> fast-glob ->
-# micromatch and shadcn -> fast-glob, so clearing it by subtraction means giving
-# up both the Next lint config and the component CLI.
-#
-# WHY IT DOES NOT APPLY. Three things have to hold, and all three do.
-#
-# It is build-time only. braces is not in the shipped tree at all — the runtime
-# gate (`npm audit --omit=dev`) reports zero vulnerabilities, so nothing here
-# reaches a user of the deployed app. That is why this entry carries no `runtime`
-# marker, and the gate will reject it if that ever changes.
-#
-# The impact is availability only. CVSS 3.1 7.5
-# AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H — no confidentiality, no integrity. The
-# failure mode is the globbing process exhausting its stack and dying, and the
-# processes doing the globbing are `eslint` and the shadcn CLI. A crashed lint
-# run is a red check, not a breach.
-#
-# The patterns are ours. The advisory needs a deeply nested brace *pattern*, and
-# the patterns reaching braces here are the glob patterns in eslint.config.mjs
-# and components.json plus shadcn's own internal file globs. They are committed
-# to this repository, not read from user input, a request, or the database. There
-# is no path by which an outside party supplies one.
-#
-# WHAT UNBLOCKS REMOVING IT. A braces release above 3.0.3, or
-# @next/eslint-plugin-next and shadcn moving off fast-glob. Neither looks
-# imminent: braces' newest publish is 3.0.3 and fast-glob's is 3.3.3 from
-# 2025-01-05, with nothing since. Neither is formally deprecated on npm, so this
-# is a quiet dependency rather than an abandoned one — which is the weaker
-# claim, and the one actually checkable. Re-check with
-# `cd app && npm view braces versions` and `npm audit --audit-level=high`.
-#
-# THE DATE IS SIX WEEKS OUT, AND IT IS NOT WAITING ON A REBUILD. The .trivyignore
-# entries use short dates because an upstream base rebuild is a scheduled,
-# expected event. This one is waiting on an upstream release that may never
-# arrive, so the date is not a countdown to a fix — it is a prompt to re-ask a
-# different question: whether a glob stack neither of whose links has shipped in
-# a year is still worth carrying for a lint config and a component CLI. If this
-# entry reaches a
-# second extension, that is the signal the .trivyignore header gives for its own
-# entries, and the answer is to change the dependency rather than the date.
+# WORTH KEEPING FROM IT. The entry argued that the advisory did not apply here.
+# The advisory was build-time only, its impact was availability only, and every
+# brace pattern was committed to this repository. Its date was set six weeks out
+# as a prompt to reconsider the dependency, not as a countdown to a fix. It named
+# two things that would unblock removal: a braces release above 3.0.3, or shadcn
+# and @next/eslint-plugin-next leaving fast-glob. Neither happened. The advisory
+# went away instead. Write the next entry's exit conditions the same way, but
+# expect the verdict to come from the gate, not from the conditions.
