@@ -101,8 +101,10 @@ export default defineConfig({
         "components/**/*.tsx",
         "scripts/**/*.ts",
         // Issue #296. In only because there is now a renderer: useIsMobile is
-        // state plus a matchMedia listener, so every line of it needs mounting
-        // to reach. Tested through renderHook in tests/unit/hooks/.
+        // a useSyncExternalStore over a matchMedia listener (Issue #193), so
+        // every line of it needs mounting to reach. Tested through renderHook
+        // in tests/unit/hooks/, plus a server render and a hydration for the
+        // server snapshot — see the hooks/** threshold below.
         "hooks/**/*.ts",
         "instrumentation.ts",
       ],
@@ -260,9 +262,14 @@ export default defineConfig({
         // app-sidebar.tsx has a render test.
         "components/**/*.tsx": { statements: 74, branches: 63, functions: 66, lines: 76 },
 
-        // 100 across the board over one 19-line file. Issue #296 brought
+        // 100 across the board over one file, use-mobile.ts. Issue #296 brought
         // hooks/ into `include` for the first time — the old `hooks/**`
         // exclusion was belt-and-braces, since no include glob reached it.
+        //
+        // Since #193 the hook's getServerSnapshot is called only by a server
+        // render or a hydration, never by renderHook, so the two tests that
+        // perform them are what keep `functions` here: without them it is 4 of
+        // 5, or 80%. A new useSyncExternalStore hook needs the same pair.
         "hooks/**/*.ts": { statements: 98, branches: 98, functions: 98, lines: 98 },
       },
     },

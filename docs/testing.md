@@ -148,6 +148,21 @@ with `toHaveClass`, which matches whole class names. A substring check such as
 `className.toContain("grid-cols-2")` also matches `@md:grid-cols-2`, so it
 cannot assert that a class is absent.
 
+**Server rendering and hydration are in reach, and a `useSyncExternalStore`
+hook needs both** ([Issue #193](https://github.com/aellington89/finance-stack/issues/193)).
+`renderToString` from `react-dom/server` produces the HTML a server would send,
+and `render(ui, { container, hydrate: true, onRecoverableError })` hydrates it,
+so a test can assert that the first client render agrees with the server (no
+recoverable error, no `console.error`) and what the component shows afterwards.
+[`use-mobile.test.tsx`](../app/tests/unit/hooks/use-mobile.test.tsx) does both.
+For a hook built on `useSyncExternalStore` they are not optional: its
+`getServerSnapshot` is called only by a server render or a hydration, never by
+`renderHook`, so without them that function goes uncovered and the `hooks/**`
+threshold fails — 4 of 5 functions is 80% against a floor of 98. One limit:
+jsdom still has a `window` during `renderToString`, so code that branches on
+`typeof window` takes its client path there. What keeps client state out of
+server HTML in such a test is the server snapshot, not the missing global.
+
 **Accessibility contracts are queried the way assistive tech finds them**
 ([Issue #144](https://github.com/aellington89/finance-stack/issues/144)). An
 expandable row's toggle is `getByRole("button", { name: "Current Asset",

@@ -58,17 +58,11 @@
     "postcss advisory because postcss is also how nanoid reaches the runtime tree:",
     "8.5.23 ranges on nanoid ^3.3.16, and 3.3.16 carries GHSA-2v37-7h3g-55p8 (HIGH).",
     "8.5.26 is the first release to require nanoid ^3.3.17. Keep the floor at or",
-    "above 8.5.26 so a fresh resolve cannot land back on a vulnerable nanoid.",
-    "eslint-plugin-react-hooks: eslint-config-next floats this on a caret range;",
-    "7.1.x adds react-hooks/set-state-in-effect, which flags pre-existing",
-    "hydration patterns in hooks/use-mobile.ts and components/ui/date-range-picker.tsx.",
-    "Pinned to the version the lockfile already used so the rule change lands in",
-    "its own PR with the refactor, not bundled into unrelated work."
+    "above 8.5.26 so a fresh resolve cannot land back on a vulnerable nanoid."
   ],
   "overrides": {
     "postcss": "^8.5.26",
-    "sharp": "^0.35.3",
-    "eslint-plugin-react-hooks": "7.0.1"
+    "sharp": "^0.35.3"
   },
   "//typescript": [
     "Read this as a floor and a ceiling that are set by two different things.",
@@ -109,9 +103,10 @@
     "ESLint 10 removed the deprecated rule-context accessors (context.getFilename()",
     "and friends, superseded by context.filename in 8.40) and the plugins",
     "eslint-config-next vendors still call them, so 10.x crashes at rule-load",
-    "time before linting a single file. eslint-plugin-react peers at ^9.7,",
-    "eslint-plugin-import and eslint-plugin-jsx-a11y at ^9, eslint-plugin-react-hooks",
-    "at ^9.0.0; eslint-config-next 16.3.0 still requires eslint-plugin-react",
+    "time before linting a single file. eslint-plugin-react peers at ^9.7, and",
+    "eslint-plugin-import and eslint-plugin-jsx-a11y at ^9. eslint-plugin-react-hooks",
+    "capped at ^9 too until 7.1.0 widened its peer to ^10 (resolved here since",
+    "#193). eslint-config-next 16.3.0 still requires eslint-plugin-react",
     "^7.37.0, whose only satisfying release is the same 7.37.5. There is no",
     "version of the Next lint config that runs on ESLint 10 (PR #247).",
     "9.39.5 carries npm's `maintenance` dist-tag, so this is a supported line,",
