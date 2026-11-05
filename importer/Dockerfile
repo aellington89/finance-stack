@@ -12,7 +12,7 @@
 #
 # Bumping this base is a Dependabot `docker` PR against /importer — see the
 # entry in .github/dependabot.yml.
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 
