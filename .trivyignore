@@ -150,16 +150,26 @@ CVE-2026-19534 exp:2026-11-17
 # undici 6.27.0, fixed in 6.28.1. npm-vendored, as above.
 CVE-2026-109383 exp:2026-11-17
 # undici 6.28.0, fixed in 6.29.1 (GHSA-2m5v-pch6-74hx, TLS certificate
-# validation bypass via dropped tls options). npm-vendored, as above. Trivy now
-# reads the vendored copy as 6.28.0 rather than 6.27.0, which still sits below
-# CVE-2026-19534's 6.28.1, so that entry keeps matching. The same scans also
-# reported this ID against the application tree's undici 7.30.0 and jsdom's
-# 8.11.2. Those are lockfile copies, so they were bumped (7.30.1, 8.12.2) and
-# are not what this line covers. Because an ID entry widens, it would also hide a
-# lockfile regression from this scan. The npm audit gate still catches that on
-# the GHSA. The vendored copy is also exposed to GHSA-xjj6-f33q-929c and
-# GHSA-qrxm-fqhp-jwvm (both fixed in 6.29.1). The 2026-11-05 scan does not report
-# either at HIGH, so neither is listed.
+# validation bypass via dropped tls options). npm-vendored, as above.
+CVE-2026-109869 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-xjj6-f33q-929c, denial of service via
+# an unhandled error on excessive content-encodings). npm-vendored, as above.
+CVE-2026-87018 exp:2026-11-17
+# undici 6.28.0, fixed in 6.29.1 (GHSA-qrxm-fqhp-jwvm, denial of service via
+# TLS 1.2 renegotiation with a mismatched certificate). npm-vendored, as above.
+#
+# Trivy now reads the vendored copy as 6.28.0 rather than 6.27.0. That still
+# sits below CVE-2026-19534's 6.28.1, so that entry keeps matching. The first
+# two IDs were also reported against the application tree's undici 7.30.0 and
+# jsdom's 8.11.2. Those are lockfile copies, so they were bumped (7.30.1,
+# 8.12.2) and are not what these lines cover. Because an ID entry widens, these
+# would also hide a lockfile regression from this scan. The npm audit gate
+# still catches that on the GHSAs.
+#
+# All three arrived together, and the first attempt listed only one. Trivy
+# prints several CVEs against one installed version as a single row, with the
+# version cell merged, so reading only the rows that name a version undercounts.
+# Count the IDs under the scan's "Total:" line, not the version cells.
 #
 # THE LAST THREE ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
 # TO VENDORED COPIES, which is worth recording because it is the distinction the
