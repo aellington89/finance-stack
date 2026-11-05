@@ -158,9 +158,15 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
-  # Service images in docker-compose.yml (postgres, metabase). Since #224 the
-  # python and backup images are built from Dockerfiles, so their bases arrive
-  # through the `docker` entries above rather than here.
+  # Service images in docker-compose.yml (postgres, metabase, glitchtip, caddy).
+  # Since #224 the python and backup images are built from Dockerfiles, so their
+  # bases arrive through the `docker` entries above rather than here.
+  # Every PR from this entry edits docker-compose.yml alone, but
+  # deploy/compose.yml pins the same images (#227), so the image job's
+  # deploy-bundle parity gate fails until the same bump is made there by hand.
+  # Commit it to the Dependabot branch and check it with
+  # ./scripts/check-deploy-parity.sh (#374, #383 and #387 all needed this).
+  # Dependabot stops rebasing a branch once someone else has committed to it.
   # Bumping postgres here needs a matching manual bump of the `postgres:`
   # service image in .github/workflows/ci.yml and backup-smoke.yml — which
   # Dependabot does not read — and of scripts/Dockerfile, which it reads as a
