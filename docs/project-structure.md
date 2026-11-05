@@ -176,6 +176,7 @@ finance-stack/
 │   │   ├── queries/work-expenses.ts      # Work expense queries (period totals, time series, category breakdown)
 │   │   ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │   │   ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
+│   │   ├── queries/net-worth-drivers.ts  # Pure builder for the drivers tree (category → type → account), unit-tested
 │   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
 │   │   ├── queries/asset-performance.ts  # Pure builder for the asset performance tree, unit-tested
 │   │   ├── queries/liabilities-drilldown.ts # Liabilities drill-down queries (allocation, performance, decomposition, debt service, waterfall)
