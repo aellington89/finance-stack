@@ -177,6 +177,7 @@ finance-stack/
 │   │   ├── queries/dashboard.ts          # Dashboard queries (net worth, time series)
 │   │   ├── queries/net-worth-drilldown.ts # Net worth drill-down queries (waterfall, drivers, decomposition)
 │   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
+│   │   ├── queries/asset-performance.ts  # Pure builder for the asset performance tree, unit-tested
 │   │   ├── queries/liabilities-drilldown.ts # Liabilities drill-down queries (allocation, performance, decomposition, debt service, waterfall)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
