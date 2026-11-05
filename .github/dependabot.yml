@@ -135,7 +135,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
-  # Base image in importer/Dockerfile (python:3.14-slim). Issue #224 moved this
+  # Base image in importer/Dockerfile (python:3.15-slim). Issue #224 moved this
   # pin out of docker-compose.yml, where the `docker-compose` ecosystem below was
   # reading it — without this entry the importer's base would silently stop being
   # tracked.

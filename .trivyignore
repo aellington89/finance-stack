@@ -28,7 +28,7 @@
 # Two of the four bases are not freely bumpable, which is worth knowing before
 # reaching for an entry. postgres:18.6 (finance-backup) must stay version-matched
 # to the server, so moving it means moving docker-compose.yml and the workflow
-# service containers with it. Both it and python:3.14-slim (finance-importer) are
+# service containers with it. Both it and python:3.15-slim (finance-importer) are
 # rebuilt upstream under the same tag, so for an OS-package finding on either,
 # re-running the job after upstream rebuilds is frequently the entire fix — check
 # that before suppressing anything.
@@ -67,9 +67,10 @@
 CVE-2026-109518 exp:2026-11-18
 # apt 3.0.3 and libapt-pkg7.0 3.0.3, fixed in 3.0.4 (DSA-6607-1, in
 # trixie-security). Reported by both debian images. NVD published it on
-# 2026-11-04, after the last upstream rebuilds Docker Hub reports
-# (python:3.14-slim 2026-11-02, postgres:18.6 2026-10-31), so both bases still
-# carry 3.0.3 and only a rebuild clears it. The vulnerable path is not taken
+# 2026-11-04, after the last upstream rebuilds Docker Hub reports. Those were
+# 2026-11-02 for python:3.14-slim and for python:3.15-slim (the importer's base
+# since #384), and 2026-10-31 for postgres:18.6. Both bases therefore still
+# carry 3.0.3, and only a rebuild clears it. The vulnerable path is not taken
 # here: the advisory needs apt to *install* a package over HTTP that an on-path
 # attacker, mirror or proxy can manipulate, with Acquire::Retries above zero.
 # Neither image runs apt at all. importer/Dockerfile and scripts/Dockerfile have
@@ -97,7 +98,7 @@ CVE-2026-109518 exp:2026-11-18
 # because only the tail of the job log was read: finance-backup is the last of
 # the four scans, and finance-migrate and finance-importer had failed above it.
 
-# --- python:3.14-slim bundled packages (finance-importer) -------------------
+# --- python:3.15-slim bundled packages (finance-importer) -------------------
 # EMPTY, AND THAT IS THE POINT. This block held CVE-2025-47273 (setuptools
 # 70.3.0) and GHSA-6v7p-g79w-8964 (msgpack 1.1.2), both of them there because
 # the image shipped pip. importer/Dockerfile now removes pip after the install

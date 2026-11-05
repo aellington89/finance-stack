@@ -349,7 +349,7 @@ the other three's findings in the same run rather than across four.
 **Fix**, in order of preference:
 
 1. **Re-run the job.** This is genuinely first for `finance-importer` and
-   `finance-backup`: their `python:3.14-slim` and `postgres:18.6` bases are
+   `finance-backup`: their `python:3.15-slim` and `postgres:18.6` bases are
    rebuilt upstream under the same tag, so an OS-package finding often clears
    with no change in this repo at all.
 2. **Remove the vulnerable component** if the image doesn't need it. The runner
@@ -360,7 +360,7 @@ the other three's findings in the same run rather than across four.
    deliberately — it runs `npx drizzle-kit` — so expect findings there that
    `finance-app` does not have.)
 3. **Rebuild on a patched base image** — `node:24-alpine` in `app/Dockerfile`,
-   `python:3.14-slim` in `importer/Dockerfile`. **`postgres` in
+   `python:3.15-slim` in `importer/Dockerfile`. **`postgres` in
    `scripts/Dockerfile` is not free to move**: `pg_dump` must stay version-matched
    to the server, so bumping it means bumping `docker-compose.yml` and the
    `postgres:` service containers in both workflows in the same change.
