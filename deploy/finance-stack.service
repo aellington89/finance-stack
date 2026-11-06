@@ -5,14 +5,19 @@
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now finance-stack
 #
-# WHAT THIS DOES AND DOES NOT DO. Reboot persistence does not come from here —
-# it comes from `restart: unless-stopped` on the long-running services, which the
-# Docker daemon honours on its own. This unit exists so that starting and
-# stopping the stack is a deliberate, ordinary system operation
-# (`systemctl start|stop|status finance-stack`) rather than a remembered
-# incantation in the right directory, and so that a `systemctl stop` survives a
-# reboot as a stop — which is exactly what `unless-stopped` alone would not give
-# you after a `docker compose down`.
+# WHAT THIS DOES AND DOES NOT DO. Reboot persistence does not need this unit —
+# without it, `restart: unless-stopped` on the long-running services brings them
+# back, because the Docker daemon honours it on its own. Once it is enabled, a
+# reboot does go through here: shutdown runs ExecStop (`down`) and boot runs
+# ExecStart (`up -d`), so what comes back is what compose.yml and .env declare.
+# Optional services belong in COMPOSE_PROFILES in .env (#185); one started by
+# hand with --profile is removed at shutdown and not started again.
+#
+# This unit exists so that starting and stopping the stack is a deliberate,
+# ordinary system operation (`systemctl start|stop|status finance-stack`) rather
+# than a remembered incantation in the right directory, and so that a
+# `systemctl stop` survives a reboot as a stop — which is exactly what
+# `unless-stopped` alone would not give you after a `docker compose down`.
 #
 # There is deliberately no upgrade timer. Upgrades go through ./deploy.sh, which
 # gates on a pre-upgrade dump and health-gates the result (Issue #228) — and

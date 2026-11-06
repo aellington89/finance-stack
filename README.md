@@ -7,10 +7,15 @@ A containerized personal finance data warehouse for aggregating, storing, and vi
 | Service | Description | Local Port |
 |---|---|---|
 | PostgreSQL 18 | Primary database | 5433 (loopback only) |
+| migrate | One-shot job on every start: creates the databases and roles, applies migrations, seeds lookups | — |
 | Next.js 16 | Custom finance application | 3001 |
 | importer | File ingestion (polls `imports/` subfolders, skips what it has already imported) | — |
-| Metabase | BI dashboards and analytics (`--profile bi`) | 3000 (loopback only) |
-| Caddy | TLS termination for exposed deployments (`--profile edge`) | 80, 443 |
+| pg-backup | Daily `pg_dump` of the databases to `./backups/` | — |
+| Metabase | BI dashboards and analytics (optional, `bi` profile) | 3000 (loopback only) |
+| GlitchTip | Self-hosted error tracking (optional, `errors` profile) | 8000 (loopback only) |
+| Caddy | TLS termination for exposed deployments (optional, `edge` profile) | 80, 443 |
+
+The optional services run only when you list their profile in `.env`, for example `COMPOSE_PROFILES=bi`. See [Services and profiles](docs/deployment.md#services-and-profiles) for what each service is for, why it starts by default or doesn't, and the one-shot `init-script` balance rebuild.
 
 ## Security
 
@@ -29,7 +34,7 @@ At the data tier, Postgres and Metabase publish their host ports on **loopback o
 
 At the edge, every response carries a **content security policy** and the usual hardening headers (HSTS, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`), sign-ins are **rate limited** to five failures per username per 15 minutes, and server actions to 120 per user per minute.
 
-**The default posture is still a trusted network** — localhost, a LAN, a VPN, Tailscale or similar — because the app speaks plain HTTP and nothing else encrypts it. Exposing it to the internet means putting TLS in front: a `caddy` service ships for exactly this, switched off, and starts with `docker compose --profile edge up -d` once `PUBLIC_HOSTNAME` is set. See [docs/deployment.md](docs/deployment.md) for the two postures, the full checklist for going public, and what each control does and does not cover.
+**The default posture is still a trusted network** — localhost, a LAN, a VPN, Tailscale or similar — because the app speaks plain HTTP and nothing else encrypts it. Exposing it to the internet means putting TLS in front: a `caddy` service ships for exactly this, switched off, and runs once `PUBLIC_HOSTNAME` is set and `edge` is listed in `COMPOSE_PROFILES` in `.env`. See [docs/deployment.md](docs/deployment.md) for the two postures, the full checklist for going public, and what each control does and does not cover.
 
 Credentials are sourced from a single `.env` file on the deployment host — never committed, never baked into an image, and enforced by ignore-rule tests plus a full-history secret scan in CI. See [docs/secrets.md](docs/secrets.md) for the inventory, the production sourcing model, and rotation.
 
@@ -65,22 +70,21 @@ This will:
 2. Run the `migrate` service: applies pending Drizzle migrations to `Finances` and `Finances_Test`, then seeds lookup data
 3. Build and start the Next.js finance application
 4. Start the importer service
+5. Start `pg-backup`, which takes its first dump straight away and then one a day
+6. Start any optional services listed in `COMPOSE_PROFILES`
 
 The `importer` service polls subdirectories under `imports/` every 60 seconds and routes files to matching parsers. See [docs/importer.md](docs/importer.md) for setup and adding new import types.
 
 ### Start Metabase (optional)
 
-Metabase is behind a Docker Compose profile and does not start by default. To start it:
+Metabase is behind the `bi` profile and does not start by default. To run it, add the profile to `.env` and start the stack as usual:
 
 ```bash
-docker compose --profile bi up metabase -d
+COMPOSE_PROFILES=bi          # in .env
+docker compose up -d
 ```
 
-To start the full stack including Metabase:
-
-```bash
-docker compose --profile bi up
-```
+Declared in `.env`, it starts and stops with the rest of the stack. `docker compose --profile bi up -d` works too, but then a plain `docker compose down` removes Metabase and a later plain `up` won't bring it back.
 
 ### 3. Set up the Next.js application (local development only)
 
@@ -123,7 +127,7 @@ The app starts on http://localhost:3001 with Turbopack for fast refresh.
 docker compose down
 ```
 
-Data is persisted in Docker volumes and will be available on next startup.
+This stops the optional services listed in `COMPOSE_PROFILES` too. Data is persisted in Docker volumes and will be available on next startup.
 
 ## Deploying to a server
 
