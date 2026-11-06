@@ -869,8 +869,19 @@ self_update() {
 # healthy, any running bi / errors / edge service is re-applied on the deployed
 # definition — otherwise a Metabase bump reaches compose.yml and never the
 # container. A failure here is a warning, not a rollback: the app is committed.
+#
+# Only an UNDECLARED profile can reach the loop below. One listed in .env's
+# COMPOSE_PROFILES (#185) is active for every compose command in this directory,
+# so its services are already in `config --services`, were applied by the main
+# `up -d`, and are filtered out as defaults here. What is left was started by
+# hand with --profile. A plain `down` removes it (the systemd unit's stop, which
+# a reboot also runs) and a plain `up -d` never starts it again. That is worth
+# saying, but not fixing from here: deploy.sh does not edit .env beyond
+# APP_VERSION (#347).
+# `init` is exempt, since it is a one-shot job that is meant to be run by hand.
 OPTIONAL_REAPPLIED=()
 OPTIONAL_FAILED=()
+OPTIONAL_UNDECLARED=()
 converge_optional_profiles() {
     local profile defaults
     local -a gated running
@@ -891,7 +902,20 @@ converge_optional_profiles() {
             warn "could not re-apply ${running[*]} — the app is deployed; check with: docker compose --profile ${profile} ps"
             OPTIONAL_FAILED+=("${running[@]}")
         fi
+        if [ "$profile" != "init" ]; then
+            warn "${running[*]} is running, but \"${profile}\" is not in COMPOSE_PROFILES in .env — a systemctl stop or reboot removes it, and nothing starts it again (see the summary below)"
+            OPTIONAL_UNDECLARED+=("$profile")
+        fi
     done < <(docker compose config --profiles 2>/dev/null)
+}
+
+# The COMPOSE_PROFILES value that declares everything this host already runs:
+# whatever .env lists now, plus each undeclared profile found above.
+suggested_compose_profiles() {
+    local declared
+    declared="$(env_get COMPOSE_PROFILES)"
+    local IFS=,
+    printf '%s' "${declared:+${declared},}${OPTIONAL_UNDECLARED[*]}"
 }
 
 # ------------------------------------------------------------
@@ -1348,6 +1372,9 @@ if [ "${#OPTIONAL_REAPPLIED[@]}" -gt 0 ]; then
 fi
 if [ "${#OPTIONAL_FAILED[@]}" -gt 0 ]; then
     echo "NOT re-applied:   ${OPTIONAL_FAILED[*]} — see the warning above"
+fi
+if [ "${#OPTIONAL_UNDECLARED[@]}" -gt 0 ]; then
+    echo "Undeclared:       --profile ${OPTIONAL_UNDECLARED[*]} — set COMPOSE_PROFILES=$(suggested_compose_profiles) in .env to make it part of the stack"
 fi
 if [ -n "$SELF_UPDATED" ]; then
     echo "deploy.sh:        updated to ${SELF_UPDATED}'s; the next run uses it"

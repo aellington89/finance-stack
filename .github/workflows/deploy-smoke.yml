@@ -474,6 +474,10 @@ jobs:
             || fail "compose.yml changed at the deployed version, but the backup gate did not run"
           [ "$(smoke_label finance-app)" = vprime ] || fail "finance-app was not recreated on the new compose.yml"
           [ "$(smoke_label caddy)" = vprime ] || fail "the running caddy was not re-applied on the new compose.yml"
+          # #185: caddy was started with --profile, not declared in .env, so
+          # deploy.sh says what to add rather than leaving it to be lost.
+          grep -qF "Undeclared:       --profile edge — set COMPOSE_PROFILES=edge in .env" refresh.log \
+            || fail "deploy.sh did not flag the hand-started, undeclared edge profile"
           grep -qF "new:              SMOKE_NEW_OPTION" refresh.log \
             || fail "the .env.example report did not name the new key"
           grep -qF "default changed:  BACKUP_DBS" refresh.log \
@@ -649,6 +653,40 @@ jobs:
           [ -z "$(docker ps -aq --filter label=com.docker.compose.service=smoke-sidecar)" ] \
             || fail "the sidecar outlived the reconverge"
           echo "✓ interrupted at exit $rc with files and .env restored; converged back to $VER"
+
+      # #185. An optional service declared in .env is part of the stack, not a
+      # container someone once started by hand: Compose reads COMPOSE_PROFILES
+      # from .env, so the plain `down` and `up -d` the systemd unit runs both
+      # include it, and deploy.sh applies it with everything else rather than
+      # through the re-apply path for hand-started services.
+      - name: A profile declared in .env survives a stop and start, and deploy.sh treats it as declared
+        working-directory: host
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+
+          grep -q '^PUBLIC_HOSTNAME=' .env || echo "PUBLIC_HOSTNAME=localhost" >> .env
+          sed -i '/^COMPOSE_PROFILES=/d' .env
+          echo "COMPOSE_PROFILES=edge" >> .env
+          docker compose config --services | grep -qx caddy \
+            || fail "COMPOSE_PROFILES in .env did not activate the edge profile"
+
+          docker compose down        # what systemctl stop finance-stack runs
+          [ -z "$(docker compose ps -aq caddy)" ] || fail "a plain down left the declared caddy behind"
+          docker compose up -d       # what systemctl start finance-stack runs
+          [ -n "$(docker compose ps --status running -q caddy)" ] \
+            || fail "a plain up -d did not start the declared caddy"
+
+          ./deploy.sh "$VER" 2>&1 | tee declared.log
+          [ "$(curl -fsS http://127.0.0.1:3001/api/health | jq -r .build.version)" = "$VER" ] \
+            || fail "the stack did not come back at $VER"
+          [ -n "$(docker compose ps --status running -q caddy)" ] || fail "caddy is not running after deploy.sh"
+          if grep -qF "Undeclared:" declared.log; then
+            fail "deploy.sh called the declared edge profile undeclared"
+          fi
+          if grep -qF "re-applying running --profile edge" declared.log; then
+            fail "the declared caddy went through the hand-started re-apply path"
+          fi
+          echo "✓ declared caddy survived down/up and was applied by deploy.sh as part of the stack"
 
       # Every profile the file declares, read from it rather than listed here
       # (#185), so caddy (started above under --profile edge) goes too, and so
