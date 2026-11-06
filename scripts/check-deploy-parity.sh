@@ -51,7 +51,15 @@ FAILED=0
 
 # Placeholder values for every variable without a default in either file, so
 # `config` renders without warnings and both sides see identical inputs.
-render() {
+#
+# --env-file /dev/null is load-bearing, not tidiness: without it a developer's
+# real root .env feeds the dev side while the deploy side (project directory
+# deploy/, no .env of its own) gets nothing, and the gate fails locally while
+# passing in CI. It also keeps a COMPOSE_PROFILES set in that .env (#185) from
+# deciding what gets compared — Compose reads no project .env at all under it.
+compose_for() {
+  local file="$1"
+  shift
   POSTGRES_USER=placeholder \
   POSTGRES_PASSWORD=placeholder \
   POSTGRES_DB=placeholder \
@@ -66,15 +74,41 @@ render() {
   APP_VERSION=latest \
   docker compose \
     --env-file /dev/null \
-    --file "$1" \
-    --profile init --profile bi --profile edge --profile errors \
-    config --format json
+    --file "$file" \
+    "$@"
 }
 
-# --env-file /dev/null is load-bearing, not tidiness: without it a developer's
-# real root .env feeds the dev side while the deploy side (project directory
-# deploy/, no .env of its own) gets nothing, and the gate fails locally while
-# passing in CI.
+# Every profile a file declares, read from the file rather than kept as a list
+# here (Issue #185). This used to name init, bi, edge and errors by hand, so a
+# fifth profile would have been rendered by neither side and its services never
+# compared at all — the gate would have passed on exactly the drift it exists to
+# catch. `config --profiles` is the same call deploy.sh relies on.
+profiles_of() {
+  compose_for "$1" config --profiles | LC_ALL=C sort
+}
+
+render() {
+  local -a flags=()
+  local profile
+  while IFS= read -r profile; do
+    [ -n "$profile" ] && flags+=(--profile "$profile")
+  done < <(profiles_of "$1")
+  # ${flags[@]+...}: an empty array under `set -u` is an unbound-variable error
+  # on bash < 4.4, which is what macOS still ships.
+  compose_for "$1" ${flags[@]+"${flags[@]}"} config --format json
+}
+
+# The two files must declare the same profiles. A service whose profile differs
+# would also show up in the JSON diff below; this says so in one line.
+profiles_of "$DEV_FILE"    > "$TMP/dev.profiles"
+profiles_of "$DEPLOY_FILE" > "$TMP/deploy.profiles"
+if ! diff -u --label "$DEV_FILE profiles" "$TMP/dev.profiles" \
+             --label "$DEPLOY_FILE profiles" "$TMP/deploy.profiles"; then
+  fail "$DEPLOY_FILE and $DEV_FILE declare different profiles — see the diff above."
+else
+  echo "✓ both files declare the same profiles: $(paste -sd' ' "$TMP/dev.profiles")"
+fi
+
 render "$DEV_FILE"    > "$TMP/dev.json"
 render "$DEPLOY_FILE" > "$TMP/deploy.json"
 

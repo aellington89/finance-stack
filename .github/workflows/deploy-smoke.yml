@@ -650,8 +650,15 @@ jobs:
             || fail "the sidecar outlived the reconverge"
           echo "✓ interrupted at exit $rc with files and .env restored; converged back to $VER"
 
-      # Every profile, so caddy (started above under --profile edge) goes too.
+      # Every profile the file declares, read from it rather than listed here
+      # (#185), so caddy (started above under --profile edge) goes too, and so
+      # will the services of any profile added later.
       - name: Tear down
         if: always()
         working-directory: host
-        run: docker compose --profile bi --profile edge --profile errors --profile init down -v --remove-orphans || true
+        run: |
+          profiles=()
+          while IFS= read -r p; do
+            [ -n "$p" ] && profiles+=(--profile "$p")
+          done < <(docker compose config --profiles 2>/dev/null || true)
+          docker compose "${profiles[@]}" down -v --remove-orphans || true
