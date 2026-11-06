@@ -10,6 +10,14 @@ Unmatched fields are still a hard failure for the file they occur in — there a
 
 The `importer/poll.py` dispatcher is committed to the repo. The `importer/parsers/` directory and `imports/` drop folder are gitignored — parser logic is user-specific since the field mapping depends on how you categorize your transactions.
 
+**Imported transactions don't show up in balances on their own.** The importer appends to `transactions` and can write nothing else, so the balance history that net worth, account balances and every drilldown read is not updated by an import. Run the rebuild after importing:
+
+```bash
+docker compose --profile init run --rm init-script
+```
+
+The transactions list shows imported rows straight away; only the balances wait for the rebuild. See [Balance history](database.md#balance-history).
+
 ## The image
 
 The service runs from `finance-importer`, built from [`importer/Dockerfile`](../importer/Dockerfile) (Issue #224). `poll.py`, `lookups.py` and the pinned dependencies are baked in; it runs as a non-root user and installs nothing at container start.

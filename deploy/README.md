@@ -134,8 +134,15 @@ systemctl status finance-stack
 ```
 
 The unit is what makes `systemctl start|stop finance-stack` work. Surviving a
-reboot does not depend on it — that comes from `restart: unless-stopped` in
-`compose.yml`, which the Docker daemon honours on its own.
+reboot does not need it — without the unit, `restart: unless-stopped` in
+`compose.yml` brings the containers back, because the Docker daemon honours it
+on its own.
+
+Once the unit is enabled, a reboot goes through it: shutdown runs its stop, a
+plain `docker compose down`, and boot runs its start, a plain `up -d`. Both
+include exactly the services `.env` declares. An optional service started by hand
+with `--profile` is removed by the stop and not started again, so declare it in
+`COMPOSE_PROFILES` (see [Optional services](#optional-services)).
 
 ## Reaching the app
 
@@ -152,13 +159,18 @@ Two supported ways to reach it from elsewhere:
 ssh -L 3001:127.0.0.1:3001 <host>      # then open http://localhost:3001
 ```
 
-**TLS termination**, for anything long-lived. Set `PUBLIC_HOSTNAME` in `.env` to
-a DNS name that resolves to this host, then:
+**TLS termination**, for anything long-lived. In `.env`, set `PUBLIC_HOSTNAME`
+to a DNS name that resolves to this host and add `edge` to `COMPOSE_PROFILES`,
+then:
 
 ```sh
-docker compose --profile edge up -d
+docker compose up -d
 curl -sI https://<your-hostname>
 ```
+
+Declare `edge` rather than starting Caddy with `--profile edge up -d`. It is the
+way in, and a hand-started Caddy is removed by `systemctl stop finance-stack`,
+or by a reboot with the unit enabled, and is not started again.
 
 Caddy obtains and renews the certificate itself, which needs ports 80 and 443
 reachable. `postgres` (5433) and `metabase` (3000) are loopback-bound too and
@@ -382,20 +394,51 @@ bundle — an install with none logs a warning per unmatched import type and is
 otherwise fine. See
 [Importer](https://github.com/aellington89/finance-stack/blob/master/docs/importer.md).
 
-## Optional services
-
-Neither starts by default.
+**An import does not update balances on its own.** The importer can only append
+transactions, so net worth, account balances and the drilldowns show imported
+transactions only after the balance rebuild:
 
 ```sh
-docker compose --profile bi up -d                    # Metabase, on 127.0.0.1:3000
-docker compose --profile init run --rm init-script   # rebuild balance history
+docker compose --profile init run --rm init-script
 ```
 
-Once you have started one, upgrades keep it current. A plain `up -d` leaves a
-running profile service on whatever definition it was started with, so after a
-successful upgrade `deploy.sh` re-applies Metabase, GlitchTip or Caddy if one is
-running. A Metabase version bump in a release therefore reaches the container,
-not just `compose.yml`.
+It is safe to run while the app is up, and as often as you like.
+
+## Optional services
+
+None of these starts by default. Declare the ones you run in `.env`, as a
+comma-separated list of profiles, and start the stack as usual:
+
+| Profile | Service | What it needs first |
+|---|---|---|
+| `edge` | Caddy, TLS on 80/443: the way in from anywhere but this host | `PUBLIC_HOSTNAME` |
+| `bi` | Metabase, on `127.0.0.1:3000` | — |
+| `errors` | GlitchTip, on `127.0.0.1:8000` | the `GLITCHTIP_*` settings |
+
+```sh
+COMPOSE_PROFILES=edge,bi     # in .env
+docker compose up -d
+```
+
+Compose reads `COMPOSE_PROFILES` from `.env` on its own, so `docker compose up
+-d`, `down` and `ps`, the systemd unit and `deploy.sh` all include the declared
+services. An upgrade applies them with everything else.
+
+A service started by hand with `docker compose --profile bi up -d` runs too, but
+the stack does not own it. A plain `down` removes it, and so do `systemctl stop`
+and a reboot with the unit enabled; a plain `up -d` never starts it again.
+`deploy.sh` still re-applies one that is running after a successful upgrade, so
+a Metabase version bump reaches the container. It also warns that the profile is
+undeclared, and names the `COMPOSE_PROFILES` value to add.
+
+One profile stays out of that list. `init` holds the balance rebuild, a one-shot
+job run on demand (see [Importing files](#importing-files)):
+
+```sh
+docker compose --profile init run --rm init-script
+```
+
+Listed in `COMPOSE_PROFILES`, it would rerun on every `up`.
 
 ## Troubleshooting
 

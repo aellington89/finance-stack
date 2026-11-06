@@ -33,6 +33,100 @@ pulls is the one CI proved. Details, including the tags and the one-time package
 visibility step, are in
 [Releases & Tagging](releases.md#published-images).
 
+## Services and profiles
+
+Nine services, five of which start by default. The other four sit behind a
+Compose profile each and run only when you ask for them
+([#185](https://github.com/aellington89/finance-stack/issues/185) audited the
+split). The two compose files define the same nine; the parity gate holds them
+to it.
+
+| Service | Starts | Runs | What it is for | To turn it on |
+|---|---|---|---|---|
+| `postgres` | by default | long-running | The database | — |
+| `migrate` | by default | once per `up`, then exits | Creates the databases and roles, applies migrations, seeds the lookup tables. `finance-app`, `importer`, `pg-backup` and `glitchtip` wait for it to exit 0 | — |
+| `finance-app` | by default | long-running | The app | — |
+| `importer` | by default | long-running | Imports the files dropped in `./imports` | — |
+| `pg-backup` | by default | long-running | Dumps the databases to `./backups`, daily by default ([Backups](backups.md)) | — |
+| `metabase` | `bi` | long-running | BI dashboards, on `127.0.0.1:3000` | `COMPOSE_PROFILES=bi` |
+| `glitchtip` | `errors` | long-running | Error tracking, on `127.0.0.1:8000` | `COMPOSE_PROFILES=errors`, plus the `GLITCHTIP_*` settings ([Observability](observability.md)) |
+| `caddy` | `edge` | long-running | TLS in front of the app on 80/443 | `COMPOSE_PROFILES=edge`, plus `PUBLIC_HOSTNAME` ([TLS termination](#tls-termination)) |
+| `init-script` | `init` | once, by hand | Rebuilds `Finances` balance history | `docker compose --profile init run --rm init-script` |
+
+### Choosing the optional services
+
+Declare them in `.env`, as a comma-separated list of profiles:
+
+```sh
+COMPOSE_PROFILES=bi,edge
+```
+
+Compose reads `COMPOSE_PROFILES` from `.env` on its own, so every `docker
+compose` command in the directory includes those services: `up -d` starts them,
+`down` stops them and `ps` lists them. On a deployment host that covers the
+systemd unit, which runs exactly `up -d` and `down`, and `deploy.sh`'s upgrades
+too.
+
+`docker compose --profile bi up -d` also starts Metabase, but as a container the
+stack does not own. A plain `docker compose down` removes it, and a plain `up -d`
+never starts it again. `systemctl stop` and `start` are exactly those two
+commands, so they leave it gone, and so does a reboot on a host with the unit
+enabled ([systemd](#systemd)). `deploy.sh` keeps such a container current while
+it happens to be running, and when it finds one it names the `COMPOSE_PROFILES`
+value to add. Declaring the profile is what makes a service part of the stack.
+
+Leave `init` out of the list. `init-script` is a one-shot job: listed there, it
+would rerun the whole rebuild on every `up`.
+
+### Why each service is where it is
+
+**The rule.** A service starts by default only if the app or the safety of the
+data needs it, *and* it starts with no configuration beyond the base `.env`.
+Everything else goes behind a profile named for what it adds — `bi`, `errors`,
+`edge` — never for where it runs. A one-shot maintenance job goes behind a
+profile too, and is run with `run --rm`.
+
+- **`pg-backup` is default-on** because a stack that holds financial history and
+  takes no backups is the failure it exists to prevent
+  ([#122](https://github.com/aellington89/finance-stack/issues/122)).
+- **`importer` is default-on.** Idle, it is one directory scan a minute; with no
+  parsers it logs a warning per unmatched folder and does nothing else. Moving it
+  behind a profile would quietly stop imports on every existing host whose `.env`
+  does not declare that profile.
+- **`caddy` is opt-in**, even though on a deployment host it is the supported
+  way in from elsewhere: it needs `PUBLIC_HOSTNAME` and ports 80 and 443, so it
+  would fail on every fresh install that has neither.
+- **`init-script` stays.** It is the only full rebuild of `Finances` balance
+  history, because `migrate` rebuilds `Finances_Test` only. The importer can
+  append to `transactions` and nothing else, so **an import does not show up in
+  any balance, net worth figure or drilldown until `init-script` has run**. See
+  [Balance history](database.md#balance-history).
+- **There is no `dev` or `prod` profile.** The two environments differ in where
+  images come from and in how `finance-app` binds, and the two compose files
+  already carry exactly that. A profile meaning "environment" would duplicate
+  the split and blur what a profile means here: an optional capability.
+  Per-environment choices, such as which optional services run, go in each
+  host's `.env`.
+
+### Adding a service
+
+1. Define it identically in `docker-compose.yml` and `deploy/compose.yml`. The
+   [parity gate](../CONTRIBUTING.md#deploy-bundle-parity-gate) fails a PR that
+   misses one.
+2. Apply the rule above. If it gets a profile, name the capability.
+3. If it owns a database, have `migrate` create its role and database, skipping
+   both when its password is empty (the Metabase and GlitchTip blocks in
+   [`migrate-and-seed.sh`](../app/scripts/migrate-and-seed.sh)), and add the
+   database to the `BACKUP_DBS` default.
+4. Put its variables in both `.env.example` files. The parity gate compares the
+   names.
+5. Update the header comment in `docker-compose.yml`, the table above, the stack
+   table in the [README](../README.md), and, if it is optional, "Optional
+   services" in [`deploy/README.md`](../deploy/README.md).
+
+Nothing else needs a profile list. The parity gate, the deploy-smoke teardown
+and `deploy.sh`'s upgrade path all read the profiles from the compose file.
+
 ## The deployment bundle
 
 A server does not get a checkout. It gets `finance-stack-X.Y.Z.tar.gz`, attached
@@ -215,10 +309,18 @@ systemctl status finance-stack
 `docker compose up -d` / `down`, with `TimeoutStartSec=600` because a first
 install runs every migration and seed inside `up -d`.
 
-Surviving a reboot does **not** depend on it — that comes from
-`restart: unless-stopped`, which the Docker daemon honours on its own. The unit
-exists so that starting and stopping the stack is an ordinary system operation,
-and so a deliberate `systemctl stop` stays stopped across a reboot. There is no
+Surviving a reboot does **not** need it. Without the unit, `restart:
+unless-stopped` brings the containers back, because the Docker daemon honours it
+on its own. The unit exists so that starting and stopping the stack is an
+ordinary system operation, and so a deliberate `systemctl stop` stays stopped
+across a reboot.
+
+Once the unit is enabled, a reboot goes through it. Shutdown stops the unit,
+which runs `docker compose down`, and boot starts it, which runs `up -d`. Both
+are plain commands, so what comes back is what `compose.yml` and `.env` declare.
+An optional service started by hand with `--profile` is removed at shutdown and
+never started again; declare it in `COMPOSE_PROFILES` instead ([Choosing the
+optional services](#choosing-the-optional-services)). There is no
 upgrade timer, and `deploy.sh` is the reason it stays that way rather than the
 reason to add one: it distinguishes "rolled back cleanly" (exit 2) from "the
 rollback also failed" (exit 3) precisely because the difference needs a person.
@@ -468,18 +570,21 @@ docker compose exec pg-backup /scripts/restore.sh --force Finances Finances_Rest
 
 ## Metabase after a deploy
 
-Metabase is behind the `bi` profile and does not start by default:
+Metabase is behind the `bi` profile and does not start by default. Declare it in
+`.env` ([Choosing the optional services](#choosing-the-optional-services)) and
+start the stack:
 
 ```sh
-docker compose --profile bi up -d
+COMPOSE_PROFILES=bi          # in .env, alongside any other profiles you run
+docker compose up -d
 ```
 
-Once it is running, upgrades keep it current. A plain `up -d` leaves a
-profile-gated container on the definition it was started with, so `deploy.sh`
-re-applies a running Metabase on each release's `compose.yml` after the app is
-healthy ([#347](https://github.com/aellington89/finance-stack/issues/347)). Each
-0.58.x bump then reaches the container rather than stopping at the file. The same
-goes for GlitchTip and Caddy.
+Declared that way, every upgrade applies it with the rest of the stack. A
+Metabase started by hand with `--profile bi up -d` is kept current too, while it
+is running: `deploy.sh` re-applies it on each release's `compose.yml` once the
+app is healthy ([#347](https://github.com/aellington89/finance-stack/issues/347)),
+and warns that the profile is undeclared. Either way each 0.58.x bump reaches the
+container rather than stopping at the file. The same goes for GlitchTip and Caddy.
 
 A fresh deploy starts it with an empty `metabase_data` volume and an empty
 metadata database, so **it has no analytics connection at all** — not a
@@ -559,15 +664,22 @@ The app does not terminate TLS and is not going to — it speaks plain HTTP on
 switched off:
 
 ```bash
-# 1. Set the hostname in .env — a DNS name that resolves to this host
+# 1. In .env: the hostname (a DNS name that resolves to this host), and the
+#    edge profile added to whatever COMPOSE_PROFILES already lists
 PUBLIC_HOSTNAME=finance.example.com
+COMPOSE_PROFILES=edge
 
-# 2. Start the stack with the edge profile
-docker compose --profile edge up -d
+# 2. Start the stack
+docker compose up -d
 
 # 3. Verify
 curl -sI https://finance.example.com
 ```
+
+Declaring `edge` in `.env`, rather than starting Caddy with `--profile edge up
+-d`, is what makes `systemctl start finance-stack` and every upgrade bring it up
+with the rest of the stack. On a deployment host it is the way in, so a Caddy
+that does not come back leaves you nothing but an SSH tunnel.
 
 Caddy obtains and renews the certificate itself. That needs the hostname to
 resolve to this host and ports 80 and 443 to be reachable, because the ACME

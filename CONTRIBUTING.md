@@ -177,6 +177,21 @@ environment entry, profile or label — must match. It also compares the two
 The diff it prints is of the rendered `docker compose config` output, so it
 points at the resolved value rather than the line you typed.
 
+Every profile is rendered, and the list comes from the files themselves
+([#185](https://github.com/aellington89/finance-stack/issues/185)). It used to be
+four names typed into the script, so a fifth profile would have escaped the
+comparison entirely. The two files must also declare the same set of profiles.
+Before you add a service, read [Services and
+profiles](docs/deployment.md#services-and-profiles). It sets out which services
+start by default and which go behind a profile, and lists the other places a new
+service has to appear.
+
+**Run it with a Linux `docker`.** From WSL with Docker Desktop's integration off,
+`docker` is the Windows binary. That binary sees none of the placeholder
+variables the script sets inline, and it renders bind mounts as
+`\\wsl.localhost\…` paths. The comparison then fails on every service, whatever
+your change. CI's result is the one that counts.
+
 **`deploy/deploy.sh` needs no new variables here.** Its six overrides
 (`DEPLOY_SKIP_PULL`, `DEPLOY_HEALTH_TIMEOUT`, `DEPLOY_HEALTH_URL`, and since
 [#347](https://github.com/aellington89/finance-stack/issues/347) `DEPLOY_BUNDLE`,

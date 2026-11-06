@@ -299,11 +299,13 @@ server-side and the CSP stays closed. That is not built — tracked in
 
 ### Self-hosting the backend
 
-`--profile errors` starts [GlitchTip](https://glitchtip.com/) inside this stack,
+The `errors` profile runs [GlitchTip](https://glitchtip.com/) inside this stack,
 so error history never leaves the host. Off by default, like `bi` and `edge`.
+Set the `GLITCHTIP_*` values in `.env`, add `errors` to `COMPOSE_PROFILES` there
+(see [Services and profiles](deployment.md#choosing-the-optional-services)), and:
 
 ```bash
-docker compose --profile errors up -d
+docker compose up -d
 docker compose exec glitchtip ./manage.py createsuperuser   # the first user
 ```
 
