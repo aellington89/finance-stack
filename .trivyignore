@@ -73,9 +73,10 @@ CVE-2026-109518 exp:2026-11-18
 # carry 3.0.3, and only a rebuild clears it. The vulnerable path is not taken
 # here: the advisory needs apt to *install* a package over HTTP that an on-path
 # attacker, mirror or proxy can manipulate, with Acquire::Retries above zero.
-# Neither image runs apt at all. importer/Dockerfile and scripts/Dockerfile have
-# no apt-get step, and nothing at runtime (`python poll.py`, `pg_dump`) calls
-# it. Dated weeks out, per the note below. Expect
+# Neither image runs apt at runtime: nothing (`python poll.py`, `pg_dump`) calls
+# it. Both Dockerfiles do run it once at build time, to take zlib1g from
+# trixie-security (DSA-6613-1), and pass `-o Acquire::Retries=0` so that step
+# stays off the path too. Dated weeks out, per the note below. Expect
 # scripts/check-trivy-suppressions.sh to name it stale once both tags rebuild.
 #
 # EMPTIED ONCE ALREADY, BECAUSE THE BASE CAUGHT UP. Before the entry above,
