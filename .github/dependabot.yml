@@ -20,6 +20,10 @@
 # and this file must be on the default branch for the setting to take effect.
 # Note that Dependabot *security* updates ignore `target-branch` and still open
 # against the default branch.
+#
+# Every entry also sets `assignees`, so each PR opens already assigned to the
+# maintainer rather than being assigned by hand. Labels need no setting:
+# Dependabot adds `dependencies` and the ecosystem's label on its own.
 
 version: 2
 
@@ -29,6 +33,8 @@ updates:
   - package-ecosystem: npm
     directory: /app
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -117,6 +123,8 @@ updates:
   - package-ecosystem: pip
     directory: /importer
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -131,6 +139,8 @@ updates:
   - package-ecosystem: docker
     directory: /app
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -142,6 +152,8 @@ updates:
   - package-ecosystem: docker
     directory: /importer
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -154,6 +166,8 @@ updates:
   - package-ecosystem: docker
     directory: /scripts
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -174,6 +188,8 @@ updates:
   - package-ecosystem: docker-compose
     directory: /
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -200,6 +216,8 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     target-branch: patch
+    assignees:
+      - aellington89
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
