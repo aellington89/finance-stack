@@ -25,8 +25,8 @@ FROM python:3.15-slim
 # scripts/Dockerfile carries the same layer for the same reason.
 #
 # This is the image's only apt step, so it stays off the path a base still on
-# apt 3.0.3 would expose (CVE-2026-109518, suppressed in .trivyignore). That
-# advisory requires Acquire::Retries above zero, so both calls pass
+# apt 3.0.3 would expose (CVE-2026-109518; both bases have since moved to 3.0.4).
+# That advisory requires Acquire::Retries above zero, so both calls pass
 # `-o Acquire::Retries=0`. `--only-upgrade` moves zlib1g alone, and the lists are
 # deleted in the same layer, so the image keeps no apt state.
 #

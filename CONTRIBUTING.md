@@ -384,11 +384,11 @@ the other three's findings in the same run rather than across four.
    that one file backs all four scans, so an entry silences its CVE everywhere.
    It is no longer empty: turning the gate on for the other three images required
    seeding ten base-image and bundled-tooling findings. It peaked at fourteen,
-   and holds seven today — [#303](https://github.com/aellington89/finance-stack/issues/303)
+   and holds six today — [#303](https://github.com/aellington89/finance-stack/issues/303)
    deleted eight that had gone stale, three debian 13.7 entries replaced the one
    OpenSSL entry that went stale after them and went stale in turn once
    `postgres:18.6` was rebuilt, the two `python:3.14-slim` entries went when the
-   importer image stopped shipping pip, and the seven left all cover copies that
+   importer image stopped shipping pip, and the six left all cover copies that
    npm itself vendors inside `finance-migrate`. Read those before adding an
    eighth — yours may already be covered, as three of the four added in
    [#291](https://github.com/aellington89/finance-stack/issues/291) were by an

@@ -64,22 +64,15 @@
 # remove, along with their comment.
 
 # --- debian OS packages (finance-backup, finance-importer) -------------------
-CVE-2026-109518 exp:2026-11-18
-# apt 3.0.3 and libapt-pkg7.0 3.0.3, fixed in 3.0.4 (DSA-6607-1, in
-# trixie-security). Reported by both debian images. NVD published it on
-# 2026-11-04, after the last upstream rebuilds Docker Hub reports. Those were
-# 2026-11-02 for python:3.14-slim and for python:3.15-slim (the importer's base
-# since #384), and 2026-10-31 for postgres:18.6. Both bases therefore still
-# carry 3.0.3, and only a rebuild clears it. The vulnerable path is not taken
-# here: the advisory needs apt to *install* a package over HTTP that an on-path
-# attacker, mirror or proxy can manipulate, with Acquire::Retries above zero.
-# Neither image runs apt at runtime: nothing (`python poll.py`, `pg_dump`) calls
-# it. Both Dockerfiles do run it once at build time, to take zlib1g from
-# trixie-security (DSA-6613-1), and pass `-o Acquire::Retries=0` so that step
-# stays off the path too. Dated weeks out, per the note below. Expect
-# scripts/check-trivy-suppressions.sh to name it stale once both tags rebuild.
+# EMPTY AGAIN, ON CI'S VERDICT. CVE-2026-109518 (apt 3.0.3 and libapt-pkg7.0
+# 3.0.3, fixed in 3.0.4 by DSA-6607-1) sat here from #386 until PR #399's run,
+# where scripts/check-trivy-suppressions.sh reported it matching nothing: both
+# bases had been rebuilt onto apt 3.0.4. Deleted with its comment. The two zlib
+# findings that turned the gate red in the same window (CVE-2026-76844 and
+# CVE-2026-85091, zlib1g, DSA-6613-1) were never entered here, because both
+# Dockerfiles take zlib1g from trixie-security instead (#399).
 #
-# EMPTIED ONCE ALREADY, BECAUSE THE BASE CAUGHT UP. Before the entry above,
+# EMPTIED ONCE BEFORE THAT, BECAUSE THE BASE CAUGHT UP. Before the apt entry,
 # this block held three entries from #352,
 # all debian 13.7 packages already fixed in -deb13u3 and waiting only on a base
 # rebuild to carry it: CVE-2026-75804 and CVE-2026-84782 (OpenSSL
