@@ -28,6 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Assets, Liabilities and Accounts dashboards, and the accounts list, load their balances much faster.** ([Issue #126](https://github.com/aellington89/finance-stack/issues/126)) They find each account's latest balance row in a new way, and only the time to find it has changed: the results are the same.
+
+  Five places did this with a correlated `MAX(balance_date)` subquery, which Postgres evaluates once per history row rather than once per account:
+  - `getAccountBalances`;
+  - `getAssetAllocation`;
+  - `getLiquidityBreakdown`;
+  - `getLiabilityAllocation`;
+  - the `v_account_balances_current` view, which the accounts list reads.
+
+  Its cost grew with every day of history. On a production-sized dataset it was 25–72 ms per query, and Postgres's one-CPU limit made the Assets page's two of them run one after the other, so the page waited about 95 ms. Each now joins one row per account through a single index probe (~0.1 ms). That pattern lives in `balanceRowPerAccount()` in `app/lib/queries/_aggregates.ts`. Projected database time per page:
+  - Assets: from ~95 ms to ~3 ms.
+  - Accounts and the accounts list: from ~67 ms to ~1 ms each.
+  - Liabilities: from ~24 ms to ~3 ms.
+
+  The other dashboards were already at 1–3 ms.
+
+  Migration `0009` redefines the view with `CREATE OR REPLACE VIEW`, so its columns, types and grants are unchanged. Metabase questions built on it need nothing. The previous app version reads the same rows from it, so rolling back by re-pinning the image is safe. New integration tests, `tests/integration/queries/latest-balance.test.ts`, run the old correlated SQL alongside the new shape and require identical rows. They also check each query's default path, which no test reached before.
+
 - **`docs/roadmap.md` is retired: the roadmaps are now GitHub [Projects](https://github.com/aellington89/finance-stack/projects).** ([Issue #396](https://github.com/aellington89/finance-stack/issues/396)) Both documentation indexes link Projects instead, and `CONTRIBUTING.md` says so under a new Planning heading. The roadmap's last version, including how the phases mapped to releases through 1.2.0, stays readable [at `0088e93`](https://github.com/aellington89/finance-stack/blob/0088e93/docs/roadmap.md).
 
 - **Local changes to the stack belong in `compose.override.yml`.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) Compose merges that file in on its own, and `deploy.sh` never touches it. An upgrade that would replace an edited `compose.yml` stops with exit 1 and nothing changed, and says how to move the edit across. An edit the release leaves alone is kept, with a reminder. An edited `caddy/Caddyfile`, which the TLS docs tell you to edit, is kept. When the release changes the Caddyfile too, its copy is written beside yours as `caddy/Caddyfile.dist`. The bundle README's new "Customizing the stack" section has the details, including moving the app's port with `!override` (Compose 2.24.4 or later).

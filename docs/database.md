@@ -43,6 +43,8 @@ Run it after an import, or any time balances look wrong. It rebuilds every accou
 
 The `Finances_Test` database has its balance history built automatically as part of the first-launch seed (see below).
 
+**Reading an account's latest balance.** Join one row per account with `balanceRowPerAccount()` in [`_aggregates.ts`](../app/lib/queries/_aggregates.ts), a `LATERAL` probe of `idx_abh_account_date`. `v_account_balances_current` uses the same shape. Don't filter on `balance_date = (SELECT MAX(balance_date) … WHERE account_id = abh.account_id)`. It returns the same rows, but Postgres evaluates it once per history row, so its cost grows every day: on a production-sized dataset it was 25–72 ms per query, against ~0.1 ms (Issue #126).
+
 ## First-Launch Database Initialization
 
 Everything comes from the `migrate` Compose service, which runs after postgres is healthy. The `postgres` container itself does nothing but start a server: it has no initdb hook and no bind mount, only its data volume (Issue #225).

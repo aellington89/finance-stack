@@ -1,0 +1,24 @@
+-- ==============================================
+-- Hand-edited (Issue #126); drizzle-kit generated DROP VIEW + CREATE VIEW.
+--
+-- CREATE OR REPLACE keeps the view's grants and dependants without depending on
+-- migrate-and-seed.sh re-running 02-grants.sql afterwards (it does, but the
+-- view never stops existing this way, so a Metabase question mid-flight cannot
+-- see it missing). It requires the same column names, types and order, and
+-- that is the point of the change: the output is unchanged, only how each
+-- account's latest row is found.
+--
+-- The old body picked the row with a correlated
+--   WHERE abh.balance_date = (SELECT max(balance_date) ... WHERE account_id = abh.account_id)
+-- which Postgres evaluates once per history row, so the view's cost grew with
+-- history (~70 ms on a production-sized dataset). The LATERAL probe is one
+-- idx_abh_account_date lookup per account (~0.1 ms). It is the same shape as
+-- balanceRowPerAccount() in app/lib/queries/_aggregates.ts.
+--
+-- account_id now comes from accounts rather than account_balance_history. The
+-- type is the same, and the set of accounts is the same: the inner LATERAL
+-- join still drops an account with no history.
+--
+-- Backward-compatible: the previous app version reads the same rows from it.
+-- ==============================================
+CREATE OR REPLACE VIEW "public"."v_account_balances_current" AS (SELECT a.account_id, a.account_name, at.account_type, atc.account_type_category, atc.account_type_category_id, abh.cumulative_balance AS current_balance, abh.balance_date FROM accounts a JOIN account_types at USING (account_type_id) JOIN account_type_categories atc USING (account_type_category_id) JOIN LATERAL ( SELECT h.cumulative_balance, h.balance_date FROM account_balance_history h WHERE h.account_id = a.account_id ORDER BY h.balance_date DESC LIMIT 1) abh ON true);
