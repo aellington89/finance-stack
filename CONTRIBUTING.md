@@ -27,6 +27,11 @@ The app requires sign-in ([docs/auth.md](docs/auth.md)): set `AUTH_SECRET` in
   `master`. CI runs on the push *and* on the PR; all gates must be green before
   merging (see [CI gates](#ci-gates) below).
 
+## Planning
+
+The roadmaps are GitHub [Projects](https://github.com/aellington89/finance-stack/projects): what is planned, and
+what is in flight. There is no roadmap file in the repository.
+
 ## Commit messages
 
 Format: **`Issue #N - <short imperative>`**
