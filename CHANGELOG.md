@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - npm's own copy of `undici` 6.28.0 in `finance-migrate`, until 2026-11-17: CVE-2026-109383, CVE-2026-109869 and CVE-2026-87018, all fixed in 6.29.1. Only a newer `node:24-alpine` reaches it.
   - **Pruned on CI's stale-entry verdict:** four vendored entries that `node:24-alpine`'s bundled npm has moved past (CVE-2026-14257, CVE-2026-69152, CVE-2026-69192 and CVE-2026-73566), and the `braces` entry in `app/.audit-allowlist`. GitHub withdrew that advisory ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)) on 2026-10-23, so the allowlist now holds no entries.
 
+- **zlib in `finance-importer` and `finance-backup` moves to Debian's fixed package at build time instead of being suppressed.** ([PR #399](https://github.com/aellington89/finance-stack/pull/399)) Both images reported `zlib1g` 1:1.3.dfsg+really1.3.1-1+b1 with two HIGH heap overflows, CVE-2026-76844 and CVE-2026-85091, both fixed in -1+deb13u1 (DSA-6613-1). The upstream bases were rebuilt after Debian published the fix and still carried the old package, so re-running the scan could not clear it. Each Dockerfile now takes the fixed package from trixie-security in its own first layer, and the build fails unless it arrived. Only `zlib1g` moves, so `pg_dump` stays version-matched to the server. Delete the layer once both bases ship -deb13u1.
+
 ## [1.2.0] - 2026-10-07
 
 **Migration:** none
