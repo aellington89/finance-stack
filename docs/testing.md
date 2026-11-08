@@ -172,6 +172,21 @@ also succeeds on a `tabindex="-1"` element that Tab skips. A chart is
 treemaps and gauges. A `data-testid` would still match with the role or the
 name missing, and those are the bugs these tests exist to catch.
 
+**Colour contrast is a model, calibrated against axe**
+([Issue #362](https://github.com/aellington89/finance-stack/issues/362)).
+jsdom has no layout or paint, so axe's `color-contrast` rule cannot run in a unit
+test. [`destructive-contrast.test.ts`](../app/tests/unit/components/destructive-contrast.test.ts)
+works out the ratio itself instead. It reads the theme tokens from `globals.css`
+and the tint alphas from the Button and Badge variants' own class strings, then
+blends them in 8-bit sRGB the way the browser paints them. That is what keeps
+the hand-set `--destructive` from going back to upstream's failing value
+unnoticed. The test also has to match axe's live readings from #148, so the
+arithmetic cannot drift away from what the browser shows. The authority is
+still axe in a real browser. When a theme value changes, re-measure on the
+production build with a temporary spec that injects `axe.min.js` through
+`page.evaluate`, which the nonce CSP allows where `addScriptTag` is refused.
+Delete the spec afterwards; it is not part of the suite.
+
 One convenience worth knowing: every `next/navigation` export is a `vi.fn()`,
 so a test steers `usePathname` with
 `vi.mocked(usePathname).mockReturnValue("/dashboard/assets")` and asserts on
