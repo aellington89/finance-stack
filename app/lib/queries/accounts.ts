@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { eq, or, sql } from "drizzle-orm";
+import { balanceRowPerAccount } from "@/lib/queries/_aggregates";
 import {
   accounts,
   accountTypes,
@@ -24,15 +25,11 @@ export async function getAccountBalances(): Promise<AccountBalanceRow[]> {
       at.account_type,
       a.account_name,
       SUM(abh.cumulative_balance) AS balance
-    FROM account_balance_history abh
-    JOIN accounts a USING (account_id)
+    FROM accounts a
     JOIN account_types at USING (account_type_id)
     JOIN account_type_categories atc USING (account_type_category_id)
+    ${balanceRowPerAccount()}
     WHERE a.closed_date IS NULL
-    AND abh.balance_date = (
-      SELECT MAX(balance_date) FROM account_balance_history
-      WHERE account_id = abh.account_id
-    )
     GROUP BY ROLLUP(atc.account_type_category, at.account_type, a.account_name)
     ORDER BY
       atc.account_type_category NULLS LAST,

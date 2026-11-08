@@ -64,6 +64,13 @@
       "when": 1794112393470,
       "tag": "0008_add_transaction_duplicated_from",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794164367761,
+      "tag": "0009_latest_balance_view_lateral",
+      "breakpoints": true
     }
   ]
 }

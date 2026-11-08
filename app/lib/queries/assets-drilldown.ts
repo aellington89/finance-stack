@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
-import { balanceAtDate } from "@/lib/queries/_aggregates";
+import { balanceAtDate, balanceRowPerAccount } from "@/lib/queries/_aggregates";
 import { pct } from "@/lib/queries/_percent";
 import {
   buildAssetPerformance,
@@ -134,13 +134,6 @@ const normalizeLiquidity = (raw: string | null): LiquidityClass => {
 export async function getAssetAllocation(
   dateTo?: string
 ): Promise<AllocationData> {
-  const dateFilter = dateTo
-    ? sql`abh.balance_date = ${dateTo}::date`
-    : sql`abh.balance_date = (
-        SELECT MAX(balance_date) FROM account_balance_history
-        WHERE account_id = abh.account_id
-      )`;
-
   const result = await db.execute(sql`
     SELECT
       atc.account_type_category_id AS category_id,
@@ -149,13 +142,12 @@ export async function getAssetAllocation(
       at.account_type AS account_type_name,
       MAX(abh.balance_date) AS as_of,
       COALESCE(SUM(abh.cumulative_balance), 0) AS value
-    FROM account_balance_history abh
-    JOIN accounts a ON a.account_id = abh.account_id
+    FROM accounts a
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
+    ${balanceRowPerAccount(dateTo)}
     WHERE atc.account_type_category_id IN (1, 2, 3, 4)
-      AND ${dateFilter}
     GROUP BY
       atc.account_type_category_id, atc.account_type_category,
       at.account_type_id, at.account_type
@@ -295,25 +287,17 @@ export async function getAssetPerformance(
 export async function getLiquidityBreakdown(
   dateTo?: string
 ): Promise<LiquidityData> {
-  const dateFilter = dateTo
-    ? sql`abh.balance_date = ${dateTo}::date`
-    : sql`abh.balance_date = (
-        SELECT MAX(balance_date) FROM account_balance_history
-        WHERE account_id = abh.account_id
-      )`;
-
   const result = await db.execute(sql`
     SELECT
       COALESCE(a.liquidity_class, at.liquidity_class) AS liquidity_class,
       MAX(abh.balance_date) AS as_of,
       COALESCE(SUM(abh.cumulative_balance), 0) AS value
-    FROM account_balance_history abh
-    JOIN accounts a ON a.account_id = abh.account_id
+    FROM accounts a
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
+    ${balanceRowPerAccount(dateTo)}
     WHERE atc.account_type_category_id IN (1, 2, 3, 4)
-      AND ${dateFilter}
     GROUP BY COALESCE(a.liquidity_class, at.liquidity_class)
   `);
 

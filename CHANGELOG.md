@@ -28,6 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Assets, Liabilities and Accounts dashboards, and the accounts list, load their balances much faster.** ([Issue #126](https://github.com/aellington89/finance-stack/issues/126)) They find each account's latest balance row in a new way, and only the time to find it has changed: the results are the same.
+
+  Five places did this with a correlated `MAX(balance_date)` subquery, which Postgres evaluates once per history row rather than once per account:
+  - `getAccountBalances`;
+  - `getAssetAllocation`;
+  - `getLiquidityBreakdown`;
+  - `getLiabilityAllocation`;
+  - the `v_account_balances_current` view, which the accounts list reads.
+
+  Its cost grew with every day of history. On a production-sized dataset it was 25–72 ms per query, and Postgres's one-CPU limit made the Assets page's two of them run one after the other, so the page waited about 95 ms. Each now joins one row per account through a single index probe (~0.1 ms). That pattern lives in `balanceRowPerAccount()` in `app/lib/queries/_aggregates.ts`. Projected database time per page:
+  - Assets: from ~95 ms to ~3 ms.
+  - Accounts and the accounts list: from ~67 ms to ~1 ms each.
+  - Liabilities: from ~24 ms to ~3 ms.
+
+  The other dashboards were already at 1–3 ms.
+
+  Migration `0009` redefines the view with `CREATE OR REPLACE VIEW`, so its columns, types and grants are unchanged. Metabase questions built on it need nothing. The previous app version reads the same rows from it, so rolling back by re-pinning the image is safe. New integration tests, `tests/integration/queries/latest-balance.test.ts`, run the old correlated SQL alongside the new shape and require identical rows. They also check each query's default path, which no test reached before.
+
 - **`docs/roadmap.md` is retired: the roadmaps are now GitHub [Projects](https://github.com/aellington89/finance-stack/projects).** ([Issue #396](https://github.com/aellington89/finance-stack/issues/396)) Both documentation indexes link Projects instead, and `CONTRIBUTING.md` says so under a new Planning heading. The roadmap's last version, including how the phases mapped to releases through 1.2.0, stays readable [at `0088e93`](https://github.com/aellington89/finance-stack/blob/0088e93/docs/roadmap.md).
 
 - **Local changes to the stack belong in `compose.override.yml`.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) Compose merges that file in on its own, and `deploy.sh` never touches it. An upgrade that would replace an edited `compose.yml` stops with exit 1 and nothing changed, and says how to move the edit across. An edit the release leaves alone is kept, with a reminder. An edited `caddy/Caddyfile`, which the TLS docs tell you to edit, is kept. When the release changes the Caddyfile too, its copy is written beside yours as `caddy/Caddyfile.dist`. The bundle README's new "Customizing the stack" section has the details, including moving the app's port with `!override` (Compose 2.24.4 or later).
@@ -57,6 +75,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Delete and Discard buttons are now readable in light mode.** ([Issue #362](https://github.com/aellington89/finance-stack/issues/362)) Every destructive button — Delete Transaction, Delete on the Settings cards, Delete Account and its confirm, Discard changes — showed red text on a pale tint of the same red. axe measured 3.93:1 in a dialog and 4.09:1 for the Delete Account button, under the 4.5:1 that WCAG AA asks for. Hovering made it worse, at 3.35:1. The fix is a darker light-mode red in the `--destructive` theme token, not a change to the buttons. They now measure 5.59:1 in a dialog and 5.80:1 on the account page, and 4.65:1 and 4.84:1 on hover. Two other places drew the same red on the same tint and were fixed by the same change: the "Invalid date range" message on the dashboards, which was the worst in the app at 3.72:1, and the "Breaking migration" badge on the About page. Error text and invalid-field borders are a slightly deeper red too. Dark mode is unchanged and still passes at rest, at 4.59:1. Its hover state measures 3.79:1, which was already the case and needs a separate design decision ([Issue #405](https://github.com/aellington89/finance-stack/issues/405)). A unit test now fails CI if the token is ever reset to a value that fails, such as by re-running the shadcn theme setup.
 
 - **Asset Performance's % Change no longer shows a gain as a loss, or 0.00% where there is no rate to show.** ([Issue #143](https://github.com/aellington89/finance-stack/issues/143)) An account that started the range overdrawn and climbed back, from -$100 to +$50 say, read -150% in red with a down arrow. It now reads +150% in green. An account with no balance at the start of the range, such as one opened partway through it, read 0.00%. It now shows a dash (—), the way the Liabilities table already shows the same case. Both now follow the Liabilities rule: the change is measured against the size of the starting balance, so its sign always matches the Change column.
+
+- **Net Worth and the other "as of today" figures no longer show $0 on the first dashboard load of a day, or after switching tabs across midnight.** ([Issue #408](https://github.com/aellington89/finance-stack/issues/408)) A figure for today reads only the balance-history rows dated today. That covers:
+  - the Summary KPIs;
+  - Net Worth's headline, waterfall and drivers;
+  - the Assets and Liabilities performance tables, debt service and debt waterfall.
+
+  The dashboard layout creates today's rows by carrying every open account forward, and it had two gaps:
+  - Next renders a layout and its page in parallel, so the page could read before the layout's insert committed.
+  - Switching dashboard tabs does not render the layout at all, so a tab left open past midnight UTC never carried anything forward until a full reload.
+
+  Each of those four pages now waits for the carry-forward itself before it reads. React's `cache` makes the layout and page share a single run per request. On days the rows already exist that run writes nothing, and it adds about half a millisecond before those pages' queries. A new end-to-end spec, `e2e/today-balances.spec.ts`, removes one account's row for today, switches tabs and checks that Net Worth has not moved.
 
 ### Security
 

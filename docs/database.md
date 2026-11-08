@@ -32,7 +32,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 
 Every balance the app shows reads this table: net worth, `v_account_balances_current`, and each drilldown. What keeps it current depends on how a transaction arrived:
 
-- **Through the app**, it is kept current as you go. Each create, edit or delete rebuilds the history of the accounts it touched (`rebuildAccountBalance`, in [`rebuild-balance.ts`](../app/lib/queries/rebuild-balance.ts)), and opening the dashboard carries every open account forward to today.
+- **Through the app**, it is kept current as you go. Each create, edit or delete rebuilds the history of the accounts it touched (`rebuildAccountBalance`, in [`rebuild-balance.ts`](../app/lib/queries/rebuild-balance.ts)). Loading any dashboard page carries every open account forward to today (`ensureTodayBalances`), and so does each page that reads today's balances, before it reads them. A page can't rely on the dashboard layout for that: Next renders a layout in parallel with its page, and switching tabs doesn't render the layout at all (Issue #408).
 - **Through the importer**, it is not. The importer's role can append to `transactions` and nothing else (see the [grant matrix](#roles--privileges)), so **imported transactions do not appear in any balance until the full rebuild has run**:
 
 ```bash
@@ -42,6 +42,8 @@ docker compose --profile init run --rm init-script
 Run it after an import, or any time balances look wrong. It rebuilds every account in one idempotent upsert, so it is safe to run while the app is up, and as often as you like. It stays behind the `init` profile and is not run automatically; don't add `init` to `COMPOSE_PROFILES`, or it reruns on every `up` (see [Services and profiles](deployment.md#services-and-profiles)).
 
 The `Finances_Test` database has its balance history built automatically as part of the first-launch seed (see below).
+
+**Reading an account's latest balance.** Join one row per account with `balanceRowPerAccount()` in [`_aggregates.ts`](../app/lib/queries/_aggregates.ts), a `LATERAL` probe of `idx_abh_account_date`. `v_account_balances_current` uses the same shape. Don't filter on `balance_date = (SELECT MAX(balance_date) … WHERE account_id = abh.account_id)`. It returns the same rows, but Postgres evaluates it once per history row, so its cost grows every day: on a production-sized dataset it was 25–72 ms per query, against ~0.1 ms (Issue #126).
 
 ## First-Launch Database Initialization
 
