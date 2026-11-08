@@ -10,7 +10,11 @@ import {
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { TransactionList } from "@/components/transactions/transaction-list";
-import { deleteTransaction } from "@/lib/actions/transaction";
+import {
+  deleteTransaction,
+  duplicateTransaction,
+  updateTransaction,
+} from "@/lib/actions/transaction";
 import {
   ALL_COLUMN_KEYS,
   VISIBLE_COLUMNS_COOKIE,
@@ -23,6 +27,7 @@ import {
 // for both children.
 vi.mock("@/lib/actions/transaction", () => ({
   updateTransaction: vi.fn(),
+  duplicateTransaction: vi.fn(),
   deleteTransaction: vi.fn(),
 }));
 
@@ -127,10 +132,13 @@ describe("TransactionList", () => {
     expect(within(header).getByText("Amount")).toBeInTheDocument();
   });
 
-  it("offers an edit and a delete control per row", () => {
+  it("offers an edit, a duplicate and a delete control per row", () => {
     render(<TransactionList {...props} />);
     expect(
       screen.getByRole("button", { name: "Edit transaction" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Duplicate transaction" })
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Delete transaction" })
@@ -284,5 +292,188 @@ describe("TransactionList confirmations", () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     // Opening the dialog is not the delete; that waits for its own button.
     expect(deleteTransaction).not.toHaveBeenCalled();
+  });
+});
+
+// ── Duplicate (Issue #241) ──
+
+/** The value an inline row will post for one field. */
+function postedValue(form: HTMLElement, name: string): string | null {
+  const input = form.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+  return input ? input.value : null;
+}
+
+describe("TransactionList duplicate", () => {
+  beforeEach(() => {
+    vi.mocked(duplicateTransaction).mockReset();
+    vi.mocked(updateTransaction).mockReset();
+  });
+
+  it("opens a prefilled copy beneath the source, which stays on screen", async () => {
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Groceries", "Duplicate transaction"));
+
+    const form = screen.getByRole("form", { name: "Duplicate transaction" });
+    expect(form).toHaveTextContent(
+      "Duplicate: saves as a new transaction; the original is unchanged."
+    );
+    expect(
+      within(form).getByRole("button", { name: "Save copy" })
+    ).toBeInTheDocument();
+
+    // Every field starts from the source, date included.
+    expect(openDescription()).toHaveValue("Groceries");
+    expect(postedValue(form, "sourceTransactionId")).toBe("1");
+    expect(postedValue(form, "transactionDate")).toBe("2026-04-19");
+    expect(postedValue(form, "amount")).toBe("-82.31");
+    expect(postedValue(form, "accountId")).toBe("1");
+    expect(postedValue(form, "relatedAccountId")).toBe("");
+    expect(postedValue(form, "transactionTypeId")).toBe("3");
+    expect(postedValue(form, "transactionCategoryId")).toBe("9");
+    // Not an edit: nothing posts as the row's own id.
+    expect(postedValue(form, "transactionId")).toBeNull();
+
+    // The source row is still rendered, directly above the copy.
+    const sourceRow = rowButton("Groceries", "Edit transaction").closest("tr");
+    expect(sourceRow?.nextElementSibling).toContainElement(form);
+  });
+
+  it("saves through duplicateTransaction with the edited values, then closes", async () => {
+    vi.mocked(duplicateTransaction).mockResolvedValue({
+      success: true,
+      errors: {},
+      message: "Transaction duplicated successfully",
+    });
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Rent", "Duplicate transaction"));
+    await user.clear(openDescription());
+    await user.type(openDescription(), "Rent (May)");
+    await user.click(screen.getByRole("button", { name: "Save copy" }));
+
+    await waitFor(() => expect(duplicateTransaction).toHaveBeenCalledTimes(1));
+    const fd = vi.mocked(duplicateTransaction).mock.calls[0][1] as FormData;
+    expect(fd.get("sourceTransactionId")).toBe("2");
+    expect(fd.get("transactionDescription")).toBe("Rent (May)");
+    expect(fd.get("amount")).toBe("-1500.00");
+    expect(updateTransaction).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("form", { name: "Duplicate transaction" })
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it("writes nothing when the copy is cancelled", async () => {
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Groceries", "Duplicate transaction"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByRole("form", { name: "Duplicate transaction" })
+    ).not.toBeInTheDocument();
+    expect(duplicateTransaction).not.toHaveBeenCalled();
+    expect(updateTransaction).not.toHaveBeenCalled();
+  });
+
+  it("asks before an open edit is swapped for a copy, even of the same row", async () => {
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Rent", "Edit transaction"));
+    await user.clear(openDescription());
+    await user.type(openDescription(), "Rent, edited");
+    // The edit replaced Rent's row, so its Duplicate button went with it; the
+    // other row's is the way to switch.
+    await user.click(rowButton("Groceries", "Duplicate transaction"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Discard changes?");
+    expect(screen.getByDisplayValue("Rent, edited")).toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Discard changes" })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+
+    expect(
+      screen.getByRole("form", { name: "Duplicate transaction" })
+    ).toBeInTheDocument();
+    expect(openDescription()).toHaveValue("Groceries");
+    expect(screen.queryByDisplayValue("Rent, edited")).not.toBeInTheDocument();
+  });
+
+  it("asks before an open copy is swapped for an edit of its own source", async () => {
+    const user = userEvent.setup();
+    render(<TransactionList {...twoRowProps} />);
+
+    await user.click(rowButton("Groceries", "Duplicate transaction"));
+    await user.clear(openDescription());
+    await user.type(openDescription(), "Groceries again");
+    // The source row stays on screen under a copy, so its Edit is reachable.
+    await user.click(rowButton("Groceries", "Edit transaction"));
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep editing" })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+
+    // Still the same copy, typed text intact.
+    expect(
+      screen.getByRole("form", { name: "Duplicate transaction" })
+    ).toBeInTheDocument();
+    expect(openDescription()).toHaveValue("Groceries again");
+  });
+
+  it("leaves the account empty when the source's account has closed", async () => {
+    const user = userEvent.setup();
+    const onClosedCard = {
+      ...transactions[0],
+      accountId: 5,
+      accountName: "Retired Card",
+      relatedAccountId: 6,
+      relatedAccountName: "Retired Savings",
+    };
+    render(
+      <TransactionList
+        {...props}
+        transactions={[onClosedCard]}
+        // `accounts` holds open accounts only (getTransactionFormOptions).
+        accounts={[{ id: 1, name: "Everyday" }]}
+      />
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Duplicate transaction" })
+    );
+
+    const form = screen.getByRole("form", { name: "Duplicate transaction" });
+    expect(postedValue(form, "accountId")).toBe("");
+    expect(postedValue(form, "relatedAccountId")).toBe("");
+    // Everything else still carries over.
+    expect(postedValue(form, "amount")).toBe("-82.31");
+  });
+
+  it("disables Duplicate on a row it could not prefill", () => {
+    render(
+      <TransactionList
+        {...props}
+        transactions={[{ ...transactions[0], transactionCategoryId: null }]}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: "Duplicate transaction" })
+    ).toBeDisabled();
   });
 });

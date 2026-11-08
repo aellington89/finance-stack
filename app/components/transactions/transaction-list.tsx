@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import {
   ArrowUpIcon,
   ArrowDownIcon,
   ArrowUpDownIcon,
+  CopyPlusIcon,
   PencilIcon,
   Settings2Icon,
   Trash2Icon,
@@ -27,7 +28,10 @@ import {
 } from "@/components/ui/popover";
 import { amountColorClass } from "@/lib/format/financial";
 import type { SortableColumn, SortDirection } from "@/lib/queries/transactions";
-import { TransactionEditRow } from "@/components/transactions/transaction-edit-row";
+import {
+  TransactionEditRow,
+  type TransactionRowMode,
+} from "@/components/transactions/transaction-edit-row";
 import { TransactionDeleteDialog } from "@/components/transactions/transaction-delete-dialog";
 import { TransactionDiscardDialog } from "@/components/transactions/transaction-discard-dialog";
 import {
@@ -57,6 +61,12 @@ interface TransactionRow {
 interface LookupOption {
   id: number;
   name: string;
+}
+
+/** The one inline row open at a time: an edit of a row, or a copy of it. */
+interface OpenRow {
+  mode: TransactionRowMode;
+  id: number;
 }
 
 interface ColumnDef {
@@ -219,23 +229,28 @@ export function TransactionList({
   const router = useRouter();
   const searchParams = useSearchParams();
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [pendingEditId, setPendingEditId] = useState<number | null>(null);
+  const [openRow, setOpenRow] = useState<OpenRow | null>(null);
+  const [pendingRow, setPendingRow] = useState<OpenRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransactionRow | null>(
     null
   );
 
-  // Switching rows unmounts the open edit row and loses what was typed into
-  // it, so the switch waits for the discard dialog (Issue #148).
-  const requestEdit = useCallback(
-    (id: number) => {
-      if (editingId !== null && editingId !== id) {
-        setPendingEditId(id);
+  // Switching rows unmounts the open inline row and loses what was typed into
+  // it, so the switch waits for the discard dialog (Issue #148). Edit and
+  // Duplicate share the one slot (Issue #241): moving between them — even on
+  // the same row — is a switch too, since each mode mounts its own form.
+  const requestOpen = useCallback(
+    (next: OpenRow) => {
+      if (
+        openRow !== null &&
+        (openRow.id !== next.id || openRow.mode !== next.mode)
+      ) {
+        setPendingRow(next);
         return;
       }
-      setEditingId(id);
+      setOpenRow(next);
     },
-    [editingId]
+    [openRow]
   );
 
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
@@ -346,7 +361,7 @@ export function TransactionList({
                   className={col.headClassName}
                 />
               ))}
-              <TableHead className="w-[88px] text-right">
+              <TableHead className="w-28 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
@@ -354,7 +369,8 @@ export function TransactionList({
           <TableBody>
             {transactions.map((txn) => {
               const id = txn.transactionId;
-              const isEditing = id !== null && editingId === id;
+              const openMode =
+                id !== null && openRow?.id === id ? openRow.mode : null;
               const canEdit =
                 id !== null &&
                 txn.accountId !== null &&
@@ -364,31 +380,35 @@ export function TransactionList({
                 txn.transactionCategoryId !== null &&
                 txn.transactionDescription !== null;
 
-              if (isEditing && canEdit) {
-                return (
-                  <TransactionEditRow
-                    key={id}
-                    transactionId={id}
-                    defaultDate={txn.transactionDate as string}
-                    defaultDescription={txn.transactionDescription as string}
-                    defaultAmount={txn.amount as string}
-                    defaultAccountId={txn.accountId as number}
-                    defaultRelatedAccountId={txn.relatedAccountId}
-                    defaultTransactionTypeId={txn.transactionTypeId as number}
-                    defaultTransactionCategoryId={
-                      txn.transactionCategoryId as number
-                    }
-                    accounts={accounts}
-                    types={types}
-                    categories={categories}
-                    columnSpan={filteredColumns.length + 1}
-                    onCancel={() => setEditingId(null)}
-                    onSaved={() => setEditingId(null)}
-                  />
-                );
+              const inlineRow = (mode: TransactionRowMode) => (
+                <TransactionEditRow
+                  key={`${mode}-${id}`}
+                  mode={mode}
+                  transactionId={id as number}
+                  defaultDate={txn.transactionDate as string}
+                  defaultDescription={txn.transactionDescription as string}
+                  defaultAmount={txn.amount as string}
+                  defaultAccountId={txn.accountId as number}
+                  defaultRelatedAccountId={txn.relatedAccountId}
+                  defaultTransactionTypeId={txn.transactionTypeId as number}
+                  defaultTransactionCategoryId={
+                    txn.transactionCategoryId as number
+                  }
+                  accounts={accounts}
+                  types={types}
+                  categories={categories}
+                  columnSpan={filteredColumns.length + 1}
+                  onCancel={() => setOpenRow(null)}
+                  onSaved={() => setOpenRow(null)}
+                />
+              );
+
+              // An edit takes the row's place, as it always has.
+              if (openMode === "edit" && canEdit) {
+                return inlineRow("edit");
               }
 
-              return (
+              const displayRow = (
                 <TableRow key={id}>
                   {filteredColumns.map((col) => (
                     <TableCell key={col.key} className={col.cellClassName}>
@@ -403,9 +423,23 @@ export function TransactionList({
                         size="icon-sm"
                         aria-label="Edit transaction"
                         disabled={!canEdit}
-                        onClick={() => id !== null && requestEdit(id)}
+                        onClick={() =>
+                          id !== null && requestOpen({ mode: "edit", id })
+                        }
                       >
                         <PencilIcon className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Duplicate transaction"
+                        disabled={!canEdit}
+                        onClick={() =>
+                          id !== null && requestOpen({ mode: "duplicate", id })
+                        }
+                      >
+                        <CopyPlusIcon className="size-4" />
                       </Button>
                       <Button
                         type="button"
@@ -421,6 +455,20 @@ export function TransactionList({
                   </TableCell>
                 </TableRow>
               );
+
+              // A duplicate opens beneath its source, which stays on screen:
+              // the copy is a new row, and replacing the source would make it
+              // look like an edit of the original (Issue #241).
+              if (openMode === "duplicate" && canEdit) {
+                return (
+                  <Fragment key={id}>
+                    {displayRow}
+                    {inlineRow("duplicate")}
+                  </Fragment>
+                );
+              }
+
+              return displayRow;
             })}
           </TableBody>
         </Table>
@@ -444,13 +492,13 @@ export function TransactionList({
         )}
 
       <TransactionDiscardDialog
-        open={pendingEditId !== null}
+        open={pendingRow !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingEditId(null);
+          if (!open) setPendingRow(null);
         }}
         onDiscard={() => {
-          setEditingId(pendingEditId);
-          setPendingEditId(null);
+          setOpenRow(pendingRow);
+          setPendingRow(null);
         }}
       />
 

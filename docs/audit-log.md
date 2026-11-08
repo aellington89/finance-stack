@@ -143,6 +143,27 @@ WHERE table_name = 'transactions'
 ORDER BY occurred_at DESC;
 ```
 
+Every copy made of one transaction with the Transactions page's **Duplicate**
+button ([Issue #241](https://github.com/aellington89/finance-stack/issues/241)).
+`duplicateTransaction()` records the source in
+`transactions.duplicated_from_transaction_id`, and the trigger captures that
+like any other column, so the link sits in the copy's INSERT row and needed no
+change to `audit_row_change()`:
+
+```sql
+SELECT occurred_at, actor_label, row_pk AS copy_id
+FROM v_audit_log
+WHERE table_name = 'transactions'
+  AND action = 'INSERT'
+  AND after_data ->> 'duplicated_from_transaction_id' = '1234'
+ORDER BY occurred_at DESC;
+```
+
+The column has no foreign key, for the same reason `actor_user_id` has none: a
+copy's provenance outlives its source. The value can therefore name a
+transaction that has since been deleted. That row's history is still here under
+its `row_pk`.
+
 Anything not done by a signed-in user:
 
 ```sql

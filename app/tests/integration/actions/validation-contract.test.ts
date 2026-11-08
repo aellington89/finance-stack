@@ -13,7 +13,7 @@ import type { ActionState } from "@/lib/actions/utils";
  * checklist/table of every server action with its validation status, all
  * green".
  *
- * A markdown table alone rots the moment someone adds a nineteenth action, so
+ * A markdown table alone rots the moment someone adds another action, so
  * the registry below is checked against two things: the modules' actual
  * exports, and the table in docs/input-validation.md. Adding an action without
  * covering it here, or without listing it there, fails CI.
@@ -62,6 +62,11 @@ const REGISTRY: Record<string, ActionCase> = {
     action: transactionActions.updateTransaction,
     valid: { transactionId: "1", ...TXN_FIELDS },
     idFields: ["transactionId", ...TXN_ID_FIELDS],
+  },
+  duplicateTransaction: {
+    action: transactionActions.duplicateTransaction,
+    valid: { sourceTransactionId: "1", ...TXN_FIELDS },
+    idFields: ["sourceTransactionId", ...TXN_ID_FIELDS],
   },
   deleteTransaction: {
     action: transactionActions.deleteTransaction,

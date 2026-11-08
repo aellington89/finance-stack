@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
-import { auditedTransaction } from "@/lib/db/audited";
+import { auditedTransaction, type Tx } from "@/lib/db/audited";
 import { transactions, accountBalanceHistory } from "@/drizzle/schema";
-import { transactionFormSchema } from "@/lib/validations/transaction";
+import {
+  transactionFormSchema,
+  type TransactionFormData,
+} from "@/lib/validations/transaction";
 import { parseEntityId } from "@/lib/validations/id";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
@@ -17,14 +20,13 @@ function revalidateTransactionPaths() {
   revalidatePath("/accounts");
 }
 
-export async function submitTransaction(
-  prevState: ActionState,
-  formData: FormData
-): Promise<ActionState> {
-  const denied = await requireActionUser();
-  if (denied) return denied;
+// The helpers below are module-private on purpose. A "use server" module may
+// only export async actions, and validation-contract.test.ts holds every
+// exported function to a registry row — an exported helper would fail both.
 
-  const raw = {
+/** The seven form fields, raw, for transactionFormSchema to parse. */
+function readTransactionFields(formData: FormData) {
+  return {
     transactionDescription: formData.get("transactionDescription") as string,
     transactionDate: formData.get("transactionDate") as string,
     amount: formData.get("amount") as string,
@@ -34,37 +36,60 @@ export async function submitTransaction(
     transactionTypeId: formData.get("transactionTypeId") as string,
     transactionCategoryId: formData.get("transactionCategoryId") as string,
   };
+}
 
-  const result = transactionFormSchema.safeParse(raw);
+/**
+ * Inserts one transaction and rebuilds the balance history it touches. Shared
+ * by submitTransaction (no provenance) and duplicateTransaction (Issue #241),
+ * which differ only in what they record as the row's source.
+ */
+async function insertTransactionAndRebuild(
+  tx: Tx,
+  data: TransactionFormData,
+  duplicatedFromTransactionId: number | null
+): Promise<void> {
+  const accountId = Number(data.accountId);
+  const relatedAccountId = data.relatedAccountId
+    ? Number(data.relatedAccountId)
+    : null;
+
+  await tx.insert(transactions).values({
+    transactionDescription: data.transactionDescription,
+    transactionDate: data.transactionDate,
+    accountId,
+    amount: data.amount,
+    relatedAccountId,
+    transactionTypeId: Number(data.transactionTypeId),
+    transactionCategoryId: Number(data.transactionCategoryId),
+    duplicatedFromTransactionId,
+  });
+
+  await rebuildAccountBalance(tx, accountId);
+
+  if (relatedAccountId) {
+    await rebuildAccountBalance(tx, relatedAccountId);
+  }
+}
+
+export async function submitTransaction(
+  prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
+  const result = transactionFormSchema.safeParse(readTransactionFields(formData));
 
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
 
   const data = result.data;
-  const accountId = Number(data.accountId);
-  const relatedAccountId = data.relatedAccountId
-    ? Number(data.relatedAccountId)
-    : null;
 
   try {
-    await auditedTransaction(async (tx) => {
-      await tx.insert(transactions).values({
-        transactionDescription: data.transactionDescription,
-        transactionDate: data.transactionDate,
-        accountId,
-        amount: data.amount,
-        relatedAccountId,
-        transactionTypeId: Number(data.transactionTypeId),
-        transactionCategoryId: Number(data.transactionCategoryId),
-      });
-
-      await rebuildAccountBalance(tx, accountId);
-
-      if (relatedAccountId) {
-        await rebuildAccountBalance(tx, relatedAccountId);
-      }
-    });
+    await auditedTransaction((tx) =>
+      insertTransactionAndRebuild(tx, data, null)
+    );
   } catch (error) {
     return actionFailure(
       "submitTransaction",
@@ -94,18 +119,7 @@ export async function updateTransaction(
     return { success: false, errors: {}, message: "Invalid transaction ID" };
   }
 
-  const raw = {
-    transactionDescription: formData.get("transactionDescription") as string,
-    transactionDate: formData.get("transactionDate") as string,
-    amount: formData.get("amount") as string,
-    accountId: formData.get("accountId") as string,
-    relatedAccountId:
-      (formData.get("relatedAccountId") as string) || undefined,
-    transactionTypeId: formData.get("transactionTypeId") as string,
-    transactionCategoryId: formData.get("transactionCategoryId") as string,
-  };
-
-  const result = transactionFormSchema.safeParse(raw);
+  const result = transactionFormSchema.safeParse(readTransactionFields(formData));
   if (!result.success) {
     return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
   }
@@ -134,6 +148,8 @@ export async function updateTransaction(
         return;
       }
 
+      // duplicatedFromTransactionId is deliberately absent: editing a copy
+      // does not change what it was copied from (Issue #241).
       await tx
         .update(transactions)
         .set({
@@ -179,6 +195,81 @@ export async function updateTransaction(
     success: true,
     errors: {},
     message: "Transaction updated successfully",
+  };
+}
+
+/**
+ * Saves an edited copy of an existing transaction as a new one (Issue #241).
+ *
+ * The form posts the seven fields — prefilled from the source in the UI, but
+ * re-validated here like any other entry point — plus `sourceTransactionId`,
+ * which is recorded as the new row's duplicated_from_transaction_id. The audit
+ * trigger captures that column in the INSERT row, which is what makes the
+ * relationship visible in the audit trail. The source itself is only read,
+ * never written.
+ *
+ * The source must exist when the copy is made, so the link cannot be pointed
+ * at an id that never existed. It may be deleted afterwards — the column has
+ * no FK by design (see migration 0008) — so a delete racing this check lands
+ * in the same state as "duplicated, then deleted" and needs no lock.
+ */
+export async function duplicateTransaction(
+  prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const denied = await requireActionUser();
+  if (denied) return denied;
+
+  const sourceTransactionId = parseEntityId(formData.get("sourceTransactionId"));
+  if (sourceTransactionId === null) {
+    return { success: false, errors: {}, message: "Invalid transaction ID" };
+  }
+
+  const result = transactionFormSchema.safeParse(readTransactionFields(formData));
+  if (!result.success) {
+    return { success: false, errors: buildFieldErrors(result.error.issues), message: "Validation failed" };
+  }
+
+  const data = result.data;
+  let notFound = false;
+
+  try {
+    await auditedTransaction(async (tx) => {
+      const [source] = await tx
+        .select({ transactionId: transactions.transactionId })
+        .from(transactions)
+        .where(eq(transactions.transactionId, sourceTransactionId))
+        .limit(1);
+
+      if (!source) {
+        notFound = true;
+        return;
+      }
+
+      await insertTransactionAndRebuild(tx, data, sourceTransactionId);
+    });
+  } catch (error) {
+    return actionFailure(
+      "duplicateTransaction",
+      error,
+      "Failed to duplicate transaction. Please try again."
+    );
+  }
+
+  if (notFound) {
+    return {
+      success: false,
+      errors: {},
+      message: "The transaction being duplicated no longer exists",
+    };
+  }
+
+  revalidateTransactionPaths();
+
+  return {
+    success: true,
+    errors: {},
+    message: "Transaction duplicated successfully",
   };
 }
 
