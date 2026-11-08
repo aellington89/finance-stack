@@ -57,6 +57,13 @@
       "when": 1789095368373,
       "tag": "0007_add_import_log",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794112393470,
+      "tag": "0008_add_transaction_duplicated_from",
+      "breakpoints": true
     }
   ]
 }

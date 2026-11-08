@@ -5,6 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import {
   submitTransaction,
   updateTransaction,
+  duplicateTransaction,
   deleteTransaction,
 } from "@/lib/actions/transaction";
 
@@ -469,6 +470,264 @@ describe("deleteTransaction", () => {
       expect(result.message).toBe("Invalid transaction ID");
     }
   );
+});
+
+// ─── duplicateTransaction (issue #241) ───────────────────────────────────────
+
+/** The copies duplicateTransaction has made of one source row. */
+function copiesOf(sourceId: number) {
+  return db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.duplicatedFromTransactionId, sourceId));
+}
+
+describe("duplicateTransaction", () => {
+  it("inserts a new row with the edited fields, linked to an untouched source", async () => {
+    const sourceId = await seedTransaction({
+      accountId: testAccountId,
+      amount: "-1500.00",
+      date: "2024-03-01",
+      description: "Rent",
+    });
+    const [sourceBefore] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.transactionId, sourceId));
+
+    const result = await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: String(sourceId),
+        transactionDescription: "Rent",
+        transactionDate: "2024-04-01",
+        amount: "-1550.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result).toEqual({
+      success: true,
+      errors: {},
+      message: "Transaction duplicated successfully",
+    });
+
+    const copies = await copiesOf(sourceId);
+    expect(copies).toHaveLength(1);
+    const [copy] = copies;
+    expect(copy.transactionId).not.toBe(sourceId);
+    expect(copy).toMatchObject({
+      transactionDescription: "Rent",
+      transactionDate: "2024-04-01",
+      amount: "-1550.00",
+      accountId: testAccountId,
+      relatedAccountId: null,
+      duplicatedFromTransactionId: sourceId,
+    });
+
+    // The source is read, never written.
+    const [sourceAfter] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.transactionId, sourceId));
+    expect(sourceAfter).toEqual(sourceBefore);
+  });
+
+  it("rebuilds balance history for the accounts the copy was moved to", async () => {
+    const sourceId = await seedTransaction({
+      accountId: testAccountId,
+      amount: "500.00",
+    });
+    const thirdAccountId = await createAccount("Txn Test Account (third)");
+    // rebuildAccountBalance() builds an account's series from its *own* rows
+    // (account_id), so a related account with none has nothing to rebuild.
+    // seedTransaction() skips the rebuild, so history appearing here is the
+    // duplicate's doing — the same trick as the transfer-delete test above.
+    await seedTransaction({
+      accountId: thirdAccountId,
+      amount: "50.00",
+      date: "2024-04-01",
+    });
+
+    const result = await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: String(sourceId),
+        transactionDescription: "Seed",
+        transactionDate: "2024-03-15",
+        amount: "500.00",
+        accountId: String(secondaryAccountId),
+        relatedAccountId: String(thirdAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result.success).toBe(true);
+
+    const secondaryHistory = await db
+      .select()
+      .from(accountBalanceHistory)
+      .where(eq(accountBalanceHistory.accountId, secondaryAccountId));
+    expect(
+      secondaryHistory.some((row) => Number(row.cumulativeBalance) === 500)
+    ).toBe(true);
+
+    const thirdHistory = await db
+      .select()
+      .from(accountBalanceHistory)
+      .where(eq(accountBalanceHistory.accountId, thirdAccountId));
+    expect(thirdHistory.length).toBeGreaterThan(0);
+  });
+
+  it("refuses a source that does not exist, and inserts nothing", async () => {
+    const result = await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: "999999999",
+        transactionDescription: "Nope",
+        transactionDate: "2024-03-15",
+        amount: "1.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result.success).toBe(false);
+    expect(result.message).toBe(
+      "The transaction being duplicated no longer exists"
+    );
+
+    const rows = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(eq(transactions.accountId, testAccountId));
+    expect(rows).toEqual([]);
+  });
+
+  it("returns field errors and inserts nothing when the amount is invalid", async () => {
+    const sourceId = await seedTransaction({ accountId: testAccountId });
+
+    const result = await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: String(sourceId),
+        transactionDescription: "Seed",
+        transactionDate: "2024-03-15",
+        amount: "abc",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result.success).toBe(false);
+    expect(result.errors).toHaveProperty("amount");
+    expect(await copiesOf(sourceId)).toEqual([]);
+  });
+
+  it("rejects a non-positive sourceTransactionId without touching the DB", async () => {
+    const result = await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: "0",
+        transactionDescription: "Test",
+        transactionDate: "2024-03-15",
+        amount: "1.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("Invalid transaction ID");
+  });
+
+  it("keeps the link when the copy is edited afterwards", async () => {
+    const sourceId = await seedTransaction({ accountId: testAccountId });
+    await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: String(sourceId),
+        transactionDescription: "Seed",
+        transactionDate: "2024-03-15",
+        amount: "100.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    const [copy] = await copiesOf(sourceId);
+
+    const edited = await updateTransaction(
+      emptyState,
+      makeFormData({
+        transactionId: String(copy.transactionId),
+        transactionDescription: "Seed, edited",
+        transactionDate: "2024-03-16",
+        amount: "120.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(edited.success).toBe(true);
+
+    const [after] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.transactionId, copy.transactionId));
+    expect(after.transactionDescription).toBe("Seed, edited");
+    expect(after.duplicatedFromTransactionId).toBe(sourceId);
+  });
+
+  // The column has no FK by design (migration 0008): provenance outlives the
+  // row it names, and deleting a copied transaction must not be blocked.
+  it("leaves the copy and its link in place when the source is deleted", async () => {
+    const sourceId = await seedTransaction({ accountId: testAccountId });
+    await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: String(sourceId),
+        transactionDescription: "Seed",
+        transactionDate: "2024-03-15",
+        amount: "100.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+
+    const deleted = await deleteTransaction(
+      emptyState,
+      makeFormData({ transactionId: String(sourceId) })
+    );
+    expect(deleted.success).toBe(true);
+
+    const copies = await copiesOf(sourceId);
+    expect(copies).toHaveLength(1);
+    expect(copies[0].duplicatedFromTransactionId).toBe(sourceId);
+  });
+
+  it("is the only writer of the link: submitTransaction leaves it null", async () => {
+    const result = await submitTransaction(
+      emptyState,
+      makeFormData({
+        transactionDescription: "Fresh entry",
+        transactionDate: "2024-03-15",
+        amount: "10.00",
+        accountId: String(testAccountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result.success).toBe(true);
+
+    const [row] = await db
+      .select({ link: transactions.duplicatedFromTransactionId })
+      .from(transactions)
+      .where(eq(transactions.accountId, testAccountId));
+    expect(row.link).toBeNull();
+  });
 });
 
 // ─── non-blank CHECK constraint (issue #147) ─────────────────────────────────

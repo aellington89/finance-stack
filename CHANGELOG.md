@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Migration:** backward-compatible
+
 ### Added
+
+- **A transaction can be duplicated, with any field changed before it is saved.** ([Issue #241](https://github.com/aellington89/finance-stack/issues/241)) Each row on the Transactions page has a Duplicate button between Edit and Delete. It opens a copy of the row's values in an inline form beneath the original, which stays on screen, and **Save copy** adds them as a new transaction without touching the original. Every field starts from the source, date included. The exception is an account that has since closed: it starts empty, because the form offers only open accounts. Duplicate shares Edit's one-open-row rule, so leaving a half-filled copy asks first.
+
+  The copy records its source in a new nullable column, `transactions.duplicated_from_transaction_id`. The audit trigger captures it in the copy's INSERT row with no change to the trigger itself. [Audit Log](docs/audit-log.md#reading-the-log) has the query that finds every copy of a transaction. The column has no foreign key, so deleting a transaction that has been copied is never blocked and leaves its copies' link in place. The migration only adds that column, so rolling back by re-pinning the previous image is safe.
 
 - **`deploy.sh` can upgrade a host that cannot reach GitHub, and reports what a release's `.env.example` changes.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) There are three new overrides:
   - `DEPLOY_BUNDLE` takes a local tarball, with its `.sha256` beside it.

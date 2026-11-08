@@ -11,6 +11,7 @@ import {
 import {
   submitTransaction,
   updateTransaction,
+  duplicateTransaction,
   deleteTransaction,
 } from "@/lib/actions/transaction";
 import { createAccount } from "@/lib/actions/account";
@@ -184,6 +185,55 @@ describe("audit logging — transaction lifecycle", () => {
     expect(amounts[0].was).toBe("-82.50");
     expect(amounts[0].now).toBe("-99.99");
     expect(updateRow.changedColumns).toEqual(["amount"]);
+  });
+
+  // Issue #241's acceptance criterion: "audit trail shows the duplicate
+  // relationship". Nothing in the trigger changed for it — to_jsonb(NEW)
+  // picks up duplicated_from_transaction_id like any other column.
+  it("records a duplicate's source in its INSERT row, and nothing on the source", async () => {
+    const sourceId = await insertTransaction("-82.50");
+
+    const result = await duplicateTransaction(
+      emptyState,
+      makeFormData({
+        sourceTransactionId: String(sourceId),
+        transactionDescription: "Audit subject (copy)",
+        transactionDate: "2024-06-01",
+        amount: "-82.50",
+        accountId: String(accountId),
+        transactionTypeId: "1",
+        transactionCategoryId: "1",
+      })
+    );
+    expect(result.success).toBe(true);
+
+    const [copy] = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(eq(transactions.duplicatedFromTransactionId, sourceId));
+
+    const copyRows = await auditRowsFor("transactions", copy.id);
+    expect(copyRows.map((r) => r.action)).toEqual(["INSERT"]);
+    expect(copyRows[0].actorSource).toBe("app");
+    expect(copyRows[0].actorUserId).toBe(SESSION_USER_ID);
+    expect(copyRows[0].actorLabel).toBe(SESSION_USER_NAME);
+
+    // Through `->>`, the shape docs/audit-log.md documents for finding copies.
+    const linked = (
+      await db.execute(sql`
+        SELECT row_pk
+        FROM audit_log
+        WHERE table_name = 'transactions'
+          AND action = 'INSERT'
+          AND after_data ->> 'duplicated_from_transaction_id' = ${String(sourceId)}
+          AND audit_id > ${auditWatermark}
+      `)
+    ).rows as { row_pk: string }[];
+    expect(linked).toEqual([{ row_pk: String(copy.id) }]);
+
+    // The source was read, never written: its own creation is all there is.
+    const sourceRows = await auditRowsFor("transactions", sourceId);
+    expect(sourceRows.map((r) => r.action)).toEqual(["INSERT"]);
   });
 
   it("does not audit derived balance history", async () => {
