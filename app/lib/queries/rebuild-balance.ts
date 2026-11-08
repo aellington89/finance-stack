@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { db } from "@/lib/db";
@@ -80,8 +81,31 @@ export async function rebuildAccountBalance(
  * cumulative_balance with daily_balance = 0.  Idempotent via
  * ON CONFLICT DO NOTHING — existing rows (e.g. from rebuildAccountBalance)
  * are never overwritten.
+ *
+ * Every dashboard page that reads `balance_date = CURRENT_DATE` must await
+ * this itself, before its queries, rather than rely on the dashboard layout's
+ * call (Issue #408). Two reasons, either of which is enough:
+ *
+ *   - Next renders a layout and its page in parallel, so the page's SELECTs
+ *     can take their snapshot before the layout's INSERT commits. On the first
+ *     load of a day that reads no rows for today and shows $0.
+ *   - A soft navigation between dashboard tabs re-renders only the page
+ *     segment. The shared layout is not rendered at all, so a tab left open
+ *     across midnight would never carry balances forward.
+ *
+ * React's `cache` is what makes calling it from both the layout and the page
+ * free: within one server request they share a single execution. Outside a
+ * React server render (the integration tests) `cache` is a pass-through, so
+ * every call there still runs the INSERT.
+ *
+ * In steady state the INSERT writes nothing: each account's gap series starts
+ * after today, so it is empty, and the statement is one index probe per open
+ * account (~0.3 ms). That is why there is no in-process "already done today"
+ * memo here (Issue #126): it would save well under a millisecond, and an
+ * account opened later in the day with no transactions would then get no row
+ * for today until tomorrow.
  */
-export async function ensureTodayBalances(): Promise<void> {
+export const ensureTodayBalances = cache(async (): Promise<void> => {
   await db.execute(sql`
     INSERT INTO account_balance_history
       (account_id, balance_date, daily_balance, cumulative_balance)
@@ -113,4 +137,4 @@ export async function ensureTodayBalances(): Promise<void> {
     WHERE a.closed_date IS NULL
     ON CONFLICT (account_id, balance_date) DO NOTHING
   `);
-}
+});

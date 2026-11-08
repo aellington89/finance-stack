@@ -87,3 +87,51 @@ export function sumAmountByType(
 export function balanceAtDate(date: string | SQL, alias: string): SQL {
   return sql`COALESCE(SUM(CASE WHEN abh.balance_date = ${date}::date THEN abh.cumulative_balance ELSE 0 END), 0) AS ${sql.identifier(alias)}`;
 }
+
+/**
+ * Pattern C — join exactly one balance row per account, as `abh`:
+ *
+ *   FROM accounts a
+ *   JOIN account_types at …
+ *   ${balanceRowPerAccount(dateTo)}
+ *
+ * With `dateTo`, the account's row on that date. An account with no row that
+ * day (not yet opened, or already closed) contributes nothing. This is the same
+ * rows as the `abh.balance_date = dateTo` filter it replaced.
+ *
+ * Without it, the account's latest row, found with one probe of
+ * `idx_abh_account_date (account_id, balance_date DESC)` per account. The form
+ * it replaced (Issue #126) was
+ *
+ *   WHERE abh.balance_date = (SELECT MAX(balance_date) FROM account_balance_history
+ *                             WHERE account_id = abh.account_id)
+ *
+ * It returned the same rows, but Postgres evaluates that subquery once per
+ * history row rather than once per account. Its cost therefore grew with
+ * history, by about one row per open account per day, and on a production-sized
+ * dataset it was ~25–72 ms per query, against ~0.1 ms for this. Pick a "latest
+ * row" with this rather than reintroducing the correlated MAX.
+ * `v_account_balances_current` has the same shape, in SQL
+ * (migration 0009).
+ *
+ * Exposes `abh.balance_date` and `abh.cumulative_balance`. Assumes the
+ * `accounts` table is aliased `a` in the surrounding query.
+ */
+export function balanceRowPerAccount(dateTo?: string): SQL {
+  if (dateTo) {
+    return sql`
+      JOIN account_balance_history abh
+        ON abh.account_id = a.account_id
+       AND abh.balance_date = ${dateTo}::date
+    `;
+  }
+  return sql`
+    JOIN LATERAL (
+      SELECT h.balance_date, h.cumulative_balance
+      FROM account_balance_history h
+      WHERE h.account_id = a.account_id
+      ORDER BY h.balance_date DESC
+      LIMIT 1
+    ) abh ON true
+  `;
+}

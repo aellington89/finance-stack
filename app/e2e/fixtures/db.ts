@@ -3,8 +3,10 @@ import { Client } from "pg";
 import { E2E_ACCOUNT_PREFIX, E2E_USERNAME } from "./constants";
 
 /**
- * Direct psql-level access for setup and teardown only — the tests themselves
- * go through the browser.
+ * Direct psql-level access for setup and teardown, and for arranging state the
+ * browser cannot produce. The one such case is today-balances.spec.ts making
+ * the date roll over by removing a carry-forward row. The assertions themselves
+ * still go through the browser.
  *
  * A plain `pg` Client rather than @/lib/db: that module is a pooled singleton
  * built for the running server, and setup/teardown are one-shot scripts in a

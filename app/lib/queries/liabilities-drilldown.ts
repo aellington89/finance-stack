@@ -10,7 +10,12 @@ import {
   DEBT_PAYMENT_ROLES,
   DEBT_SERVICE_ROLES,
 } from "@/lib/constants/reporting-roles";
-import { balanceAtDate, categoryIdsWithRoles, valueList } from "@/lib/queries/_aggregates";
+import {
+  balanceAtDate,
+  balanceRowPerAccount,
+  categoryIdsWithRoles,
+  valueList,
+} from "@/lib/queries/_aggregates";
 import { pct, pctOrNull } from "@/lib/queries/_percent";
 
 // Sign convention: liability balances are stored as negative numbers in
@@ -167,15 +172,8 @@ export async function getLiabilityAllocation(
 ): Promise<LiabilityAllocationData> {
   // Accounts closed on or before the as-of date contribute nothing — their
   // last balance_history row is the day before closure (rebuild-balance.ts:33)
-  // and would otherwise be picked up by the per-account MAX(balance_date).
+  // and would otherwise be picked up as the account's latest row.
   const asOfExpr = dateTo ? sql`${dateTo}::date` : sql`CURRENT_DATE`;
-  const dateFilter = dateTo
-    ? sql`abh.balance_date = ${dateTo}::date`
-    : sql`abh.balance_date = (
-        SELECT MAX(balance_date) FROM account_balance_history
-        WHERE account_id = abh.account_id
-      )`;
-
   const result = await db.execute(sql`
     SELECT
       atc.account_type_category_id AS category_id,
@@ -184,14 +182,13 @@ export async function getLiabilityAllocation(
       at.account_type AS account_type_name,
       MAX(abh.balance_date) AS as_of,
       COALESCE(SUM(abh.cumulative_balance), 0) AS value
-    FROM account_balance_history abh
-    JOIN accounts a ON a.account_id = abh.account_id
+    FROM accounts a
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
+    ${balanceRowPerAccount(dateTo)}
     WHERE atc.account_type_category_id IN (${LIABILITY_IDS})
       AND (a.closed_date IS NULL OR a.closed_date > ${asOfExpr})
-      AND ${dateFilter}
     GROUP BY
       atc.account_type_category_id, atc.account_type_category,
       at.account_type_id, at.account_type
