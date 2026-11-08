@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`docs/roadmap.md` is retired: the roadmaps are now GitHub [Projects](https://github.com/aellington89/finance-stack/projects).** ([Issue #396](https://github.com/aellington89/finance-stack/issues/396)) Both documentation indexes link Projects instead, and `CONTRIBUTING.md` says so under a new Planning heading. The roadmap's last version, including how the phases mapped to releases through 1.2.0, stays readable [at `0088e93`](https://github.com/aellington89/finance-stack/blob/0088e93/docs/roadmap.md).
+
 - **Local changes to the stack belong in `compose.override.yml`.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) Compose merges that file in on its own, and `deploy.sh` never touches it. An upgrade that would replace an edited `compose.yml` stops with exit 1 and nothing changed, and says how to move the edit across. An edit the release leaves alone is kept, with a reminder. An edited `caddy/Caddyfile`, which the TLS docs tell you to edit, is kept. When the release changes the Caddyfile too, its copy is written beside yours as `caddy/Caddyfile.dist`. The bundle README's new "Customizing the stack" section has the details, including moving the app's port with `!override` (Compose 2.24.4 or later).
 
 - **The backup gate also runs when an upgrade changes `compose.yml` at the deployed version.** ([Issue #347](https://github.com/aellington89/finance-stack/issues/347)) Re-running `./deploy.sh` at the deployed version skipped the dump, since no schema change was possible. A new `postgres` image can now arrive that way and restart the database, so the dump runs unless the run changes no files at all.
@@ -356,7 +358,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`1.0.0` is a safety and stability commitment, not a feature-completeness claim.** The promise is the one [`docs/roadmap.md`](docs/roadmap.md#what-v100-means-here) has carried since the line was drawn — *log in, don't lose your data, expose it safely* — and nothing more. Budgets, forecasting, search, receipts and the rest were never inside it; they are additive, and they land as ordinary `1.x` minors. What changes at this tag is not what the stack does but what it is willing to promise about doing it. Until v0.2.0 this thing had no authentication at all, and anyone who could reach the port could read and delete every record; 1.0 is the statement that the work which closed that has since been run, upgraded, and backed up somewhere real.
+- **`1.0.0` is a safety and stability commitment, not a feature-completeness claim.** The promise is the one [the roadmap](https://github.com/aellington89/finance-stack/blob/0088e93/docs/roadmap.md#what-v100-means-here) has carried since the line was drawn — *log in, don't lose your data, expose it safely* — and nothing more. Budgets, forecasting, search, receipts and the rest were never inside it; they are additive, and they land as ordinary `1.x` minors. What changes at this tag is not what the stack does but what it is willing to promise about doing it. Until v0.2.0 this thing had no authentication at all, and anyone who could reach the port could read and delete every record; 1.0 is the statement that the work which closed that has since been run, upgraded, and backed up somewhere real.
 
 - **The tree is identical to `v0.4.1` apart from the version stamp.** Upgrading `0.4.1 → 1.0.0` pulls four freshly built images carrying the same code and changes nothing else — no migration, no config change, no behavioural difference to plan around. That is deliberate rather than incidental. v0.4.0 was declared the release candidate, and a candidate is the artifact you run in order to find out what is wrong with it, so 1.0.0 had to be *the thing that was actually run* — not a new build assembled afterwards and promoted on the strength of its predecessor's testing.
 
@@ -665,12 +667,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Unified, persistent sidebar navigation (shadcn Sidebar) connecting all application sections, with a Next.js route-group split for the landing page vs. the app shell ([Issue #77](https://github.com/aellington89/finance-stack/issues/77)).
-
----
-
-Earlier alpha history (v0.1.0-alpha.1 – v0.1.0-alpha.5) is recorded in the
-[Alpha Development History](https://github.com/aellington89/finance-stack/wiki/Alpha-Development-History)
-wiki page.
 
 [Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/aellington89/finance-stack/compare/v1.1.2...v1.2.0

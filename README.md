@@ -188,5 +188,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Importer](docs/importer.md) — the importer service and adding new import types
 - [Project Structure](docs/project-structure.md) — repository layout and directory tree
 - [Releases & Tagging](docs/releases.md) — versioning, the `vX.Y.Z` tag convention, and how releases map to `CHANGELOG.md`
-- [Versioning Roadmap](docs/roadmap.md) — how phase milestones mapped to releases through `v1.0.0`, and how work is grouped since
+- [Projects](https://github.com/aellington89/finance-stack/projects) — the roadmaps: what is planned and what is in flight
 - [Changelog](CHANGELOG.md) — release history and version notes
