@@ -21,6 +21,19 @@
 # merged together — see CONTRIBUTING.md "Dependabot PRs".
 FROM postgres:18.6
 
+# ZLIB COMES FROM TRIXIE-SECURITY, NOT FROM THE BASE (DSA-6613-1): the same
+# CVE-2026-76844 / CVE-2026-85091 finding, fix and reasoning as the identical
+# layer in importer/Dockerfile, which explains it in full. `--only-upgrade
+# zlib1g` moves that one package, so it cannot pull postgresql-18 forward from the
+# pgdg repository and break the pg_dump version match described above. Both apt
+# calls pass `-o Acquire::Retries=0` to stay off the path that apt 3.0.3's
+# advisory (CVE-2026-109518) needs, should the base still carry it. Delete the layer once postgres:18.6 ships
+# -deb13u1 itself.
+RUN apt-get -o Acquire::Retries=0 update \
+ && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --only-upgrade zlib1g \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1'
+
 COPY backup.sh restore.sh /scripts/
 # Consumed by the one-shot `init-script` service (--profile init), which runs it
 # through psql rather than executing it.
