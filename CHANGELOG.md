@@ -58,6 +58,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Asset Performance's % Change no longer shows a gain as a loss, or 0.00% where there is no rate to show.** ([Issue #143](https://github.com/aellington89/finance-stack/issues/143)) An account that started the range overdrawn and climbed back, from -$100 to +$50 say, read -150% in red with a down arrow. It now reads +150% in green. An account with no balance at the start of the range, such as one opened partway through it, read 0.00%. It now shows a dash (—), the way the Liabilities table already shows the same case. Both now follow the Liabilities rule: the change is measured against the size of the starting balance, so its sign always matches the Change column.
 
+- **Net Worth and the other "as of today" figures no longer show $0 on the first dashboard load of a day, or after switching tabs across midnight.** ([Issue #408](https://github.com/aellington89/finance-stack/issues/408)) A figure for today reads only the balance-history rows dated today. That covers:
+  - the Summary KPIs;
+  - Net Worth's headline, waterfall and drivers;
+  - the Assets and Liabilities performance tables, debt service and debt waterfall.
+
+  The dashboard layout creates today's rows by carrying every open account forward, and it had two gaps:
+  - Next renders a layout and its page in parallel, so the page could read before the layout's insert committed.
+  - Switching dashboard tabs does not render the layout at all, so a tab left open past midnight UTC never carried anything forward until a full reload.
+
+  Each of those four pages now waits for the carry-forward itself before it reads. React's `cache` makes the layout and page share a single run per request. On days the rows already exist that run writes nothing, and it adds about half a millisecond before those pages' queries. A new end-to-end spec, `e2e/today-balances.spec.ts`, removes one account's row for today, switches tabs and checks that Net Worth has not moved.
+
 ### Security
 
 - **`next` 16.4.3 closes two CRITICAL advisories and a HIGH one, and the HIGH one was reachable here.** ([PR #382](https://github.com/aellington89/finance-stack/pull/382)) `next` moves from 16.3.8 to 16.4.3.

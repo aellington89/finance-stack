@@ -32,7 +32,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 
 Every balance the app shows reads this table: net worth, `v_account_balances_current`, and each drilldown. What keeps it current depends on how a transaction arrived:
 
-- **Through the app**, it is kept current as you go. Each create, edit or delete rebuilds the history of the accounts it touched (`rebuildAccountBalance`, in [`rebuild-balance.ts`](../app/lib/queries/rebuild-balance.ts)), and opening the dashboard carries every open account forward to today.
+- **Through the app**, it is kept current as you go. Each create, edit or delete rebuilds the history of the accounts it touched (`rebuildAccountBalance`, in [`rebuild-balance.ts`](../app/lib/queries/rebuild-balance.ts)). Loading any dashboard page carries every open account forward to today (`ensureTodayBalances`), and so does each page that reads today's balances, before it reads them. A page can't rely on the dashboard layout for that: Next renders a layout in parallel with its page, and switching tabs doesn't render the layout at all (Issue #408).
 - **Through the importer**, it is not. The importer's role can append to `transactions` and nothing else (see the [grant matrix](#roles--privileges)), so **imported transactions do not appear in any balance until the full rebuild has run**:
 
 ```bash

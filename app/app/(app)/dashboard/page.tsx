@@ -11,6 +11,7 @@ import { DashboardDateRangeFilter } from "@/components/dashboard/date-range-filt
 import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { DateRangeError } from "@/components/dashboard/date-range-error";
 import { getDateRangeFromParams } from "@/lib/queries/date-range";
+import { ensureTodayBalances } from "@/lib/queries/rebuild-balance";
 import { validateDateRange } from "@/lib/validations/date-range";
 import {
   Card,
@@ -66,6 +67,10 @@ export default async function DashboardSummaryPage({
   }
 
   const { dateFrom, dateTo } = getDateRangeFromParams(params);
+
+  // Today's carry-forward rows must exist before the reads below, and the
+  // layout's call does not guarantee that (Issue #408). See ensureTodayBalances().
+  await ensureTodayBalances();
 
   const [currentNetWorth, timeSeries] = await Promise.all([
     getCurrentNetWorth(),
