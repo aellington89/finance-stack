@@ -60,7 +60,7 @@ export function checkMigrationMarkers(releases: ChangelogRelease[]): ChangelogPr
 // schema — so post-1.0 it is a major. Nothing else compares the version against
 // the *content* of the release: package.json, the newest changelog heading and
 // the tag can all agree on an understated number, which is the worst place for a
-// version to be wrong. See Issue #315 and docs/roadmap.md's "breaking → major".
+// version to be wrong. See Issue #315 and docs/releases.md's "Choosing the bump".
 //
 // Deliberately *not* rules, because they are the first things a reader asks:
 // a major that declares `none` is fine (v1.0.0 is exactly that), and a breaking
