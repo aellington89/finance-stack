@@ -12,6 +12,9 @@ export const transactions = pgTable("transactions", {
 	relatedAccountId: integer("related_account_id"),
 	transactionTypeId: integer("transaction_type_id").notNull(),
 	transactionCategoryId: integer("transaction_category_id").notNull(),
+	// The row this one was copied from by duplicateTransaction() (Issue #241).
+	// Deliberately no foreign key — see the COMMENT ON COLUMN in migration 0008.
+	duplicatedFromTransactionId: integer("duplicated_from_transaction_id"),
 }, (table) => [
 	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_category").using("btree", table.transactionCategoryId.asc().nullsLast().op("int4_ops")),

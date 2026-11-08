@@ -12,7 +12,7 @@ The rules every server action and page boundary follows, and the two CI gates th
 
 ## The validation checklist
 
-All 18 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
+All 19 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
 
 Six of them open with `requireAdminUser()` instead, which composes it ([Issue #87](https://github.com/aellington89/finance-stack/issues/87)): the three `*TransactionType()` and the three `*AccountTypeCategory()` actions. Those two tables are the basis of every KPI, so they are reachable only from `/settings/admin` and only by an admin. `createTransactionType()` was removed entirely by [Issue #109](https://github.com/aellington89/finance-stack/issues/109) and restored here behind that gate, which is where that issue said a legitimate insert belonged.
 
@@ -22,6 +22,7 @@ Six of them open with `requireAdminUser()` instead, which composes it ([Issue #8
 | --- | --- | --- | --- |
 | `submitTransaction()` | `transactionFormSchema` | — | Failed to save transaction. Please try again. |
 | `updateTransaction()` | `transactionFormSchema` | `transactionId` | Failed to update transaction. Please try again. |
+| `duplicateTransaction()` | `transactionFormSchema` | `sourceTransactionId` | Failed to duplicate transaction. Please try again. |
 | `deleteTransaction()` | — | `transactionId` | Failed to delete transaction. Please try again. |
 | `createAccount()` | `accountFormSchema` | — | Failed to create account. Please try again. |
 | `updateAccount()` | `accountFormSchema` | `accountId` | Failed to update account. Please try again. |

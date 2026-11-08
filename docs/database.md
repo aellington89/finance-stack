@@ -9,7 +9,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `accounts` | All financial accounts (checking, savings, credit cards, loans, etc.) |
 | `account_type_categories` | Top-level account categories (e.g. Current Asset, Current Liability) |
 | `account_types` | Specific account types (e.g. Checking, Mortgage, Credit Card) |
-| `transactions` | Individual financial transactions |
+| `transactions` | Individual financial transactions. `duplicated_from_transaction_id` names the row a copy was made from with **Duplicate**, and is `NULL` otherwise. It deliberately has no FK, so the link outlives the source; see [Audit Log](audit-log.md#reading-the-log) |
 | `transaction_categories` | Expense/income categories (e.g. Groceries, Salary, Rent) |
 | `transaction_types` | Transaction classifications (e.g. Debit, Credit, Transfer) |
 | `account_balance_history` | Daily cumulative balance snapshots per account |

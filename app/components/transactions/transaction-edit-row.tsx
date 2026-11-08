@@ -21,7 +21,10 @@ import {
   ComboboxEmpty,
 } from "@/components/ui/combobox";
 
-import { updateTransaction } from "@/lib/actions/transaction";
+import {
+  updateTransaction,
+  duplicateTransaction,
+} from "@/lib/actions/transaction";
 
 interface LookupOption {
   id: number;
@@ -36,7 +39,17 @@ interface ActionState {
 
 const initialState: ActionState = { success: false, errors: {}, message: "" };
 
+/**
+ * `edit` saves over the row (updateTransaction). `duplicate` saves the same
+ * fields as a new transaction linked back to this one (duplicateTransaction,
+ * Issue #241) and leaves the row itself alone. Required rather than defaulted,
+ * so no call site can end up in the wrong mode by omission.
+ */
+export type TransactionRowMode = "edit" | "duplicate";
+
 interface TransactionEditRowProps {
+  mode: TransactionRowMode;
+  /** The row being edited, or the source being duplicated. */
   transactionId: number;
   defaultDate: string;
   defaultDescription: string;
@@ -53,14 +66,30 @@ interface TransactionEditRowProps {
   onSaved: () => void;
 }
 
-function SaveButton() {
+function SaveButton({ mode }: { mode: TransactionRowMode }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" size="sm" disabled={pending}>
       <CheckIcon className="size-4" />
-      {pending ? "Saving..." : "Save"}
+      {pending ? "Saving..." : mode === "duplicate" ? "Save copy" : "Save"}
     </Button>
   );
+}
+
+/**
+ * A copy is a new transaction, and the New Transaction form only offers open
+ * accounts — so a duplicate drops a source account that is no longer among
+ * the options (it closed) rather than carrying it over. Left in, the combobox
+ * would show the bare id and the copy would post to a closed account.
+ */
+function initialAccountValue(
+  mode: TransactionRowMode,
+  id: number | null,
+  accounts: LookupOption[]
+): string {
+  if (id === null) return "";
+  if (mode === "duplicate" && !accounts.some((a) => a.id === id)) return "";
+  return String(id);
 }
 
 function ComboField({
@@ -117,6 +146,7 @@ function ComboField({
 }
 
 export function TransactionEditRow({
+  mode,
   transactionId,
   defaultDate,
   defaultDescription,
@@ -132,16 +162,25 @@ export function TransactionEditRow({
   onCancel,
   onSaved,
 }: TransactionEditRowProps) {
-  const [state, formAction] = useActionState(updateTransaction, initialState);
+  // `mode` is fixed for the life of the row: TransactionList keys edit and
+  // duplicate rows apart, so switching modes mounts a new one.
+  const [state, formAction] = useActionState(
+    mode === "duplicate" ? duplicateTransaction : updateTransaction,
+    initialState
+  );
   const handledStateRef = useRef(state);
 
   // Initialised once from the row's current values; never re-synced — closing
   // the row (Cancel/Save) unmounts this component, so a new edit starts fresh.
+  // A duplicate starts from the same values, date included: the issue asks for
+  // the form "prefilled with the source transaction's data".
   const [transactionDate, setTransactionDate] = useState(defaultDate);
   const [amount, setAmount] = useState(defaultAmount);
-  const [accountId, setAccountId] = useState(String(defaultAccountId));
-  const [relatedAccountId, setRelatedAccountId] = useState(
-    defaultRelatedAccountId !== null ? String(defaultRelatedAccountId) : ""
+  const [accountId, setAccountId] = useState(() =>
+    initialAccountValue(mode, defaultAccountId, accounts)
+  );
+  const [relatedAccountId, setRelatedAccountId] = useState(() =>
+    initialAccountValue(mode, defaultRelatedAccountId, accounts)
   );
   const [transactionTypeId, setTransactionTypeId] = useState(
     String(defaultTransactionTypeId)
@@ -165,8 +204,24 @@ export function TransactionEditRow({
   return (
     <TableRow className="bg-muted/30">
       <TableCell colSpan={columnSpan} className="p-3">
-        <form action={formAction} className="space-y-3">
-          <input type="hidden" name="transactionId" value={transactionId} />
+        <form
+          action={formAction}
+          aria-label={
+            mode === "duplicate" ? "Duplicate transaction" : "Edit transaction"
+          }
+          className="space-y-3"
+        >
+          <input
+            type="hidden"
+            name={mode === "duplicate" ? "sourceTransactionId" : "transactionId"}
+            value={transactionId}
+          />
+
+          {mode === "duplicate" && (
+            <p className="text-xs text-muted-foreground">
+              Duplicate: saves as a new transaction; the original is unchanged.
+            </p>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1">
@@ -190,13 +245,13 @@ export function TransactionEditRow({
 
             <div className="space-y-1 sm:col-span-2 lg:col-span-2">
               <Label
-                htmlFor={`edit-desc-${transactionId}`}
+                htmlFor={`${mode}-desc-${transactionId}`}
                 className="text-xs text-muted-foreground"
               >
                 Description *
               </Label>
               <Input
-                id={`edit-desc-${transactionId}`}
+                id={`${mode}-desc-${transactionId}`}
                 name="transactionDescription"
                 defaultValue={defaultDescription}
                 autoComplete="off"
@@ -311,7 +366,7 @@ export function TransactionEditRow({
               <XIcon className="size-4" />
               Cancel
             </Button>
-            <SaveButton />
+            <SaveButton mode={mode} />
           </div>
         </form>
       </TableCell>

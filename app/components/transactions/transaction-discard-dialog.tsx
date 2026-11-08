@@ -17,10 +17,11 @@ interface TransactionDiscardDialogProps {
   onDiscard: () => void;
 }
 
-// Asked when Edit is clicked on one row while another is open for editing
-// (Issue #148, replacing the browser's confirm box). The way back is "Keep
-// editing" rather than the delete dialogs' "Cancel": in a discard prompt,
-// "Cancel" reads as "cancel the edit", which is the opposite of what it does.
+// Asked when Edit or Duplicate is clicked while another inline row is open
+// (Issue #148, replacing the browser's confirm box; Duplicate joined it in
+// Issue #241). The way back is "Keep editing" rather than the delete dialogs'
+// "Cancel": in a discard prompt, "Cancel" reads as "cancel the edit", which is
+// the opposite of what it does.
 export function TransactionDiscardDialog({
   open,
   onOpenChange,
@@ -32,8 +33,8 @@ export function TransactionDiscardDialog({
         <DialogHeader>
           <DialogTitle>Discard changes?</DialogTitle>
           <DialogDescription>
-            You are already editing a transaction. Editing a different one
-            discards your unsaved changes.
+            You already have a transaction open. Opening another one discards
+            your unsaved changes.
           </DialogDescription>
         </DialogHeader>
 
