@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Migration:** backward-compatible
+
 ## [1.3.0] - 2026-11-08
 
 **Migration:** backward-compatible

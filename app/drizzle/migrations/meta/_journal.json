@@ -71,6 +71,13 @@
       "when": 1794164367761,
       "tag": "0009_latest_balance_view_lateral",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794369981002,
+      "tag": "0010_add_balance_transfers",
+      "breakpoints": true
     }
   ]
 }

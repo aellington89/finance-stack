@@ -69,7 +69,11 @@ deletion of the user it names, which is what `actor_label` preserves.
 ## What is covered
 
 Audited: `transactions`, `accounts`, `transaction_categories`,
-`transaction_types`, `account_types`, `account_type_categories`.
+`transaction_types`, `account_types`, `account_type_categories`,
+`balance_transfers` (Issue #417, migration 0010). An unlinked fee shows up as
+an `UPDATE` of `fee_transaction_id` to `NULL`, attributed to whoever deleted
+the fee transaction: `ON DELETE SET NULL` is a row update, so the trigger fires
+for it.
 
 Two deliberate exclusions:
 

@@ -1,4 +1,4 @@
-import { pgTable, index, uniqueIndex, foreignKey, char, serial, text, date, integer, bigint, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, index, uniqueIndex, unique, foreignKey, char, serial, text, date, integer, bigint, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -169,7 +169,7 @@ export const auditLog = pgTable("audit_log", {
 //   it retries on the next poll with no manual un-quarantine step. This is why
 //   there is no `imports/.failed/` directory: see docs/importer.md.
 //
-// No audit_row_change trigger, unlike the six business tables — this is itself
+// No audit_row_change trigger, unlike the seven business tables — this is itself
 // an append-only log, and a trigger would double-write on every poll.
 export const importLog = pgTable("import_log", {
 	importId: bigint("import_id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
@@ -216,6 +216,45 @@ export const accountBalanceHistory = pgTable("account_balance_history", {
 			name: "account_balance_history_account_id_fkey"
 		}),
 	primaryKey({ columns: [table.accountId, table.balanceDate], name: "account_balance_history_pkey"}),
+]);
+
+// One row per balance transfer (Issue #417): an annotation on the transfer's
+// posting on the receiving card, not a second ledger. The row holds only what
+// the ledger cannot know, which is the offer's end date and APR. The card,
+// the amount, the source and the start date are read from the posting at query
+// time, so correcting the posting corrects the transfer.
+//
+// A promo is active on the half-open interval [posting date, promo_end_date).
+// Ask that through promoActiveOn() / accountHasActivePromo() in
+// lib/queries/_aggregates.ts rather than restating it.
+//
+// The two foreign keys differ on purpose. The posting is RESTRICT: without it
+// the transfer has no card, amount or start date, and the hand-entered terms
+// would go with it, so deleteTransaction() refuses and says to remove the
+// transfer first. The fee is SET NULL: it is an ordinary expense, and deleting
+// it only unlinks it. The UNIQUEs index both links, so the table needs no
+// other index.
+export const balanceTransfers = pgTable("balance_transfers", {
+	balanceTransferId: integer("balance_transfer_id").primaryKey().generatedAlwaysAsIdentity(),
+	transferTransactionId: integer("transfer_transaction_id").notNull(),
+	feeTransactionId: integer("fee_transaction_id"),
+	promoEndDate: date("promo_end_date").notNull(),
+	promoApr: numeric("promo_apr", { precision: 6, scale: 3 }).default('0').notNull(),
+}, (table) => [
+	unique("balance_transfers_transfer_transaction_id_key").on(table.transferTransactionId),
+	unique("balance_transfers_fee_transaction_id_key").on(table.feeTransactionId),
+	foreignKey({
+			columns: [table.transferTransactionId],
+			foreignColumns: [transactions.transactionId],
+			name: "balance_transfers_transfer_transaction_id_fkey"
+		}).onDelete("restrict"),
+	foreignKey({
+			columns: [table.feeTransactionId],
+			foreignColumns: [transactions.transactionId],
+			name: "balance_transfers_fee_transaction_id_fkey"
+		}).onDelete("set null"),
+	check("balance_transfers_fee_not_transfer", sql`fee_transaction_id <> transfer_transaction_id`),
+	check("balance_transfers_promo_apr_range", sql`promo_apr >= 0 AND promo_apr <= 100`),
 ]);
 export const vTransactionsFull = pgView("v_transactions_full", {	transactionId: integer("transaction_id"),
 	transactionDescription: text("transaction_description"),

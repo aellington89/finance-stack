@@ -23,7 +23,7 @@
 --   finance_importer  SELECT+INSERT on transactions and on import_log, SELECT
 --                     on the three lookup tables it resolves FKs against, and
 --                     nothing else.
---   finance_bi        SELECT on the seven core base tables and the four views.
+--   finance_bi        SELECT on the eight core base tables and the four views.
 --                     Nothing on users or audit_log — that exclusion is the
 --                     whole point of the role existing (#249).
 --
@@ -154,7 +154,8 @@ SELECT format('GRANT USAGE, SELECT ON SEQUENCE %s TO finance_importer',
 GRANT CONNECT ON DATABASE :"DBNAME" TO finance_bi;
 GRANT USAGE ON SCHEMA public TO finance_bi;
 GRANT SELECT ON accounts, account_types, account_type_categories, transactions,
-    transaction_categories, transaction_types, account_balance_history
+    transaction_categories, transaction_types, account_balance_history,
+    balance_transfers
     TO finance_bi;
 GRANT SELECT ON v_transactions_full, v_account_balances_current, v_daily_totals,
     v_audit_log

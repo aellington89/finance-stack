@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm/relations";
-import { accounts, transactions, transactionCategories, transactionTypes, accountTypeCategories, accountTypes, accountBalanceHistory } from "./schema";
+import { accounts, transactions, transactionCategories, transactionTypes, accountTypeCategories, accountTypes, accountBalanceHistory, balanceTransfers } from "./schema";
 
-export const transactionsRelations = relations(transactions, ({one}) => ({
+export const transactionsRelations = relations(transactions, ({one, many}) => ({
 	account_accountId: one(accounts, {
 		fields: [transactions.accountId],
 		references: [accounts.accountId],
@@ -19,6 +19,12 @@ export const transactionsRelations = relations(transactions, ({one}) => ({
 	transactionType: one(transactionTypes, {
 		fields: [transactions.transactionTypeId],
 		references: [transactionTypes.transactionTypeId]
+	}),
+	balanceTransfers_transferTransactionId: many(balanceTransfers, {
+		relationName: "balanceTransfers_transferTransactionId_transactions_transactionId"
+	}),
+	balanceTransfers_feeTransactionId: many(balanceTransfers, {
+		relationName: "balanceTransfers_feeTransactionId_transactions_transactionId"
 	}),
 }));
 
@@ -60,5 +66,17 @@ export const accountBalanceHistoryRelations = relations(accountBalanceHistory, (
 	account: one(accounts, {
 		fields: [accountBalanceHistory.accountId],
 		references: [accounts.accountId]
+	}),
+}));
+export const balanceTransfersRelations = relations(balanceTransfers, ({one}) => ({
+	transaction_transferTransactionId: one(transactions, {
+		fields: [balanceTransfers.transferTransactionId],
+		references: [transactions.transactionId],
+		relationName: "balanceTransfers_transferTransactionId_transactions_transactionId"
+	}),
+	transaction_feeTransactionId: one(transactions, {
+		fields: [balanceTransfers.feeTransactionId],
+		references: [transactions.transactionId],
+		relationName: "balanceTransfers_feeTransactionId_transactions_transactionId"
 	}),
 }));
