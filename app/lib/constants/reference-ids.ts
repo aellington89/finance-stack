@@ -5,6 +5,7 @@
 
 // ── transaction_types (seeded in init-db/seeds/shared-lookups.sql:27-41) ──
 
+export const INTERNAL_TRANSFER_TYPE = { id: 1, name: "Internal Transfer" } as const;
 export const EXPENSE_TYPE = { id: 2, name: "Expense" } as const;
 export const INCOME_TYPE = { id: 4, name: "Income" } as const;
 export const WORK_EXPENSE_TYPE = { id: 5, name: "Work Expense" } as const;
@@ -14,6 +15,10 @@ export const WORK_EXPENSE_REIMBURSEMENT_TYPE = {
 } as const;
 export const INVESTMENT_TYPE = { id: 10, name: "Investment" } as const;
 export const OPENING_BALANCE_TYPE = { id: 12, name: "Opening Balance" } as const;
+// The two transfer types the balance-transfer picker lists first (Issue #417).
+// Internal Transfer is the type a card-to-card transfer is recorded as; an
+// External Transfer is one from a source the app does not track.
+export const EXTERNAL_TRANSFER_TYPE = { id: 8, name: "External Transfer" } as const;
 
 // ── account_type_categories (seeded in init-db/seeds/shared-lookups.sql:17-25) ──
 
@@ -92,10 +97,12 @@ export const SEED_REFERENCES: ReadonlyArray<SeedReferenceGroup> = [
     idColumn: "transaction_type_id",
     nameColumn: "transaction_type",
     expected: [
+      INTERNAL_TRANSFER_TYPE,
       EXPENSE_TYPE,
       INCOME_TYPE,
       WORK_EXPENSE_TYPE,
       WORK_EXPENSE_REIMBURSEMENT_TYPE,
+      EXTERNAL_TRANSFER_TYPE,
       INVESTMENT_TYPE,
       OPENING_BALANCE_TYPE,
     ],
@@ -129,14 +136,14 @@ export const SHIPPED_ROWS: ReadonlyArray<SeedReferenceGroup> = [
     idColumn: "transaction_type_id",
     nameColumn: "transaction_type",
     expected: [
-      { id: 1, name: "Internal Transfer" },
+      INTERNAL_TRANSFER_TYPE,
       EXPENSE_TYPE,
       { id: 3, name: "Refund" },
       INCOME_TYPE,
       WORK_EXPENSE_TYPE,
       WORK_EXPENSE_REIMBURSEMENT_TYPE,
       { id: 7, name: "Other" },
-      { id: 8, name: "External Transfer" },
+      EXTERNAL_TRANSFER_TYPE,
       // "Amoritized" is misspelled in the seed and in production. Corrected
       // here alone it would fail the shipped-set gate, so it stays as shipped
       // until seed, fixture and constant move together — issue #271.

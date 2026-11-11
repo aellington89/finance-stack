@@ -11,9 +11,11 @@ import {
   DEBT_SERVICE_ROLES,
 } from "@/lib/constants/reporting-roles";
 import {
+  accountHasActivePromo,
   balanceAtDate,
   balanceRowPerAccount,
   categoryIdsWithRoles,
+  promoActiveOn,
   valueList,
 } from "@/lib/queries/_aggregates";
 import { pct, pctOrNull } from "@/lib/queries/_percent";
@@ -48,6 +50,14 @@ export interface AllocationAccountType {
   value: number;
   percentOfParent: number;
   percentOfTotal: number;
+  /**
+   * Set only for a type with at least one account carrying a balance-transfer
+   * promo on the as-of date (Issue #417). `promoValue` is those accounts'
+   * share of `value`, raw sign, and the debt-mix tiles split the type on it.
+   * Absent otherwise, so every other type's shape is unchanged.
+   */
+  hasActivePromo?: true;
+  promoValue?: number;
 }
 
 export interface AllocationCategory {
@@ -75,6 +85,12 @@ export interface PerformanceAccount {
   percentChange: number | null;
   percentOfParent: number;
   percentOfTotal: number;
+  /**
+   * The account's earliest-ending balance-transfer promo active on the period's
+   * end date, for the "‹apr›% until ‹date›" badge (Issue #417). Absent when
+   * none is active.
+   */
+  activePromo?: { apr: number; endDate: string };
 }
 
 export interface PerformanceAccountType {
@@ -181,7 +197,10 @@ export async function getLiabilityAllocation(
       at.account_type_id,
       at.account_type AS account_type_name,
       MAX(abh.balance_date) AS as_of,
-      COALESCE(SUM(abh.cumulative_balance), 0) AS value
+      COALESCE(SUM(abh.cumulative_balance), 0) AS value,
+      COALESCE(SUM(CASE WHEN ${accountHasActivePromo(asOfExpr)}
+        THEN abh.cumulative_balance ELSE 0 END), 0) AS promo_value,
+      BOOL_OR(${accountHasActivePromo(asOfExpr)}) AS has_active_promo
     FROM accounts a
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
@@ -202,6 +221,8 @@ export async function getLiabilityAllocation(
     account_type_name: string;
     as_of: string | null;
     value: string;
+    promo_value: string;
+    has_active_promo: boolean | null;
   };
 
   const rows = result.rows as Row[];
@@ -212,7 +233,12 @@ export async function getLiabilityAllocation(
       categoryId: number;
       categoryName: string;
       value: number;
-      children: { id: number; name: string; value: number }[];
+      children: {
+        id: number;
+        name: string;
+        value: number;
+        promoValue: number | null;
+      }[];
     }
   >();
 
@@ -239,6 +265,9 @@ export async function getLiabilityAllocation(
       id: row.account_type_id,
       name: row.account_type_name,
       value,
+      promoValue: row.has_active_promo
+        ? parseFloat(row.promo_value) || 0
+        : null,
     });
   }
 
@@ -264,6 +293,10 @@ export async function getLiabilityAllocation(
           value: c.value,
           percentOfParent: pct(c.value, cat.value),
           percentOfTotal: pct(c.value, totalLiabilities),
+          ...(c.promoValue !== null && {
+            hasActivePromo: true as const,
+            promoValue: c.promoValue,
+          }),
         }))
         .sort((a, b) => a.value - b.value),
     }))
@@ -301,18 +334,31 @@ export async function getLiabilityPerformance(
       a.account_id,
       a.account_name,
       ${balanceAtDate(dateFrom, "start_balance")},
-      ${balanceAtDate(endDate, "end_balance")}
+      ${balanceAtDate(endDate, "end_balance")},
+      promo.promo_end_date,
+      promo.promo_apr
     FROM account_balance_history abh
     JOIN accounts a ON a.account_id = abh.account_id
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
+    -- The badge's promo: the earliest-ending one active on the end date.
+    LEFT JOIN LATERAL (
+      SELECT bt.promo_end_date, bt.promo_apr
+      FROM balance_transfers bt
+      JOIN transactions p ON p.transaction_id = bt.transfer_transaction_id
+      WHERE p.account_id = a.account_id
+        AND ${promoActiveOn(endDate)}
+      ORDER BY bt.promo_end_date, bt.balance_transfer_id
+      LIMIT 1
+    ) promo ON true
     WHERE atc.account_type_category_id IN (${LIABILITY_IDS})
       AND abh.balance_date IN (${dateFrom}::date, ${endDate}::date)
     GROUP BY
       atc.account_type_category_id, atc.account_type_category,
       at.account_type_id, at.account_type,
-      a.account_id, a.account_name
+      a.account_id, a.account_name,
+      promo.promo_end_date, promo.promo_apr
     ORDER BY atc.account_type_category_id, at.account_type_id, a.account_id
   `);
 
@@ -325,6 +371,8 @@ export async function getLiabilityPerformance(
     account_name: string;
     start_balance: string;
     end_balance: string;
+    promo_end_date: string | null;
+    promo_apr: string | null;
   };
 
   const rows = result.rows as Row[];
@@ -348,6 +396,7 @@ export async function getLiabilityPerformance(
             accountName: string;
             currentValue: number;
             startValue: number;
+            activePromo?: { apr: number; endDate: string };
           }[];
         }
       >;
@@ -390,6 +439,12 @@ export async function getLiabilityPerformance(
       accountName: row.account_name,
       currentValue,
       startValue,
+      ...(row.promo_end_date !== null && {
+        activePromo: {
+          apr: parseFloat(row.promo_apr ?? "0"),
+          endDate: row.promo_end_date,
+        },
+      }),
     });
   }
 
@@ -425,6 +480,7 @@ export async function getLiabilityPerformance(
                 percentChange: pctOrNull(change, Math.abs(a.startValue)),
                 percentOfParent: pct(a.currentValue, t.currentValue),
                 percentOfTotal: pct(a.currentValue, totalCurrentValue),
+                ...(a.activePromo && { activePromo: a.activePromo }),
               };
             })
             // Largest debt by magnitude first.
