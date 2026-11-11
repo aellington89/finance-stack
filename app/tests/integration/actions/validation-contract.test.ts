@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import * as accountActions from "@/lib/actions/account";
 import * as transactionActions from "@/lib/actions/transaction";
 import * as categoryActions from "@/lib/actions/categories";
+import * as balanceTransferActions from "@/lib/actions/balance-transfer";
 import type { ActionState } from "@/lib/actions/utils";
 
 /**
@@ -50,6 +51,16 @@ const TXN_FIELDS = {
 };
 
 const TXN_ID_FIELDS = ["accountId", "transactionTypeId", "transactionCategoryId"];
+
+const BALANCE_TRANSFER_FIELDS = {
+  accountId: "1",
+  transferTransactionId: "1",
+  feeTransactionId: "2",
+  promoEndDate: "2027-01-01",
+  promoApr: "0",
+};
+
+const BALANCE_TRANSFER_ID_FIELDS = ["accountId", "transferTransactionId", "feeTransactionId"];
 
 const REGISTRY: Record<string, ActionCase> = {
   // ── transactions ──
@@ -163,6 +174,23 @@ const REGISTRY: Record<string, ActionCase> = {
     valid: { accountTypeId: "1" },
     idFields: ["accountTypeId"],
   },
+
+  // ── balance transfers (Issue #417) ──
+  createBalanceTransfer: {
+    action: balanceTransferActions.createBalanceTransfer,
+    valid: BALANCE_TRANSFER_FIELDS,
+    idFields: BALANCE_TRANSFER_ID_FIELDS,
+  },
+  updateBalanceTransfer: {
+    action: balanceTransferActions.updateBalanceTransfer,
+    valid: { balanceTransferId: "1", ...BALANCE_TRANSFER_FIELDS },
+    idFields: ["balanceTransferId", ...BALANCE_TRANSFER_ID_FIELDS],
+  },
+  deleteBalanceTransfer: {
+    action: balanceTransferActions.deleteBalanceTransfer,
+    valid: { balanceTransferId: "1" },
+    idFields: ["balanceTransferId"],
+  },
 };
 
 /**
@@ -208,11 +236,12 @@ function expectCleanRejection(result: ActionState) {
 }
 
 describe("server action validation contract", () => {
-  it("covers every action the three modules export", () => {
+  it("covers every action the four modules export", () => {
     const exported = [
       ...exportedActionNames(accountActions),
       ...exportedActionNames(transactionActions),
       ...exportedActionNames(categoryActions),
+      ...exportedActionNames(balanceTransferActions),
     ].sort();
 
     // Fails when an action is added without a row above. Add the row (and a
