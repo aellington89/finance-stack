@@ -6,6 +6,7 @@ import {
   formatPercentChange,
   formatCurrency,
   formatCurrencyCompact,
+  formatApr,
 } from "@/lib/format/financial";
 
 describe("signedCurrency", () => {
@@ -98,5 +99,17 @@ describe("formatCurrencyCompact", () => {
 
   it("carries the sign", () => {
     expect(formatCurrencyCompact(-2400)).toBe("-$2.4K");
+  });
+});
+
+describe("formatApr", () => {
+  it.each([
+    [0, "0%"],
+    [3.99, "3.99%"],
+    [3.99000001, "3.99%"],
+    [29.999, "29.999%"],
+    [100, "100%"],
+  ])("formats %s as %s", (apr, expected) => {
+    expect(formatApr(apr)).toBe(expected);
   });
 });

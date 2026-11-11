@@ -1,8 +1,19 @@
 import { notFound } from "next/navigation";
 import { getAccountById, getAccountTypes } from "@/lib/queries/accounts";
+import {
+  getBalanceTransferCandidates,
+  getBalanceTransfersForAccount,
+} from "@/lib/queries/balance-transfers";
+import { LIABILITY_CATEGORY_IDS } from "@/lib/queries/liability-categories";
 import { parseEntityId } from "@/lib/validations/id";
 import { AccountForm } from "@/components/accounts/account-form";
 import { DeleteAccountDialog } from "@/components/accounts/delete-account-dialog";
+import { BalanceTransfersCard } from "@/components/accounts/balance-transfers-card";
+import {
+  createBalanceTransfer,
+  deleteBalanceTransfer,
+  updateBalanceTransfer,
+} from "@/lib/actions/balance-transfer";
 import {
   Card,
   CardContent,
@@ -32,8 +43,20 @@ export default async function EditAccountPage({
 
   if (!account) notFound();
 
+  // Balance transfers are a liability concept (Issue #417): the section is not
+  // rendered for an asset account, and the actions refuse one regardless.
+  const isLiability = (LIABILITY_CATEGORY_IDS as readonly number[]).includes(
+    account.accountTypeCategoryId
+  );
+  const [transfers, candidates] = isLiability
+    ? await Promise.all([
+        getBalanceTransfersForAccount(accountId),
+        getBalanceTransferCandidates(accountId),
+      ])
+    : [[], []];
+
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Edit Account</CardTitle>
@@ -46,6 +69,17 @@ export default async function EditAccountPage({
           <AccountForm accountTypes={accountTypes} account={account} />
         </CardContent>
       </Card>
+
+      {isLiability && (
+        <BalanceTransfersCard
+          accountId={account.accountId}
+          transfers={transfers}
+          candidates={candidates}
+          createAction={createBalanceTransfer}
+          updateAction={updateBalanceTransfer}
+          deleteAction={deleteBalanceTransfer}
+        />
+      )}
     </div>
   );
 }

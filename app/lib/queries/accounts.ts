@@ -92,6 +92,8 @@ export interface AccountRow {
   accountTypeId: number;
   accountType: string;
   accountTypeCategory: string;
+  /** The category's id, which is what code tests (e.g. "is this a liability"). */
+  accountTypeCategoryId: number;
   accountIdentifier: string | null;
   openedDate: string | null;
   closedDate: string | null;
@@ -108,6 +110,7 @@ export async function getAccountById(
       accountTypeId: accounts.accountTypeId,
       accountType: accountTypes.accountType,
       accountTypeCategory: accountTypeCategories.accountTypeCategory,
+      accountTypeCategoryId: accountTypeCategories.accountTypeCategoryId,
       accountIdentifier: accounts.accountIdentifier,
       openedDate: accounts.openedDate,
       closedDate: accounts.closedDate,
