@@ -62,3 +62,11 @@ export function amountColorClass(n: number): string {
 // Render an em-dash so the column reads cleanly without claiming 0% or ∞%.
 export const formatPercentChange = (n: number | null): string =>
   n === null ? "—" : signedPercent(n);
+
+/**
+ * An APR as the issuer states it: "0%", "3.99%", "29.999%". `promo_apr` is
+ * numeric(6,3), so it arrives as "3.990"; trailing zeros are dropped rather
+ * than padded to a fixed precision (Issue #417).
+ */
+export const formatApr = (apr: number): string =>
+  `${Number(apr.toFixed(3))}%`;

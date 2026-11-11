@@ -18,3 +18,10 @@ export const parseChartDate = (dateStr: string): Date =>
  */
 export const formatAxisDate = (dateStr: string): string =>
   format(parseChartDate(dateStr), "MMM d");
+
+/**
+ * The long form — "Apr 19, 2027" — for a date that may be years out, such as
+ * a balance-transfer promo's end date (Issue #417).
+ */
+export const formatLongDate = (dateStr: string): string =>
+  format(parseChartDate(dateStr), "MMM d, yyyy");

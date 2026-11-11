@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseChartDate, formatAxisDate } from "@/lib/format/dates";
+import { parseChartDate, formatAxisDate, formatLongDate } from "@/lib/format/dates";
 
 describe("parseChartDate", () => {
   // The whole reason the helper exists: `new Date("2026-04-19")` is parsed as
@@ -30,5 +30,15 @@ describe("formatAxisDate", () => {
 
   it("reports the stored day rather than the UTC-shifted one", () => {
     expect(formatAxisDate("2026-01-01")).toBe("Jan 1");
+  });
+});
+
+describe("formatLongDate", () => {
+  it("renders month, day and year", () => {
+    expect(formatLongDate("2027-03-14")).toBe("Mar 14, 2027");
+  });
+
+  it("reports the stored day rather than the UTC-shifted one", () => {
+    expect(formatLongDate("2027-01-01")).toBe("Jan 1, 2027");
   });
 });

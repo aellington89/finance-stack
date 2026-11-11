@@ -31,6 +31,8 @@ interface DeleteEntityDialogProps {
   itemIdFieldName: string;
   itemName: string;
   entityLabel: string;
+  /** An extra sentence after the confirmation, e.g. what the delete leaves alone. */
+  detail?: string;
 }
 
 function DeleteButton() {
@@ -50,6 +52,7 @@ export function DeleteEntityDialog({
   itemIdFieldName,
   itemName,
   entityLabel,
+  detail,
 }: DeleteEntityDialogProps) {
   const [state, formAction] = useActionState(action, initialState);
 
@@ -71,7 +74,7 @@ export function DeleteEntityDialog({
           <DialogTitle>Delete {entityLabel}</DialogTitle>
           <DialogDescription>
             Are you sure you want to delete <strong>{itemName}</strong>? This
-            action cannot be undone.
+            action cannot be undone.{detail && <> {detail}</>}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
