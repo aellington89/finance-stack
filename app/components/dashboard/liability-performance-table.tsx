@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import { BadgePercent } from "lucide-react";
 import type { LiabilityPerformanceData } from "@/lib/queries/liabilities-drilldown";
 import {
   signedCurrency,
@@ -23,7 +24,9 @@ import {
 } from "@/components/ui/card";
 import { ExpandToggle } from "@/components/dashboard/expand-toggle";
 import { SignedChange } from "@/components/dashboard/signed-change";
-import { formatCurrency } from "@/lib/format/financial";
+import { formatApr, formatCurrency } from "@/lib/format/financial";
+import { formatLongDate } from "@/lib/format/dates";
+import { Badge } from "@/components/ui/badge";
 
 interface LiabilityPerformanceTableProps {
   data: LiabilityPerformanceData;
@@ -171,7 +174,21 @@ export function LiabilityPerformanceTable({
                                 data-testid={`row-acc:${acc.accountId}`}
                               >
                                 <TableCell className="text-muted-foreground pl-14">
-                                  {acc.accountName}
+                                  {acc.activePromo ? (
+                                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                                      <span>{acc.accountName}</span>
+                                      {/* Text and an icon, not colour alone
+                                          (Issue #144): the badge reads the same
+                                          to a screen reader as it looks. */}
+                                      <Badge variant="outline">
+                                        <BadgePercent aria-hidden />
+                                        {formatApr(acc.activePromo.apr)} until{" "}
+                                        {formatLongDate(acc.activePromo.endDate)}
+                                      </Badge>
+                                    </span>
+                                  ) : (
+                                    acc.accountName
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   {formatCurrency(acc.currentValue)}

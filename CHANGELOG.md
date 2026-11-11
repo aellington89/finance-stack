@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Migration:** backward-compatible
 
+### Added
+
+- **Balance-transfer cards are tracked separately from revolving cards.** ([Issue #417](https://github.com/aellington89/finance-stack/issues/417)) A liability account's edit page has a new **Balance transfers** section. To record a transfer, pick its posting on the card (transfers are listed first), then pick its fee, which can also be "No separate fee". The only things typed are the promo's end date and its APR, which can be 0% or a reduced rate such as 3.99%. A transfer that happened in the past is recorded the same way, from the transactions already in the ledger. A card counts as promotional from the posting's date until the end date, and it reverts to revolving on that date with nothing to remember to change.
+
+  The Liabilities page changes in three places while a promo is active on the range's end date:
+  - **A Balance Transfers card** shows, per card:
+    - the transfer, its source and its fee;
+    - the months left and what is still owed;
+    - the monthly paydown needed to clear it in time, amortized at the promo rate when that is above 0%;
+    - the actual pace over the last 3 months and over the selected range;
+    - what would be left at expiry;
+    - a status: *On track*, *Behind*, *Expires in N days* (within 90 days) or *Too new to project*.
+  - **The Debt Mix tile** of each such account type splits into "‹type› — balance transfer" and "‹type› — revolving".
+  - **The Liability Performance table** badges the account "‹rate›% until ‹date›".
+
+  Linking a transfer changes no balance, expense or Debt Service total. While a promo is active the card's whole balance counts as promotional, including new purchases, so the needed paydown is conservative for a card that is also used for purchases. A transaction that is a transfer's posting can't be deleted until the transfer is removed. Deleting a linked fee just unlinks it. [Database → Balance Transfers](docs/database.md#balance-transfers) has the model and its limits.
+
+  The migration adds one table, `balance_transfers`, with an audit trigger. Metabase's `finance_bi` role can read it, and the importer's role can't. The previous app version never reads the table, so rolling back by re-pinning the previous image is safe: on that version, deleting a linked fee still unlinks it, and deleting a linked posting fails with its generic error.
+
 ## [1.3.0] - 2026-11-08
 
 **Migration:** backward-compatible

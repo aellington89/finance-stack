@@ -16,7 +16,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `users` | Sign-in accounts (see [Authentication](auth.md)) |
 | `audit_log` | Who changed what, with before/after row state. Written **only** by a database trigger, never by the app — see [Audit Log](audit-log.md) |
 | `import_log` | One row per file the importer has attempted, with its sha256 and outcome. Append-only; drives import idempotency and quarantine — see [Importer](importer.md#idempotency) |
-| `balance_transfers` | One row per balance transfer on a liability card: the promo's end date and APR, a link to the transfer's posting, and an optional link to its fee. Everything else is read from the posting at query time (Issue #417) |
+| `balance_transfers` | One row per balance transfer on a liability card: the promo's end date and APR, a link to the transfer's posting, and an optional link to its fee. Everything else is read from the posting — see [Balance Transfers](#balance-transfers) |
 
 ## Views
 
@@ -45,6 +45,41 @@ Run it after an import, or any time balances look wrong. It rebuilds every accou
 The `Finances_Test` database has its balance history built automatically as part of the first-launch seed (see below).
 
 **Reading an account's latest balance.** Join one row per account with `balanceRowPerAccount()` in [`_aggregates.ts`](../app/lib/queries/_aggregates.ts), a `LATERAL` probe of `idx_abh_account_date`. `v_account_balances_current` uses the same shape. Don't filter on `balance_date = (SELECT MAX(balance_date) … WHERE account_id = abh.account_id)`. It returns the same rows, but Postgres evaluates it once per history row, so its cost grows every day: on a production-sized dataset it was 25–72 ms per query, against ~0.1 ms (Issue #126).
+
+## Balance Transfers
+
+A card carrying a promotional balance (0%, or a reduced rate such as 3.99%) is a different kind of debt from one revolving at its standard APR. The question it raises is whether it will be cleared before the promo ends (Issue #417). `balance_transfers` records that, as dated rows rather than as an account type: a type is user data that code can't read meaning from, and a promo ends while a type doesn't.
+
+**The row is an annotation on the ledger, not a second ledger.** Both legs of the transfer and its fee stay ordinary `transactions`, recorded exactly as before. The row adds only what the ledger can't know:
+
+| Column | Holds |
+|---|---|
+| `transfer_transaction_id` | The transfer's leg on the receiving card: `account_id` is the card, the amount is negative, and `related_account_id` is the source card (`NULL` when the source isn't tracked). `NOT NULL UNIQUE`, `ON DELETE RESTRICT` |
+| `fee_transaction_id` | The fee as it posted, an ordinary Expense on the same card. `NULL` when there was no separate fee. `UNIQUE`, `ON DELETE SET NULL` |
+| `promo_end_date` | The first day the promo no longer applies |
+| `promo_apr` | `numeric(6,3)`, 0–100 |
+
+The card, the amount, the source and the start date are **read from the posting at query time**. Correct the posting and the transfer follows. Each read also re-checks the posting: one moved to an asset account, or edited into a credit, drops out rather than being misreported. A fee counts only while it sits on the same card as its posting.
+
+**Active on `[posting date, promo_end_date)`.** The posting's own day counts and the end day doesn't. A card is promotional while one of its transfers is active, and it reverts to revolving the day the promo ends, worked out from dates rather than stored. The rule is written once, as `promoActiveOn()` and `accountHasActivePromo()` in [`_aggregates.ts`](../app/lib/queries/_aggregates.ts). The Liabilities drilldown's Balance Transfers card, its debt-mix split and its performance-table badge all ask it that way.
+
+**Deleting.** A linked posting can't be deleted. `deleteTransaction()` refuses with "Remove the transfer first", and the `RESTRICT` key backs that up for any other writer (SQLSTATE 23001). Deleting a linked fee unlinks it. The transfer survives with no fee, and the `SET NULL` update is audited like any other change. Deleting the transfer itself, from the account's edit page, removes only the terms.
+
+**The payoff math** lives in [`balance-transfer-payoff.ts`](../app/lib/queries/balance-transfer-payoff.ts), with every boundary unit-tested:
+
+- **Required/mo** is the payment that clears the balance by the end date: balance ÷ months at 0%, and the amortized payment at a promo APR above 0.
+- **Pace** is the card's net balance change per month (window days ÷ 30.44), measured over two windows:
+  - the trailing 3 months;
+  - the selected range.
+
+  Both are taken from balance history, so new purchases count against it. Both leave out the transfer's own posting and fee, and both show "—" for a window under 30 days.
+- **Projection and status** use the 3-month pace. Status is "Expires in N days" within 90 days, ahead of on-track or behind.
+
+**Known v1 limitations.**
+
+- While a promo is active, the card's **whole** balance counts as promotional, including purchases at the standard APR. Separating them would mean modelling how issuers allocate payments, so the required paydown is conservative for a card that's also used for purchases.
+- A card with several overlapping transfers gets **one** tracker row, keyed to its earliest-ending promo. Balance and pace are card-level facts, so per-transfer rows would double-count them.
+- Above 0%, interest is approximated at the nominal monthly rate (APR ÷ 12) on the current balance. It is not daily compounding, and not the interest postings in the ledger.
 
 ## First-Launch Database Initialization
 
@@ -127,6 +162,7 @@ The top-right cell is the one that matters. It is not a bucket you file things i
 | `transaction_categories` — all other rows | Pure user data | Includes the ~15 the Liabilities drilldown reads, which opt in via `reporting_role` rather than by being named in code — see below |
 | `transaction_categories` / `accounts` rows an importer parser names | Pure user data | The parser resolves them **by name** at import time and fails loudly when one is absent. Not shipped, not protected, not id-pinned — see [the importer's lookup names](#the-importers-lookup-names) |
 | `account_types` rows | Pure user data | `liquidity_class` gets a seeded *default* per known name, via `UPDATE … WHERE liquidity_class IS NULL`, but the rows are yours |
+| `balance_transfers` rows | Pure user data | Nothing depends on a specific row. "This card is promotional" is read from the table's dates, not from an account type the user named, which is where a "Balance Transfer Card" type would have put it: the defect cell (Issue #417) |
 
 **The case that used to be unresolved.** The Liabilities drilldown filtered on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treated them as app-owned reference data, which put them squarely in the top-right cell. Shipping them was rejected: it would bake one person's loan portfolio into every install and still leave the set unextensible without a code change.
 
