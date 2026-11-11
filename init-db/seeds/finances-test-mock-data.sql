@@ -146,7 +146,7 @@ UPDATE transaction_categories SET reporting_role = 'debt_cash_paydown'
     WHERE reporting_role IS NULL AND transaction_category_id IN (29);
 
 -- --------------------------------------------
--- 3. accounts (8 rows — all opened 18 months ago so the 12-month
+-- 3. accounts (9 rows — all opened 18 months ago so the 12-month
 --    transaction window falls cleanly inside each account's lifetime)
 -- --------------------------------------------
 INSERT INTO accounts (account_id, account_name, account_type_id, account_identifier, closed_date, opened_date) VALUES
@@ -157,7 +157,9 @@ INSERT INTO accounts (account_id, account_name, account_type_id, account_identif
     (5, 'Test Auto Loan - Toyota',  19,  '5678901234',       NULL, (CURRENT_DATE - INTERVAL '18 months')::date),
     (6, 'Test Retirement - 401K',   13,  'R-1234567',        NULL, (CURRENT_DATE - INTERVAL '18 months')::date),
     (7, 'Test Savings - Vacation',   3,  '9012345603',       NULL, (CURRENT_DATE - INTERVAL '18 months')::date),
-    (8, 'Test Brokerage',           12,  'B-7654321',        NULL, (CURRENT_DATE - INTERVAL '18 months')::date)
+    (8, 'Test Brokerage',           12,  'B-7654321',        NULL, (CURRENT_DATE - INTERVAL '18 months')::date),
+    -- The balance-transfer card (Issue #417); its activity is section 4b.
+    (9, 'Test Credit Card - Discover', 15, '6011222233334444', NULL, (CURRENT_DATE - INTERVAL '18 months')::date)
 ON CONFLICT (account_id) DO NOTHING;
 
 -- --------------------------------------------
@@ -396,6 +398,65 @@ BEGIN
     FROM generate_series(0, 11) n
     WHERE (month0 + (n * INTERVAL '1 month') + INTERVAL '20 days')::date <= CURRENT_DATE;
 END $$;
+
+-- --------------------------------------------
+-- 4b. A balance transfer (Issue #417): Visa → Discover, linked in
+--     balance_transfers along with its fee.
+--
+-- A separate block with its own guard, rather than part of section 4, so it
+-- also reaches a Finances_Test that already holds the section-4 rows: that
+-- block returns early on any existing transaction, and this one would never
+-- be applied to an existing database if it lived there.
+--
+-- Shape, all relative to CURRENT_DATE:
+--   - an Internal Transfer pair four months ago: Visa +1,200 (the source is
+--     paid down), Discover -1,200 (the receiving leg, the one that is linked);
+--   - a 3% fee three days later, as an ordinary Expense on Discover;
+--   - $60 monthly payments from checking since then, so the pace is real;
+--   - an 18-month 0% promo, so the transfer is active at seed time.
+--
+-- Category 1 (Credit Card Payment) carries no reporting role, so the transfer
+-- pair moves no Debt Service total. It nets to zero across liabilities. The fee
+-- (category 79) adds $36 to fixture liabilities and expenses, and the
+-- payments move checking. No test asserts fixture totals: the drilldown suites
+-- use their own 2020-dated rows, and latest-balance asserts deltas.
+-- --------------------------------------------
+DO $$
+DECLARE
+    posting_date date := (CURRENT_DATE - INTERVAL '4 months')::date;
+BEGIN
+    IF EXISTS (SELECT 1 FROM transactions
+               WHERE account_id = 9 AND transaction_description = 'Balance Transfer from Visa') THEN
+        RAISE NOTICE 'Finances_Test balance transfer already present — skipping.';
+        RETURN;
+    END IF;
+
+    INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id) VALUES
+        ('Balance Transfer to Discover', posting_date,                         3,  1200.00, 9,    1, 1),
+        ('Balance Transfer from Visa',   posting_date,                         9, -1200.00, 3,    1, 1),
+        ('Balance Transfer Fee',         (posting_date + INTERVAL '3 days')::date, 9, -36.00, NULL, 2, 79);
+
+    INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
+    SELECT 'Payment to Discover', (posting_date + (n * INTERVAL '1 month'))::date,
+           1, -60.00, 9, 1, 1
+    FROM generate_series(1, 4) n
+    WHERE (posting_date + (n * INTERVAL '1 month'))::date <= CURRENT_DATE;
+
+    INSERT INTO transactions (transaction_description, transaction_date, account_id, amount, related_account_id, transaction_type_id, transaction_category_id)
+    SELECT 'Payment from Checking', (posting_date + (n * INTERVAL '1 month'))::date,
+           9, 60.00, 1, 1, 29
+    FROM generate_series(1, 4) n
+    WHERE (posting_date + (n * INTERVAL '1 month'))::date <= CURRENT_DATE;
+END $$;
+
+-- Idempotent on its own: both links are UNIQUE, so a re-run inserts nothing.
+INSERT INTO balance_transfers (transfer_transaction_id, fee_transaction_id, promo_end_date, promo_apr)
+SELECT p.transaction_id, f.transaction_id, (p.transaction_date + INTERVAL '18 months')::date, 0
+FROM transactions p
+JOIN transactions f
+  ON f.account_id = 9 AND f.transaction_description = 'Balance Transfer Fee'
+WHERE p.account_id = 9 AND p.transaction_description = 'Balance Transfer from Visa'
+ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------
 -- 5. Advance IDENTITY sequences past the highest explicit IDs.

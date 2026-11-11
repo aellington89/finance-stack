@@ -55,7 +55,7 @@ The migrate service:
 0. Creates the databases — `Finances` (or whatever `FINANCE_APP_DB` names), `Finances_Test`, and the Metabase metadata role + database — from [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql). Metabase is provisioned only when `MB_DB_PASS` is non-empty; leave it blank and that role and database are skipped. **This runs on every `docker compose up`, not only the first**, which is the point of it living here: it used to be a postgres initdb hook, which runs once on an empty data volume and never again, so a database added later would never appear on an existing volume.
 1. Creates the least-privilege service roles, then applies pending Drizzle migrations from [`app/drizzle/migrations/`](../app/drizzle/migrations/) to both `Finances` and `Finances_Test` and grants each role its privileges — see [Roles & Privileges](#roles--privileges).
 2. Seeds the **app-owned reference rows** (all of `account_type_categories` and `transaction_types`, plus the single `transaction_categories` row id 6 `Other`) into both databases so they start in sync — see [Seed-data taxonomy](#seed-data-taxonomy) for why that one category row ships and the rest do not. This runs on **every** migrate run, not only on an empty database: the seed is purely additive (`ON CONFLICT DO NOTHING`, `setval`, and `UPDATE`s guarded by `WHERE liquidity_class IS NULL`), so **existing Finances user data is never overwritten** and a reference row added to the seed after your database was first created is backfilled automatically. See [Repairing seed drift](#repairing-seed-drift).
-3. Seeds `Finances_Test` with mock data: all 19 `account_types`, 44 `transaction_categories`, 8 accounts, and ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time.
+3. Seeds `Finances_Test` with mock data: all 19 `account_types`, 44 `transaction_categories`, 9 accounts, ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time, and one active balance transfer (Visa → Discover, with its fee) linked in `balance_transfers`.
 4. Rebuilds `Finances_Test.account_balance_history` so balances are up-to-date as of today.
 
 `finance-app` and `importer` wait on `migrate: service_completed_successfully` before starting. After the migrate service exits, a fresh `Finances` contains only the shared lookups and is ready for the user (or the importer) to populate via normal application use; an existing `Finances` has its lookups reconciled against the current seed and is otherwise untouched. `Finances_Test` contains a full year of mock activity usable by integration tests and for UI development.
@@ -406,7 +406,7 @@ Use **`finance_bi`**, with `FINANCE_BI_DB_PASSWORD`. It is the one role for this
 | File | Purpose |
 |---|---|
 | `shared-lookups.sql` | 6 account type categories + 12 transaction types + the one app-owned transaction category (id 6 `Other`), plus `account_types.liquidity_class` defaults for the known asset type names (runs against both DBs, on every migrate run) |
-| `finances-test-mock-data.sql` | 19 account types, 44 categories, 8 accounts, ~400 transactions with dates derived from `CURRENT_DATE` |
+| `finances-test-mock-data.sql` | 19 account types, 44 categories, 9 accounts, ~400 transactions with dates derived from `CURRENT_DATE`, and one balance transfer with its fee |
 | `rebuild-balance-history.sql` | Mirrors `scripts/update-account-balance-history.sql`, runs against `Finances_Test` at seed time |
 
 ### Refreshing Finances_Test (dates age out)
