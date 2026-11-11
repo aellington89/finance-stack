@@ -5,10 +5,12 @@ import {
   getLiabilityPerformance,
   getLiabilityTrendDecomposition,
 } from "@/lib/queries/liabilities-drilldown";
+import { getActiveBalanceTransfers } from "@/lib/queries/balance-transfers";
 import { LiabilityAllocationChart } from "@/components/charts/liability-allocation-chart";
 import { LiabilitiesTimeSeriesChart } from "@/components/charts/liabilities-timeseries-chart";
 import { DebtWaterfallChart } from "@/components/charts/debt-waterfall-chart";
 import { DebtMixBreakdown } from "@/components/dashboard/debt-mix-breakdown";
+import { BalanceTransferTracker } from "@/components/dashboard/balance-transfer-tracker";
 import { DebtServiceSummary } from "@/components/dashboard/debt-service-summary";
 import { TrendIcon } from "@/components/dashboard/signed-change";
 import { LiabilityPerformanceTable } from "@/components/dashboard/liability-performance-table";
@@ -63,14 +65,21 @@ export default async function LiabilitiesDrilldownPage({
   // layout's call does not guarantee that (Issue #408). See ensureTodayBalances().
   await ensureTodayBalances();
 
-  const [allocation, performance, decomposition, debtService, waterfall] =
-    await Promise.all([
-      getLiabilityAllocation(dateTo),
-      getLiabilityPerformance(dateFrom, dateTo),
-      getLiabilityTrendDecomposition(dateFrom, dateTo),
-      getDebtServiceSummary(dateFrom, dateTo),
-      getDebtWaterfall(dateFrom, dateTo),
-    ]);
+  const [
+    allocation,
+    performance,
+    decomposition,
+    debtService,
+    waterfall,
+    balanceTransfers,
+  ] = await Promise.all([
+    getLiabilityAllocation(dateTo),
+    getLiabilityPerformance(dateFrom, dateTo),
+    getLiabilityTrendDecomposition(dateFrom, dateTo),
+    getDebtServiceSummary(dateFrom, dateTo),
+    getDebtWaterfall(dateFrom, dateTo),
+    getActiveBalanceTransfers(dateFrom, dateTo),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -141,6 +150,12 @@ export default async function LiabilitiesDrilldownPage({
       </div>
 
       <DebtMixBreakdown data={allocation} />
+
+      {/* Only when a promo is active on the range's end date (Issue #417), so
+          the page is unchanged for anyone without a balance transfer. */}
+      {balanceTransfers.length > 0 && (
+        <BalanceTransferTracker rows={balanceTransfers} />
+      )}
 
       <div className="h-[400px]">
         <DebtWaterfallChart data={waterfall} />

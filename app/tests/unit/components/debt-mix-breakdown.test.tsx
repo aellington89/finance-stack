@@ -101,3 +101,62 @@ describe("DebtMixBreakdown", () => {
     ).toHaveLength(2);
   });
 });
+
+// Issue #417: the halves of a promo-split type render as their own tiles and
+// bar segments, keyed apart, and an unsplit type keeps its old test id.
+describe("DebtMixBreakdown — promo split", () => {
+  const data: LiabilityAllocationData = {
+    totalLiabilities: -4000,
+    currentLiabilities: -4000,
+    nonCurrentLiabilities: 0,
+    asOf: "2026-05-02",
+    byCategory: [
+      {
+        categoryId: 5,
+        categoryName: "Current Liability",
+        value: -4000,
+        percentOfTotal: 100,
+        children: [
+          {
+            accountTypeId: 15,
+            accountTypeName: "Credit Card",
+            value: -3000,
+            percentOfParent: 75,
+            percentOfTotal: 75,
+            hasActivePromo: true,
+            promoValue: -1000,
+          },
+          {
+            accountTypeId: 16,
+            accountTypeName: "Store Card",
+            value: -1000,
+            percentOfParent: 25,
+            percentOfTotal: 25,
+          },
+        ],
+      },
+    ],
+  };
+
+  it("renders both halves by name, with their own test ids", () => {
+    render(<DebtMixBreakdown data={data} />);
+
+    expect(screen.getByTestId("debt-mix-tile-15-revolving")).toHaveTextContent(
+      "Credit Card — revolving-$2,000.0050.0%"
+    );
+    expect(screen.getByTestId("debt-mix-tile-15-balance_transfer")).toHaveTextContent(
+      "Credit Card — balance transfer-$1,000.0025.0%"
+    );
+    expect(screen.getByTestId("debt-mix-tile-16")).toHaveTextContent("Store Card");
+    expect(screen.queryByTestId("debt-mix-tile-15")).not.toBeInTheDocument();
+  });
+
+  it("stripes the balance-transfer bar segment and names it in its title", () => {
+    render(<DebtMixBreakdown data={data} />);
+
+    const bt = screen.getByTestId("debt-mix-bar-15-balance_transfer");
+    expect(bt.style.backgroundImage).toContain("repeating-linear-gradient");
+    expect(bt).toHaveAttribute("title", "Credit Card — balance transfer: 25.0%");
+    expect(screen.getByTestId("debt-mix-bar-15-revolving").style.backgroundImage).toBe("");
+  });
+});

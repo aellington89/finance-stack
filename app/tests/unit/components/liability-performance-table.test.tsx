@@ -139,3 +139,44 @@ describe("LiabilityPerformanceTable", () => {
     expect(screen.getByTestId("row-cat:5")).toBeInTheDocument();
   });
 });
+
+// Issue #417: an account on an active balance-transfer promo carries a badge
+// naming the rate and its end date, in text, with the icon hidden.
+describe("LiabilityPerformanceTable — promo badge", () => {
+  const withPromo = (apr: number): LiabilityPerformanceData => {
+    const copy = structuredClone(data);
+    copy.categories[0].accountTypes[0].accounts[0].activePromo = {
+      apr,
+      endDate: "2027-03-14",
+    };
+    return copy;
+  };
+
+  const openAccounts = async () => {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Current Liability" }));
+    await user.click(screen.getByRole("button", { name: "Credit Card" }));
+  };
+
+  it("badges a promotional account with its rate and end date", async () => {
+    render(<LiabilityPerformanceTable data={withPromo(0)} />);
+    await openAccounts();
+
+    const row = screen.getByTestId("row-acc:42");
+    expect(within(row).getByText("Visa ...1234")).toBeInTheDocument();
+    expect(row).toHaveTextContent("0% until Mar 14, 2027");
+    expect(row.querySelector("svg.lucide-badge-percent")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("shows a non-zero promo rate as stated", async () => {
+    render(<LiabilityPerformanceTable data={withPromo(3.99)} />);
+    await openAccounts();
+    expect(screen.getByTestId("row-acc:42")).toHaveTextContent("3.99% until Mar 14, 2027");
+  });
+
+  it("shows no badge on an account without a promo", async () => {
+    render(<LiabilityPerformanceTable data={data} />);
+    await openAccounts();
+    expect(screen.getByTestId("row-acc:42")).not.toHaveTextContent("until");
+  });
+});

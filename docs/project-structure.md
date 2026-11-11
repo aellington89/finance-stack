@@ -82,6 +82,7 @@ finance-stack/
 │   │       ├── 0000_baseline.sql         # Baseline matching current prod schema
 │   │       ├── 0003_add_users_table.sql  # users table for authentication (#120)
 │   │       ├── 0004_add_audit_log.sql    # audit_log + the audit_row_change() trigger, hand-appended (#180)
+│   │       ├── 0010_add_balance_transfers.sql # balance_transfers + its audit trigger, hand-appended (#417)
 │   │       └── meta/                     # Drizzle migration journal and snapshots
 │   │           ├── _journal.json         # Ordered list of applied migrations (idx, tag, breakpoints)
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
@@ -120,6 +121,9 @@ finance-stack/
 │   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse
 │   │   │   ├── accounts-by-category.tsx  # Grouped card view: Assets (2x2) + Liabilities, with per-type + icon
 │   │   │   ├── account-form.tsx          # Create/edit account form with combobox type selector
+│   │   │   ├── balance-transfers-card.tsx # Edit page's Balance transfers section on liability accounts: list + add/edit/delete dialogs (#417)
+│   │   │   ├── balance-transfer-dialog.tsx # Add/edit dialog: posting + fee pickers, promo end date + APR (#417)
+│   │   │   ├── balance-transfer-candidates.ts # What the two pickers offer, and in what order, unit-tested (#417)
 │   │   │   └── delete-account-dialog.tsx # Delete confirmation dialog with transaction check
 │   │   ├── settings/                     # Settings page components
 │   │   │   ├── entity-card.tsx           # Reusable card for flat entities (name-only CRUD)
@@ -138,7 +142,8 @@ finance-stack/
 │   │   │   ├── asset-performance-table.tsx # Expandable assets performance table (category → account type → account)
 │   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
 │   │   │   ├── liability-performance-table.tsx # Expandable liability performance table (category → account type → account)
-│   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type (current vs. long-term)
+│   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type; a type with an active promo splits into balance transfer / revolving (#417)
+│   │   │   ├── balance-transfer-tracker.tsx # Liabilities "Balance Transfers" card: payoff tracker per card with an active promo (#417)
 │   │   │   ├── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
 │   │   │   ├── expand-toggle.tsx         # Disclosure button for an expandable table row: aria-expanded, Tab/Enter/Space (#144)
 │   │   │   └── signed-change.tsx         # SignedChange: a gain/loss in green/red with a trend icon, so direction is not colour-only; TrendIcon: the icon alone (#144)
@@ -169,7 +174,8 @@ finance-stack/
 │   │   ├── actions/transaction.ts        # Server action for transaction submission
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
-│   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list)
+│   │   ├── actions/balance-transfer.ts   # Server actions for balance transfer create, update, delete (#417)
+│   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list, promo-active interval)
 │   │   ├── queries/_percent.ts           # Shared percent math (round2, pct, pctOrNull) for the drilldown queries
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
 │   │   ├── queries/accounting.ts         # Accounting queries (time series, period totals, category breakdown, averages)
@@ -180,6 +186,8 @@ finance-stack/
 │   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
 │   │   ├── queries/asset-performance.ts  # Pure builder for the asset performance tree, unit-tested
 │   │   ├── queries/liabilities-drilldown.ts # Liabilities drill-down queries (allocation, performance, decomposition, debt service, waterfall)
+│   │   ├── queries/balance-transfers.ts  # Active balance transfers for the drilldown; the edit page's list and picker candidates (#417)
+│   │   ├── queries/balance-transfer-payoff.ts # Pure payoff math (months left, pace, required, projection, status), unit-tested (#417)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
@@ -191,6 +199,7 @@ finance-stack/
 │   │   ├── validations/account.ts        # Zod schema for account form validation
 │   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
 │   │   ├── validations/categories.ts     # Zod schemas for category/type forms
+│   │   ├── validations/balance-transfer.ts # Zod schema + the pure link checker for balance transfers (#417)
 │   │   ├── validations/date-range.ts     # Canonical dateFrom/dateTo validator (format + ordering) + isValidIsoDate
 │   │   ├── validations/id.ts             # parseEntityId()/isEntityId() — the one positive-int4 check for every ID (#179)
 │   │   ├── validations/search-params.ts  # validateFilterParams() — ID lists, amount, descriptions from the URL (#179)
