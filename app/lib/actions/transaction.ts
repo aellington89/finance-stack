@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { auditedTransaction, type Tx } from "@/lib/db/audited";
-import { transactions, accountBalanceHistory } from "@/drizzle/schema";
+import {
+  transactions,
+  accountBalanceHistory,
+  balanceTransfers,
+} from "@/drizzle/schema";
 import {
   transactionFormSchema,
   type TransactionFormData,
@@ -286,6 +290,7 @@ export async function deleteTransaction(
   }
 
   let notFound = false;
+  let isTransferPosting = false;
 
   try {
     await auditedTransaction(async (tx) => {
@@ -300,6 +305,23 @@ export async function deleteTransaction(
 
       if (!existing) {
         notFound = true;
+        return;
+      }
+
+      // A balance transfer reads its card, amount and start date from its
+      // posting (Issue #417), so deleting the posting would strand the
+      // hand-entered terms. Refuse and say what to do, the way deleteAccount()
+      // refuses an account with transactions. The RESTRICT foreign key is the
+      // backstop for any other writer. A linked *fee* needs nothing here: its
+      // key is ON DELETE SET NULL, so deleting it just unlinks it.
+      const [linked] = await tx
+        .select({ id: balanceTransfers.balanceTransferId })
+        .from(balanceTransfers)
+        .where(eq(balanceTransfers.transferTransactionId, transactionId))
+        .limit(1);
+
+      if (linked) {
+        isTransferPosting = true;
         return;
       }
 
@@ -341,6 +363,15 @@ export async function deleteTransaction(
 
   if (notFound) {
     return { success: false, errors: {}, message: "Transaction not found" };
+  }
+
+  if (isTransferPosting) {
+    return {
+      success: false,
+      errors: {},
+      message:
+        "This transaction is the posting of a balance transfer. Remove the transfer first.",
+    };
   }
 
   revalidateTransactionPaths();

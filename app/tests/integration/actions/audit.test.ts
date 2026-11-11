@@ -7,6 +7,7 @@ import {
   transactionCategories,
   accountBalanceHistory,
   auditLog,
+  balanceTransfers,
 } from "@/drizzle/schema";
 import {
   submitTransaction,
@@ -16,6 +17,11 @@ import {
 } from "@/lib/actions/transaction";
 import { createAccount } from "@/lib/actions/account";
 import { createTransactionCategory } from "@/lib/actions/categories";
+import {
+  createBalanceTransfer,
+  updateBalanceTransfer,
+  deleteBalanceTransfer,
+} from "@/lib/actions/balance-transfer";
 import { auditedTransaction } from "@/lib/db/audited";
 
 // The session vitest-setup.ts installs by default.
@@ -88,6 +94,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Balance transfers first: a linked posting's foreign key is RESTRICT.
+  await db.execute(sql`
+    DELETE FROM balance_transfers bt
+    USING transactions p
+    WHERE p.transaction_id = bt.transfer_transaction_id
+      AND p.account_id IN (${sql.join(createdAccountIds.map((id) => sql`${id}`), sql`, `)})
+  `);
   await db
     .delete(transactions)
     .where(inArray(transactions.accountId, createdAccountIds));
@@ -360,5 +373,91 @@ describe("audit logging — other audited tables", () => {
     expect(row.action).toBe("INSERT");
     expect(row.actorSource).toBe("app");
     expect(row.actorLabel).toBe(SESSION_USER_NAME);
+  });
+});
+
+describe("audit logging — balance transfers (Issue #417)", () => {
+  it("audits create, edit and delete through the actions, and a fee unlink", async () => {
+    const [card] = await db
+      .insert(accounts)
+      .values({ accountName: "Audit Test Card", accountTypeId: 15 })
+      .returning({ accountId: accounts.accountId });
+    createdAccountIds.push(card.accountId);
+
+    const [posting, fee] = await db
+      .insert(transactions)
+      .values([
+        {
+          transactionDescription: "Audit transfer posting",
+          transactionDate: "2024-05-01",
+          accountId: card.accountId,
+          amount: "-2000.00",
+          transactionTypeId: 1,
+          transactionCategoryId: 1,
+        },
+        {
+          transactionDescription: "Audit transfer fee",
+          transactionDate: "2024-05-04",
+          accountId: card.accountId,
+          amount: "-60.00",
+          transactionTypeId: 2,
+          transactionCategoryId: 1,
+        },
+      ])
+      .returning({ id: transactions.transactionId });
+
+    const fields = {
+      accountId: String(card.accountId),
+      transferTransactionId: String(posting.id),
+      feeTransactionId: String(fee.id),
+      promoEndDate: "2025-11-01",
+      promoApr: "0",
+    };
+
+    expect((await createBalanceTransfer(emptyState, makeFormData(fields))).success).toBe(true);
+    const [bt] = await db
+      .select({ id: balanceTransfers.balanceTransferId })
+      .from(balanceTransfers)
+      .where(eq(balanceTransfers.transferTransactionId, posting.id));
+
+    expect(
+      (
+        await updateBalanceTransfer(
+          emptyState,
+          makeFormData({ ...fields, balanceTransferId: String(bt.id), promoApr: "2.5" })
+        )
+      ).success
+    ).toBe(true);
+
+    // Deleting the fee unlinks it through ON DELETE SET NULL, which is a row
+    // UPDATE: the trigger records it, attributed to whoever deleted the fee.
+    expect(
+      (await deleteTransaction(emptyState, makeFormData({ transactionId: String(fee.id) })))
+        .success
+    ).toBe(true);
+
+    expect(
+      (
+        await deleteBalanceTransfer(
+          emptyState,
+          makeFormData({ balanceTransferId: String(bt.id) })
+        )
+      ).success
+    ).toBe(true);
+
+    const rows = await auditRowsFor("balance_transfers", bt.id);
+    expect(rows.map((r) => r.action)).toEqual(["INSERT", "UPDATE", "UPDATE", "DELETE"]);
+    for (const row of rows) {
+      expect(row.actorSource).toBe("app");
+      expect(row.actorUserId).toBe(SESSION_USER_ID);
+    }
+    expect(rows[0].afterData).toMatchObject({
+      transfer_transaction_id: posting.id,
+      fee_transaction_id: fee.id,
+    });
+    expect(rows[1].changedColumns).toEqual(["promo_apr"]);
+    expect(rows[2].changedColumns).toEqual(["fee_transaction_id"]);
+    expect(rows[2].afterData).toMatchObject({ fee_transaction_id: null });
+    expect(rows[3].beforeData).toMatchObject({ transfer_transaction_id: posting.id });
   });
 });

@@ -12,7 +12,7 @@ The rules every server action and page boundary follows, and the two CI gates th
 
 ## The validation checklist
 
-All 19 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
+All 22 mutating actions, all green. Each also opens with `requireActionUser()` ([Issue #120](https://github.com/aellington89/finance-stack/issues/120)) — the session gate is a separate concern and is not repeated in the table.
 
 Six of them open with `requireAdminUser()` instead, which composes it ([Issue #87](https://github.com/aellington89/finance-stack/issues/87)): the three `*TransactionType()` and the three `*AccountTypeCategory()` actions. Those two tables are the basis of every KPI, so they are reachable only from `/settings/admin` and only by an admin. `createTransactionType()` was removed entirely by [Issue #109](https://github.com/aellington89/finance-stack/issues/109) and restored here behind that gate, which is where that issue said a legitimate insert belonged.
 
@@ -39,8 +39,11 @@ Six of them open with `requireAdminUser()` instead, which composes it ([Issue #8
 | `createAccountType()` | `accountTypeSchema` | — | Failed to create account type. Please try again. |
 | `updateAccountType()` | `accountTypeSchema` | `accountTypeId` | Failed to update account type. Please try again. |
 | `deleteAccountType()` | — | `accountTypeId` | Failed to delete account type. Please try again. |
+| `createBalanceTransfer()` | `balanceTransferFormSchema` + `checkBalanceTransferLinks()` | — | Failed to save balance transfer. Please try again. |
+| `updateBalanceTransfer()` | `balanceTransferFormSchema` + `checkBalanceTransferLinks()` | `balanceTransferId` | Failed to update balance transfer. Please try again. |
+| `deleteBalanceTransfer()` | — | `balanceTransferId` | Failed to delete balance transfer. Please try again. |
 
-**This table is a gate, not a note.** [`tests/integration/actions/validation-contract.test.ts`](../app/tests/integration/actions/validation-contract.test.ts) parses the rows out of it and asserts they exactly match the exported functions of the three action modules. Add an action without a row here and the suite fails.
+**This table is a gate, not a note.** [`tests/integration/actions/validation-contract.test.ts`](../app/tests/integration/actions/validation-contract.test.ts) parses the rows out of it and asserts they exactly match the exported functions of the four action modules. Add an action without a row here and the suite fails.
 
 ### The two exemptions
 
