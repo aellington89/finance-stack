@@ -11,14 +11,17 @@ import {
   DEBT_SERVICE_ROLES,
 } from "@/lib/constants/reporting-roles";
 import {
-  accountHasActivePromo,
   balanceAtDate,
   balanceRowPerAccount,
   categoryIdsWithRoles,
-  promoActiveOn,
   valueList,
 } from "@/lib/queries/_aggregates";
 import { pct, pctOrNull } from "@/lib/queries/_percent";
+import { getActiveTransferBalances } from "@/lib/queries/balance-transfers";
+import {
+  promoBadgeByAccount,
+  promoBalanceByType,
+} from "@/lib/queries/balance-transfer-payoff";
 
 // Sign convention: liability balances are stored as negative numbers in
 // account_balance_history. We preserve that sign throughout — this module
@@ -51,10 +54,12 @@ export interface AllocationAccountType {
   percentOfParent: number;
   percentOfTotal: number;
   /**
-   * Set only for a type with at least one account carrying a balance-transfer
-   * promo on the as-of date (Issue #417). `promoValue` is those accounts'
-   * share of `value`, raw sign, and the debt-mix tiles split the type on it.
-   * Absent otherwise, so every other type's shape is unchanged.
+   * Set only for a type with balance left on a balance transfer active on the
+   * as-of date (Issues #417 and #427). `promoValue` is what is left on those
+   * transfers, raw sign, and the debt-mix tiles split the type on it, so the
+   * rest of its cards' debt, purchases included, stays revolving. Absent
+   * otherwise, including for a type whose transfers are all paid off, so every
+   * other type's shape is unchanged.
    */
   hasActivePromo?: true;
   promoValue?: number;
@@ -86,9 +91,10 @@ export interface PerformanceAccount {
   percentOfParent: number;
   percentOfTotal: number;
   /**
-   * The account's earliest-ending balance-transfer promo active on the period's
-   * end date, for the "‹apr›% until ‹date›" badge (Issue #417). Absent when
-   * none is active.
+   * The account's earliest-ending balance transfer active on the period's end
+   * date that still has a balance, for the "‹apr›% until ‹date›" badge (Issues
+   * #417 and #427). Absent when none is, including when every active transfer
+   * on the account is paid off.
    */
   activePromo?: { apr: number; endDate: string };
 }
@@ -190,17 +196,18 @@ export async function getLiabilityAllocation(
   // last balance_history row is the day before closure (rebuild-balance.ts:33)
   // and would otherwise be picked up as the account's latest row.
   const asOfExpr = dateTo ? sql`${dateTo}::date` : sql`CURRENT_DATE`;
-  const result = await db.execute(sql`
+  // The promo split is what is left on each active transfer, which only a
+  // replay of the card's balance history can say (Issue #427). On the
+  // drilldown, the tracker and the badge read the same request-cached run.
+  const [result, { transfers }] = await Promise.all([
+    db.execute(sql`
     SELECT
       atc.account_type_category_id AS category_id,
       atc.account_type_category AS category_name,
       at.account_type_id,
       at.account_type AS account_type_name,
       MAX(abh.balance_date) AS as_of,
-      COALESCE(SUM(abh.cumulative_balance), 0) AS value,
-      COALESCE(SUM(CASE WHEN ${accountHasActivePromo(asOfExpr)}
-        THEN abh.cumulative_balance ELSE 0 END), 0) AS promo_value,
-      BOOL_OR(${accountHasActivePromo(asOfExpr)}) AS has_active_promo
+      COALESCE(SUM(abh.cumulative_balance), 0) AS value
     FROM accounts a
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
@@ -212,7 +219,9 @@ export async function getLiabilityAllocation(
       atc.account_type_category_id, atc.account_type_category,
       at.account_type_id, at.account_type
     ORDER BY atc.account_type_category_id, at.account_type_id
-  `);
+  `),
+    getActiveTransferBalances(dateTo),
+  ]);
 
   type Row = {
     category_id: number;
@@ -221,11 +230,10 @@ export async function getLiabilityAllocation(
     account_type_name: string;
     as_of: string | null;
     value: string;
-    promo_value: string;
-    has_active_promo: boolean | null;
   };
 
   const rows = result.rows as Row[];
+  const promoByType = promoBalanceByType(transfers);
 
   const catMap = new Map<
     number,
@@ -265,9 +273,7 @@ export async function getLiabilityAllocation(
       id: row.account_type_id,
       name: row.account_type_name,
       value,
-      promoValue: row.has_active_promo
-        ? parseFloat(row.promo_value) || 0
-        : null,
+      promoValue: promoByType.get(row.account_type_id) ?? null,
     });
   }
 
@@ -325,7 +331,11 @@ export async function getLiabilityPerformance(
 ): Promise<LiabilityPerformanceData> {
   const endDate = dateTo ?? sql`CURRENT_DATE`;
 
-  const result = await db.execute(sql`
+  // The badge names the earliest-ending active transfer that still has a
+  // balance (Issue #427), from the same request-cached split the tracker and
+  // the debt-mix tiles read.
+  const [result, { transfers }] = await Promise.all([
+    db.execute(sql`
     SELECT
       atc.account_type_category_id AS category_id,
       atc.account_type_category AS category_name,
@@ -334,33 +344,22 @@ export async function getLiabilityPerformance(
       a.account_id,
       a.account_name,
       ${balanceAtDate(dateFrom, "start_balance")},
-      ${balanceAtDate(endDate, "end_balance")},
-      promo.promo_end_date,
-      promo.promo_apr
+      ${balanceAtDate(endDate, "end_balance")}
     FROM account_balance_history abh
     JOIN accounts a ON a.account_id = abh.account_id
     JOIN account_types at ON at.account_type_id = a.account_type_id
     JOIN account_type_categories atc
       ON atc.account_type_category_id = at.account_type_category_id
-    -- The badge's promo: the earliest-ending one active on the end date.
-    LEFT JOIN LATERAL (
-      SELECT bt.promo_end_date, bt.promo_apr
-      FROM balance_transfers bt
-      JOIN transactions p ON p.transaction_id = bt.transfer_transaction_id
-      WHERE p.account_id = a.account_id
-        AND ${promoActiveOn(endDate)}
-      ORDER BY bt.promo_end_date, bt.balance_transfer_id
-      LIMIT 1
-    ) promo ON true
     WHERE atc.account_type_category_id IN (${LIABILITY_IDS})
       AND abh.balance_date IN (${dateFrom}::date, ${endDate}::date)
     GROUP BY
       atc.account_type_category_id, atc.account_type_category,
       at.account_type_id, at.account_type,
-      a.account_id, a.account_name,
-      promo.promo_end_date, promo.promo_apr
+      a.account_id, a.account_name
     ORDER BY atc.account_type_category_id, at.account_type_id, a.account_id
-  `);
+  `),
+    getActiveTransferBalances(dateTo),
+  ]);
 
   type Row = {
     category_id: number;
@@ -371,11 +370,10 @@ export async function getLiabilityPerformance(
     account_name: string;
     start_balance: string;
     end_balance: string;
-    promo_end_date: string | null;
-    promo_apr: string | null;
   };
 
   const rows = result.rows as Row[];
+  const badges = promoBadgeByAccount(transfers);
 
   const catMap = new Map<
     number,
@@ -434,17 +432,13 @@ export async function getLiabilityPerformance(
     }
     type.currentValue += currentValue;
     type.startValue += startValue;
+    const activePromo = badges.get(row.account_id);
     type.accounts.push({
       accountId: row.account_id,
       accountName: row.account_name,
       currentValue,
       startValue,
-      ...(row.promo_end_date !== null && {
-        activePromo: {
-          apr: parseFloat(row.promo_apr ?? "0"),
-          endDate: row.promo_end_date,
-        },
-      }),
+      ...(activePromo && { activePromo }),
     });
   }
 

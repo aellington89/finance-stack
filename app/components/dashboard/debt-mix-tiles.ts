@@ -50,12 +50,13 @@ export const debtMixTileKey = (tile: DebtMixTile): string =>
  * Flattens the allocation tree to one tile per account type with a
  * non-zero balance. Sorted from largest debt magnitude to smallest.
  *
- * A type with an account on an active balance-transfer promo (Issue #417)
- * becomes two tiles instead, "‹type› — balance transfer" and
- * "‹type› — revolving". The split is within each type, so this never needs to
- * know which user-defined type means "credit card". A half with no balance is
- * dropped like any other zero tile. Both halves keep the type's colour; the
- * label is what tells them apart.
+ * A type with balance left on an active balance transfer (Issues #417 and
+ * #427) becomes two tiles instead, "‹type› — balance transfer" and
+ * "‹type› — revolving". The first is what is left on the transfers, and the
+ * second everything else on the type's accounts, purchases included. The split
+ * is within each type, so this never needs to know which user-defined type
+ * means "credit card". A half with no balance is dropped like any other zero
+ * tile. Both halves keep the type's colour; the label is what tells them apart.
  */
 export function buildDebtMixTiles(data: LiabilityAllocationData): DebtMixTile[] {
   const tiles: DebtMixTile[] = [];

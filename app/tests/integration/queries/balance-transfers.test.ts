@@ -22,11 +22,13 @@ import {
 } from "@/lib/queries/liabilities-drilldown";
 import { getAccountingPeriodTotals } from "@/lib/queries/accounting";
 import { DAYS_PER_MONTH } from "@/lib/queries/balance-transfer-payoff";
+import { buildDebtMixTiles } from "@/components/dashboard/debt-mix-tiles";
 
-// Issue #417. Dated in 2020, outside the mock-data window, so every query here
-// sees only the rows this file inserts. Balances come from real transactions
-// through rebuildAccountBalance(), so the paces are measured the way the page
-// measures them. All figures are synthetic.
+// Issues #417 and #427. Dated in 2020, outside the mock-data window, so every
+// query here sees only the rows this file inserts. Balances come from real
+// transactions through rebuildAccountBalance(), so the paces and the balance
+// split are measured the way the page measures them. All figures are
+// synthetic.
 
 const TYPE_CHECKING = 2; // Current Asset
 const TYPE_CREDIT_CARD = 15; // Current Liability
@@ -165,6 +167,21 @@ async function addPaidOffTransfer(s: Scenario) {
     .from(balanceTransfers)
     .where(eq(balanceTransfers.transferTransactionId, s.posting));
   return { ...s, paidOff, transferId };
+}
+
+/**
+ * Pays card B's transfer off on Dec 15, 2020 ($1,340, all that is left of it),
+ * then spends $300 on the card on Dec 20. The transfer is still active, with
+ * nothing left on it, and the card owes only the purchase.
+ */
+async function payOffAndSpend(s: Scenario) {
+  await insertTx({
+    accountId: s.card, date: "2020-12-15", amount: "1340.00", categoryId: s.category,
+    typeId: INTERNAL_TRANSFER, relatedAccountId: s.checking,
+  });
+  await insertTx({ accountId: s.card, date: "2020-12-20", amount: "-300.00", categoryId: s.category });
+  await rebuild(s.card);
+  return s;
 }
 
 async function rebuild(...ids: number[]) {
@@ -392,6 +409,48 @@ describe("getLiabilityAllocation promo split", () => {
     const type = await creditCardType("2020-02-29");
     expect(type).not.toHaveProperty("hasActivePromo");
   });
+
+  // Issue #427: the "balance transfer" half is what is left on the transfer,
+  // not the card's whole balance.
+  it("counts only what is left on the transfer, leaving the card's purchases revolving", async () => {
+    const s = await buildScenario();
+    // A $400 purchase on Nov 15. The Dec 1 payment goes to it first.
+    await insertTx({ accountId: s.card, date: "2020-11-15", amount: "-400.00", categoryId: s.category });
+    await rebuild(s.card);
+
+    // 3,090 less the six payments (Jun–Nov) that reached the transfer.
+    const [tracked] = await onCard(s.card, RANGE_FROM, AS_OF);
+    expect(tracked).toMatchObject({ owed: 1590, aheadOfIt: 150 });
+
+    const data = await getLiabilityAllocation(AS_OF);
+    const type = data.byCategory
+      .flatMap((c) => c.children)
+      .find((c) => c.accountTypeId === TYPE_CREDIT_CARD);
+    // A: -1000; B: -1740, of which 150 is the purchase; C: -700.
+    expect(type?.value).toBe(-3440);
+    expect(type?.promoValue).toBe(-tracked.owed);
+
+    const tiles = buildDebtMixTiles(data).filter((t) => t.accountTypeId === TYPE_CREDIT_CARD);
+    expect(tiles.map((t) => [t.segment, t.value])).toEqual([
+      ["revolving", -1850],
+      ["balance_transfer", -1590],
+    ]);
+  });
+
+  it("counts only the later transfer once the earlier one is paid off", async () => {
+    await addPaidOffTransfer(await buildScenario());
+    const type = await creditCardType(AS_OF);
+    expect(type?.promoValue).toBe(-1940);
+  });
+
+  it("does not split a type whose active transfers are all paid off", async () => {
+    await payOffAndSpend(await buildScenario());
+    const type = await creditCardType(AS_OF);
+
+    expect(type?.value).toBe(-2000); // A: -1000; B: -300 of purchases; C: -700
+    expect(type).not.toHaveProperty("hasActivePromo");
+    expect(type).not.toHaveProperty("promoValue");
+  });
 });
 
 describe("getLiabilityPerformance activePromo", () => {
@@ -430,6 +489,25 @@ describe("getLiabilityPerformance activePromo", () => {
     expect(await accountRow("2021-06-30", PROMO_END, s.card)).not.toHaveProperty(
       "activePromo"
     );
+  });
+
+  // Issue #427: a paid-off transfer no longer names the badge.
+  it("names the later transfer once the earlier one is paid off", async () => {
+    const s = await addPaidOffTransfer(await buildScenario());
+    expect((await accountRow("2020-06-30", AS_OF, s.card))?.activePromo).toEqual({
+      apr: 0,
+      endDate: PROMO_END,
+    });
+  });
+
+  it("drops the badge when every active transfer is paid off", async () => {
+    const s = await payOffAndSpend(await buildScenario());
+    expect(await accountRow("2020-06-30", AS_OF, s.card)).not.toHaveProperty(
+      "activePromo"
+    );
+    // The transfer keeps its tracker row until its promo ends.
+    const [tracked] = await onCard(s.card, RANGE_FROM, AS_OF);
+    expect(tracked).toMatchObject({ owed: 0, aheadOfIt: 300, status: { kind: "paid_off" } });
   });
 });
 
