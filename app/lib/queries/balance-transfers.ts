@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { LIABILITY_CATEGORY_IDS } from "@/lib/queries/liability-categories";
@@ -11,10 +12,12 @@ import {
   valueList,
 } from "@/lib/queries/_aggregates";
 import {
-  balanceKey,
-  balanceProbes,
   buildBalanceTransferTracker,
+  historyStarts,
+  splitActiveTransfers,
+  type ActiveTransfer,
   type ActiveTransferRow,
+  type BalancePoint,
   type BalanceTransferTrackerRow,
 } from "@/lib/queries/balance-transfer-payoff";
 
@@ -39,30 +42,44 @@ const TRANSFER_TYPE_IDS = valueList([
 const num = (v: string | null): number | null =>
   v === null ? null : parseFloat(v);
 
-// ── The drilldown's Balance transfers card ─────────────────────────────
+// ── Active transfers, and what is left on each ─────────────────────────
+
+/** Every transfer active on the as-of date, and the history behind the split. */
+export interface ActiveTransferSnapshot {
+  /** Grouped by card, in payoff order, each with what is left on it. */
+  transfers: ActiveTransfer[];
+  /**
+   * Each card's balance history from its earliest active posting through the
+   * as-of date, ascending, keyed by account id.
+   */
+  history: ReadonlyMap<number, BalancePoint[]>;
+}
 
 /**
- * One tracker row per liability card with a promo active on the range's end
- * date (`dateTo`, or today), the as-of date the allocation tiles use. The math
- * lives in balance-transfer-payoff.ts.
+ * Every liability card's transfers active on `dateTo` (or today), split by
+ * splitCardBalance() into what is left on each and the card's non-promo debt
+ * (Issue #427). `accountId` narrows it to one card, for the account edit page.
  *
- * Two queries, not one. The pace windows ("the trailing 3 months, or since the
- * posting if that is shorter") are decided in tested TypeScript, and only then
- * is it known which balances to read. The second query is one index probe per
- * card and window start, and it is skipped outright when nothing is active,
- * which is the common case.
+ * Two queries, not one. Which history to read depends on the transfers found:
+ * each card's is read from its earliest active posting, where the split's
+ * replay starts. Both pace windows start on or after that date too, so the
+ * same rows give the tracker its start balances. The second query is one
+ * index range scan per card, at most a row a day for the longest promo, and it
+ * is skipped outright when nothing is active, which is the common case.
  */
-export async function getActiveBalanceTransfers(
-  dateFrom: string,
-  dateTo?: string
-): Promise<BalanceTransferTrackerRow[]> {
+async function loadActiveTransfers(
+  dateTo?: string,
+  accountId?: number
+): Promise<ActiveTransferSnapshot> {
   const asOfExpr = dateTo ? sql`${dateTo}::date` : sql`CURRENT_DATE`;
+  const oneCard = accountId === undefined ? sql`` : sql`AND p.account_id = ${accountId}`;
 
   const result = await db.execute(sql`
     SELECT
       bt.balance_transfer_id,
       a.account_id,
       a.account_name,
+      a.account_type_id,
       p.transaction_id AS posting_transaction_id,
       p.transaction_date AS posting_date,
       p.amount AS posting_amount,
@@ -86,6 +103,7 @@ export async function getActiveBalanceTransfers(
     WHERE at.account_type_category_id IN (${LIABILITY_IDS})
       AND (a.closed_date IS NULL OR a.closed_date > ${asOfExpr})
       AND ${promoActiveOn(asOfExpr)}
+      ${oneCard}
     ORDER BY bt.promo_end_date, bt.balance_transfer_id
   `);
 
@@ -93,6 +111,7 @@ export async function getActiveBalanceTransfers(
     balance_transfer_id: number;
     account_id: number;
     account_name: string;
+    account_type_id: number;
     posting_transaction_id: number;
     posting_date: string;
     posting_amount: string;
@@ -110,6 +129,7 @@ export async function getActiveBalanceTransfers(
     balanceTransferId: r.balance_transfer_id,
     accountId: r.account_id,
     accountName: r.account_name,
+    accountTypeId: r.account_type_id,
     postingTransactionId: r.posting_transaction_id,
     postingDate: r.posting_date,
     postingAmount: parseFloat(r.posting_amount),
@@ -123,34 +143,67 @@ export async function getActiveBalanceTransfers(
     asOf: r.as_of,
   }));
 
-  const probes = balanceProbes(rows, dateFrom);
-  const startBalances = new Map<string, number>();
+  const starts = historyStarts(rows);
+  const history = new Map<number, BalancePoint[]>();
 
-  if (probes.length > 0) {
-    const tuples = sql.join(
-      probes.map((p) => sql`(${p.accountId}::integer, ${p.date}::date)`),
+  if (starts.length > 0) {
+    const cards = sql.join(
+      starts.map((s) => sql`(${s.accountId}::integer, ${s.since}::date)`),
       sql`, `
     );
     const balances = await db.execute(sql`
       SELECT h.account_id, h.balance_date, h.cumulative_balance
       FROM account_balance_history h
-      JOIN (VALUES ${tuples}) AS probe(account_id, balance_date)
-        ON h.account_id = probe.account_id
-       AND h.balance_date = probe.balance_date
+      JOIN (VALUES ${cards}) AS card(account_id, since)
+        ON h.account_id = card.account_id
+       AND h.balance_date BETWEEN card.since AND ${asOfExpr}
+      ORDER BY h.account_id, h.balance_date
     `);
     for (const b of balances.rows as {
       account_id: number;
       balance_date: string;
       cumulative_balance: string;
     }[]) {
-      startBalances.set(
-        balanceKey(b.account_id, b.balance_date),
-        parseFloat(b.cumulative_balance) || 0
-      );
+      const points = history.get(b.account_id) ?? [];
+      points.push({
+        date: b.balance_date,
+        balance: parseFloat(b.cumulative_balance) || 0,
+      });
+      history.set(b.account_id, points);
     }
   }
 
-  return buildBalanceTransferTracker(rows, startBalances, dateFrom);
+  return { transfers: splitActiveTransfers(rows, history), history };
+}
+
+/**
+ * loadActiveTransfers() for every card, once per request. React's `cache`
+ * makes every reader in one server request share a single execution, as
+ * ensureTodayBalances() does for the layout and the page, so no two parts of
+ * a page can disagree about it. Outside a React server render (the
+ * integration tests) `cache` is a pass-through, and every call queries afresh.
+ *
+ * `cache` keys on the arguments as passed, so callers pass `dateTo` even when
+ * it is undefined: `f()` and `f(undefined)` would be two entries.
+ */
+export const getActiveTransferBalances = cache(
+  (dateTo: string | undefined): Promise<ActiveTransferSnapshot> =>
+    loadActiveTransfers(dateTo)
+);
+
+// ── The drilldown's Balance transfers card ─────────────────────────────
+
+/**
+ * One tracker row per balance transfer active on the range's end date
+ * (`dateTo`, or today), the as-of date the allocation tiles use. A card's rows
+ * are together, in payoff order. The math lives in balance-transfer-payoff.ts.
+ */
+export async function getActiveBalanceTransfers(
+  dateFrom: string,
+  dateTo?: string
+): Promise<BalanceTransferTrackerRow[]> {
+  const { transfers, history } = await getActiveTransferBalances(dateTo);
+  return buildBalanceTransferTracker(transfers, history, dateFrom);
 }
 
 // ── The account edit page's Balance transfers section ──────────────────

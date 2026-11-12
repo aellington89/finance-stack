@@ -6,16 +6,15 @@ import {
 } from "@/components/dashboard/balance-transfer-tracker";
 import type { BalanceTransferTrackerRow } from "@/lib/queries/balance-transfer-payoff";
 
-// Issue #417. The math is tested in balance-transfer-payoff.test.ts; this pins
-// what the card shows for it. All figures synthetic.
+// Issues #417 and #427. The math is tested in balance-transfer-payoff.test.ts;
+// this pins what the card shows for it. All figures synthetic.
 
 const row = (overrides: Partial<BalanceTransferTrackerRow> = {}): BalanceTransferTrackerRow => ({
   accountId: 9,
   accountName: "Card B",
+  accountTypeId: 15,
   asOf: "2026-11-10",
-  balance: -4200,
-  debt: 4200,
-  primary: {
+  transfer: {
     balanceTransferId: 1,
     sourceAccountName: "Card A",
     postingDate: "2025-11-10",
@@ -24,7 +23,8 @@ const row = (overrides: Partial<BalanceTransferTrackerRow> = {}): BalanceTransfe
     promoApr: 0,
     feeAmount: 180,
   },
-  others: [],
+  owed: 4200,
+  aheadOfIt: 0,
   monthsRemaining: 12,
   daysLeft: 365,
   monthlyInterest: null,
@@ -38,6 +38,7 @@ const row = (overrides: Partial<BalanceTransferTrackerRow> = {}): BalanceTransfe
 
 describe("statusText", () => {
   it.each([
+    [{ kind: "paid_off" } as const, "Paid off"],
     [{ kind: "on_track" } as const, "On track"],
     [{ kind: "behind", shortPerMonth: 50 } as const, "Behind — $50.00/mo short"],
     [{ kind: "expiring", daysLeft: 45 } as const, "Expires in 45 days"],
@@ -51,7 +52,7 @@ describe("statusText", () => {
 describe("BalanceTransferTracker", () => {
   it("renders the issue's worked example", () => {
     render(<BalanceTransferTracker rows={[row()]} />);
-    const tr = screen.getByTestId("balance-transfer-row-9");
+    const tr = screen.getByTestId("balance-transfer-row-1");
     const cells = within(tr).getAllByRole("cell").map((c) => c.textContent);
 
     expect(cells).toEqual([
@@ -71,7 +72,7 @@ describe("BalanceTransferTracker", () => {
       <BalanceTransferTracker
         rows={[
           row({
-            primary: { ...row().primary, sourceAccountName: null, feeAmount: null, promoApr: 3.99 },
+            transfer: { ...row().transfer, sourceAccountName: null, feeAmount: null, promoApr: 3.99 },
             monthlyInterest: 13.97,
             rangePace: null,
             monthsRemaining: 1,
@@ -79,40 +80,71 @@ describe("BalanceTransferTracker", () => {
         ]}
       />
     );
-    const tr = screen.getByTestId("balance-transfer-row-9");
+    const tr = screen.getByTestId("balance-transfer-row-1");
     expect(tr).toHaveTextContent("$6,000.00 from External, no fee linked");
     expect(tr).toHaveTextContent("3.99% until Nov 10, 20271 month left, $13.97/mo interest");
     expect(tr).toHaveTextContent("range —");
   });
 
-  it("lists a card's other active transfers under it", () => {
+  it("gives each of a card's transfers its own row, keyed by transfer", () => {
     render(
       <BalanceTransferTracker
         rows={[
+          row({ owed: 0, requiredPerMonth: null, status: { kind: "paid_off" } }),
           row({
-            others: [
-              {
-                balanceTransferId: 2,
-                sourceAccountName: "Card C",
-                postingDate: "2026-06-01",
-                transferredAmount: 1500,
-                promoEndDate: "2028-06-01",
-                promoApr: 0,
-                feeAmount: null,
-              },
-            ],
+            transfer: { ...row().transfer, balanceTransferId: 2, transferredAmount: 1500 },
+            owed: 1500,
           }),
         ]}
       />
     );
-    expect(screen.getByTestId("balance-transfer-row-9")).toHaveTextContent(
-      "Also $1,500.00 from Card C, no fee linked, 0% until Jun 1, 2028"
+    expect(screen.getByTestId("balance-transfer-row-1")).toHaveTextContent("Card B");
+    expect(screen.getByTestId("balance-transfer-row-2")).toHaveTextContent(
+      "Card B$1,500.00 from Card A"
     );
+    // No "Also …" lines: each transfer speaks for itself.
+    expect(screen.queryByText(/^Also /)).not.toBeInTheDocument();
+  });
+
+  it("shows a paid-off transfer with nothing left to measure", () => {
+    render(
+      <BalanceTransferTracker
+        rows={[
+          row({
+            owed: 0,
+            requiredPerMonth: null,
+            threeMonthPace: null,
+            rangePace: null,
+            projectedAtExpiry: null,
+            status: { kind: "paid_off" },
+          }),
+        ]}
+      />
+    );
+    const cells = within(screen.getByTestId("balance-transfer-row-1"))
+      .getAllByRole("cell")
+      .map((c) => c.textContent);
+    expect(cells.slice(2)).toEqual(["$0.00", "—", "3 mo —range —", "—", "Paid off"]);
+  });
+
+  it("says how much of Needed / mo is paid ahead of the transfer", () => {
+    render(
+      <BalanceTransferTracker
+        rows={[row({ owed: 10300, aheadOfIt: 1700, requiredPerMonth: 3000 })]}
+      />
+    );
+    const tr = screen.getByTestId("balance-transfer-row-1");
+    expect(tr).toHaveTextContent("$3,000.00incl. $1,700.00 paid first");
+  });
+
+  it("does not mention what is paid ahead when nothing is", () => {
+    render(<BalanceTransferTracker rows={[row()]} />);
+    expect(screen.queryByText(/paid first/)).not.toBeInTheDocument();
   });
 
   it("hides the status icon from assistive tech, leaving the words", () => {
     render(<BalanceTransferTracker rows={[row({ status: { kind: "on_track" } })]} />);
-    const cell = within(screen.getByTestId("balance-transfer-row-9")).getByText("On track");
+    const cell = within(screen.getByTestId("balance-transfer-row-1")).getByText("On track");
     expect(cell.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });
 });

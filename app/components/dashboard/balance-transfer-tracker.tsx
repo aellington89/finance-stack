@@ -1,4 +1,4 @@
-import { CircleCheck, Clock, Hourglass, TriangleAlert } from "lucide-react";
+import { BadgeCheck, CircleCheck, Clock, Hourglass, TriangleAlert } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -39,6 +39,8 @@ function transferLine(t: TransferTerms): string {
 /** The status as words. The icon beside it repeats the meaning and is hidden. */
 export function statusText(status: TrackerStatus): string {
   switch (status.kind) {
+    case "paid_off":
+      return "Paid off";
     case "on_track":
       return "On track";
     case "behind":
@@ -51,6 +53,7 @@ export function statusText(status: TrackerStatus): string {
 }
 
 const STATUS_ICON = {
+  paid_off: BadgeCheck,
   on_track: CircleCheck,
   behind: TriangleAlert,
   expiring: Clock,
@@ -58,9 +61,11 @@ const STATUS_ICON = {
 } as const;
 
 /**
- * The Liabilities drilldown's Balance transfers card (Issue #417): one row per
- * card with a promo active on the range's end date, tracking whether the
- * balance will be cleared before the promo ends.
+ * The Liabilities drilldown's Balance transfers card (Issues #417 and #427):
+ * one row per transfer active on the range's end date, tracking whether what
+ * is left on it will be cleared before its promo ends. A card's transfers are
+ * adjacent rows, soonest-ending first. A paid-off transfer keeps its row until
+ * its promo ends, with "—" for everything it has nothing left to measure.
  *
  * A card containing a table rather than KPI figures: the text-5xl row above
  * already clips six-figure values (#356). Status is text with an icon beside
@@ -75,10 +80,13 @@ export function BalanceTransferTracker({ rows }: BalanceTransferTrackerProps) {
         <CardTitle className="text-sm font-medium">Balance Transfers</CardTitle>
         {asOf && (
           <CardDescription>
-            Promos active on {formatLongDate(asOf)}. Pace is the card&apos;s net
-            paydown per month, leaving out each transfer&apos;s own posting and
-            fee. While a promo is active, the card&apos;s whole balance counts
-            as promotional, including new purchases.
+            Promos active on {formatLongDate(asOf)}. What&apos;s owed on each
+            transfer is estimated from the card&apos;s balance history:
+            payments clear the card&apos;s other debt first, then the promo
+            that ends soonest. Needed / mo includes what&apos;s paid ahead of a
+            transfer, so a card with several needs the largest of its rows.
+            Pace is the card&apos;s net paydown per month, leaving out each
+            transfer&apos;s own posting and fee.
           </CardDescription>
         )}
       </CardHeader>
@@ -102,31 +110,23 @@ export function BalanceTransferTracker({ rows }: BalanceTransferTrackerProps) {
             <TableBody>
               {rows.map((row) => {
                 const Icon = STATUS_ICON[row.status.kind];
+                const id = row.transfer.balanceTransferId;
                 return (
                   <TableRow
-                    key={row.accountId}
-                    data-testid={`balance-transfer-row-${row.accountId}`}
+                    key={id}
+                    data-testid={`balance-transfer-row-${id}`}
                     className="align-top"
                   >
                     <TableCell className="min-w-48 whitespace-normal">
                       <div className="font-medium">{row.accountName}</div>
                       <div className="text-xs text-muted-foreground">
-                        {transferLine(row.primary)}
+                        {transferLine(row.transfer)}
                       </div>
-                      {row.others.map((other) => (
-                        <div
-                          key={other.balanceTransferId}
-                          className="text-xs text-muted-foreground"
-                        >
-                          Also {transferLine(other)}, {formatApr(other.promoApr)} until{" "}
-                          {formatLongDate(other.promoEndDate)}
-                        </div>
-                      ))}
                     </TableCell>
                     <TableCell className="min-w-40 whitespace-normal">
                       <div>
-                        {formatApr(row.primary.promoApr)} until{" "}
-                        {formatLongDate(row.primary.promoEndDate)}
+                        {formatApr(row.transfer.promoApr)} until{" "}
+                        {formatLongDate(row.transfer.promoEndDate)}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {plural(row.monthsRemaining, "month")} left
@@ -135,10 +135,19 @@ export function BalanceTransferTracker({ rows }: BalanceTransferTrackerProps) {
                       </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCurrency(row.debt)}
+                      {formatCurrency(row.owed)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCurrency(row.requiredPerMonth)}
+                      <div>{money(row.requiredPerMonth)}</div>
+                      {/* Why Needed can exceed Owed ÷ months: payments reach
+                          this transfer only after what is ahead of it. It
+                          wraps rather than widening the column, which would
+                          push the table past the card at 1280px. */}
+                      {row.requiredPerMonth !== null && row.aheadOfIt > 0 && (
+                        <div className="whitespace-normal text-xs text-muted-foreground">
+                          incl. {formatCurrency(row.aheadOfIt)} paid first
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <div>
