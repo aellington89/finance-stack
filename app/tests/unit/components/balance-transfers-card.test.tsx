@@ -8,7 +8,7 @@ import type {
 } from "@/lib/queries/balance-transfers";
 import type { ActionState } from "@/lib/actions/utils";
 
-// Issue #417. All figures synthetic.
+// Issues #417 and #427. All figures synthetic.
 
 type Action = (prev: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -29,6 +29,7 @@ const transfer = (overrides: Partial<AccountBalanceTransfer> = {}): AccountBalan
   promoEndDate: "2027-09-01",
   promoApr: 0,
   isActive: true,
+  remaining: 3120,
   ...overrides,
 });
 
@@ -91,15 +92,26 @@ describe("BalanceTransfersCard", () => {
     expect(row).toHaveTextContent("fee $180.00");
   });
 
+  it("says what is left on an active transfer, or that it is paid off", () => {
+    renderCard([
+      transfer(),
+      transfer({ balanceTransferId: 2, transferTransactionId: 200, remaining: 0 }),
+    ]);
+    expect(within(screen.getByTestId("balance-transfer-1")).getByText("$3,120.00 left")).toBeInTheDocument();
+    expect(within(screen.getByTestId("balance-transfer-2")).getByText("Paid off")).toBeInTheDocument();
+  });
+
   it("names an untracked source External, and a missing fee as unlinked", () => {
     renderCard([
-      transfer({ sourceAccountName: null, feeTransactionId: null, feeAmount: null, feeDate: null, feeDescription: null, isActive: false, promoApr: 3.99 }),
+      transfer({ sourceAccountName: null, feeTransactionId: null, feeAmount: null, feeDate: null, feeDescription: null, isActive: false, promoApr: 3.99, remaining: null }),
     ]);
     const row = screen.getByTestId("balance-transfer-1");
     expect(within(row).getByText("$6,000.00 from External")).toBeInTheDocument();
     expect(within(row).getByText("Ended")).toBeInTheDocument();
     expect(row).toHaveTextContent("3.99% until Sep 1, 2027");
     expect(row).toHaveTextContent("no fee linked");
+    // An ended promo has nothing left to track.
+    expect(row).not.toHaveTextContent(/left|Paid off/);
   });
 
   it("opens an empty add dialog, with the fee picker waiting on the posting", async () => {
