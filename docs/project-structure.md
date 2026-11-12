@@ -121,7 +121,7 @@ finance-stack/
 │   │   │   ├── accounts-table.tsx        # Two-column balance sheet with expand/collapse
 │   │   │   ├── accounts-by-category.tsx  # Grouped card view: Assets (2x2) + Liabilities, with per-type + icon
 │   │   │   ├── account-form.tsx          # Create/edit account form with combobox type selector
-│   │   │   ├── balance-transfers-card.tsx # Edit page's Balance transfers section on liability accounts: list + add/edit/delete dialogs (#417)
+│   │   │   ├── balance-transfers-card.tsx # Edit page's Balance transfers section on liability accounts: list with what's left on each + add/edit/delete dialogs (#417, #427)
 │   │   │   ├── balance-transfer-dialog.tsx # Add/edit dialog: posting + fee pickers, promo end date + APR (#417)
 │   │   │   ├── balance-transfer-candidates.ts # What the two pickers offer, and in what order, unit-tested (#417)
 │   │   │   └── delete-account-dialog.tsx # Delete confirmation dialog with transaction check
@@ -142,8 +142,8 @@ finance-stack/
 │   │   │   ├── asset-performance-table.tsx # Expandable assets performance table (category → account type → account)
 │   │   │   ├── liquidity-breakdown.tsx   # Liquidity classification tiles + stacked bar
 │   │   │   ├── liability-performance-table.tsx # Expandable liability performance table (category → account type → account)
-│   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type; a type with an active promo splits into balance transfer / revolving (#417)
-│   │   │   ├── balance-transfer-tracker.tsx # Liabilities "Balance Transfers" card: payoff tracker per card with an active promo (#417)
+│   │   │   ├── debt-mix-breakdown.tsx    # Debt mix tiles per account type; a type with balance left on an active transfer splits into balance transfer / revolving (#417, #427)
+│   │   │   ├── balance-transfer-tracker.tsx # Liabilities "Balance Transfers" card: payoff tracker, one row per active transfer (#417, #427)
 │   │   │   ├── debt-service-summary.tsx  # Period payments, interest accrued, estimated principal paid + per-account sub-table
 │   │   │   ├── expand-toggle.tsx         # Disclosure button for an expandable table row: aria-expanded, Tab/Enter/Space (#144)
 │   │   │   └── signed-change.tsx         # SignedChange: a gain/loss in green/red with a trend icon, so direction is not colour-only; TrendIcon: the icon alone (#144)
@@ -186,8 +186,8 @@ finance-stack/
 │   │   ├── queries/assets-drilldown.ts   # Assets drill-down queries (allocation, performance, liquidity, decomposition)
 │   │   ├── queries/asset-performance.ts  # Pure builder for the asset performance tree, unit-tested
 │   │   ├── queries/liabilities-drilldown.ts # Liabilities drill-down queries (allocation, performance, decomposition, debt service, waterfall)
-│   │   ├── queries/balance-transfers.ts  # Active balance transfers for the drilldown; the edit page's list and picker candidates (#417)
-│   │   ├── queries/balance-transfer-payoff.ts # Pure payoff math (months left, pace, required, projection, status), unit-tested (#417)
+│   │   ├── queries/balance-transfers.ts  # Active balance transfers and what's left on each (request-cached); the edit page's list and picker candidates (#417, #427)
+│   │   ├── queries/balance-transfer-payoff.ts # Pure payoff math: the balance split between transfers, months left, pace, required, projection, status; unit-tested (#417, #427)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)

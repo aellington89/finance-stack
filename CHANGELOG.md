@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The balance-transfer tracker now splits a card's balance between its transfers, so a paid-off promo no longer sets the card's deadline.** ([Issue #427](https://github.com/aellington89/finance-stack/issues/427)) Before, a card with more than one active transfer was tracked as if its whole balance were owed on the promo that ends first. A transfer that had already been paid off still set the card's deadline, its needed monthly payment and its badge. Purchases on a promo card counted as promotional too. Now the app works out what's left on each transfer by replaying the card's balance history:
+  - payments clear the card's other debt first, then the promo that ends soonest;
+  - new purchases never add to a transfer;
+  - a transfer's fee joins it on the day the fee posts.
+
+  On the Liabilities page:
+  - **The Balance Transfers card** has one row per active transfer, with a card's transfers together.
+    - Each row shows what's left on that transfer and is judged against its own end date.
+    - Needed / mo counts what's paid ahead of the transfer, and the row says how much. So a card with several transfers needs the largest of its rows.
+    - A transfer that has been paid off reads **Paid off**, and it keeps its row until its promo ends.
+  - **The Debt Mix "balance transfer" tile** counts only what's left on active transfers. Purchases and other debt on the card move to the "revolving" tile, and a type whose transfers are all paid off doesn't split.
+  - **The Liability Performance badge** names the earliest-ending transfer that still has a balance. A card whose transfers are all paid off has no badge.
+
+  The account edit page's Balance transfers section shows what's left on each active transfer, or "Paid off".
+
+  A card with one transfer and no other debt shows the same figures as before, with two exceptions:
+  - once paid off, the transfer reads "Paid off" rather than "On track";
+  - when the card's debt is growing, what would be left at expiry is now capped at what's owed on the transfer, because the rest is new debt rather than promo balance.
+
+  The split models how issuers allocate payments. Where a statement shows per-promo balances, those are authoritative. [Database → Balance Transfers](docs/database.md#balance-transfers) has the rule and its limits. Nothing is stored, so there is no migration.
+
 ## [1.4.0] - 2026-11-10
 
 **Migration:** backward-compatible

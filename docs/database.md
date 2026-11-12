@@ -61,25 +61,50 @@ A card carrying a promotional balance (0%, or a reduced rate such as 3.99%) is a
 
 The card, the amount, the source and the start date are **read from the posting at query time**. Correct the posting and the transfer follows. Each read also re-checks the posting: one moved to an asset account, or edited into a credit, drops out rather than being misreported. A fee counts only while it sits on the same card as its posting.
 
-**Active on `[posting date, promo_end_date)`.** The posting's own day counts and the end day doesn't. A card is promotional while one of its transfers is active, and it reverts to revolving the day the promo ends, worked out from dates rather than stored. The rule is written once, as `promoActiveOn()` and `accountHasActivePromo()` in [`_aggregates.ts`](../app/lib/queries/_aggregates.ts). The Liabilities drilldown's Balance Transfers card, its debt-mix split and its performance-table badge all ask it that way.
+**Active on `[posting date, promo_end_date)`.** The posting's own day counts and the end day doesn't. A card is promotional while one of its transfers is active, and it reverts to revolving the day the promo ends, worked out from dates rather than stored. The rule is written once, as `promoActiveOn()` in [`_aggregates.ts`](../app/lib/queries/_aggregates.ts). The Liabilities drilldown's Balance Transfers card, its debt-mix split and its performance-table badge all read the one query that composes it, `getActiveTransferBalances()` in [`balance-transfers.ts`](../app/lib/queries/balance-transfers.ts). It is cached per request, so the three can't disagree.
 
 **Deleting.** A linked posting can't be deleted. `deleteTransaction()` refuses with "Remove the transfer first", and the `RESTRICT` key backs that up for any other writer (SQLSTATE 23001). Deleting a linked fee unlinks it. The transfer survives with no fee, and the `SET NULL` update is audited like any other change. Deleting the transfer itself, from the account's edit page, removes only the terms.
 
+**What's left on each transfer** (Issue #427). A card's balance history says how much the card owes, not which promo it's owed on, so `splitCardBalance()` in [`balance-transfer-payoff.ts`](../app/lib/queries/balance-transfer-payoff.ts) works that out. It replays the card's daily balances from its earliest active posting to the as-of date:
+
+- A transfer's balance starts at its posting amount, on the posting date. Its linked fee joins it on the fee's own date, since issuers add the fee to the transfer's balance.
+- Debt beyond the transfers' balances is non-promo debt. That covers purchases, interest, an older balance, and the leftover of a promo that has already ended.
+- When the card's debt falls below the transfers' total, the difference comes off the transfers, soonest-ending first, with ties broken by id. Payments therefore clear non-promo debt first, the way the CARD Act sends payments above the minimum to the highest-APR balance. After that they clear the promos in the order that leaves the least to revert.
+- New charges never add to a transfer's balance. That includes interest charged at a promo rate above 0%.
+
+It has to be a replay. Suppose a card carries an older, longer promo that has been partly paid down, and then takes a new, shorter one. A split of today's balance alone would read the new promo as paid off on the day it posts. In the replay, the debt rises by the new posting's full amount that day, so nothing comes off it.
+
+A promo that ended before the as-of date needs no tracking. It ends before every active one, so its leftover is paid ahead of all of them either way, exactly like non-promo debt. That is why the replay can start at the earliest *active* posting. The arithmetic is in whole cents, so float noise can't leave a cent on a paid-off transfer.
+
+The drilldown reads the split in three places:
+
+- **The Balance Transfers card** has one row per active transfer. A card's rows sit together, soonest-ending first.
+- **The debt-mix split's "balance transfer" half** is what's left on active transfers. Purchases and other non-promo debt on the card count as "revolving". A type whose active transfers are all paid off doesn't split.
+- **The performance-table badge** names the earliest-ending active transfer that still has a balance. A card whose active transfers are all paid off gets none.
+
+The account edit page shows what's left on each active transfer, or "Paid off".
+
 **The payoff math** lives in [`balance-transfer-payoff.ts`](../app/lib/queries/balance-transfer-payoff.ts), with every boundary unit-tested:
 
-- **Required/mo** is the payment that clears the balance by the end date: balance ÷ months at 0%, and the amortized payment at a promo APR above 0.
-- **Pace** is the card's net balance change per month (window days ÷ 30.44), measured over two windows:
+- **Owed** is what's left on the transfer.
+- **Needed / mo** is the payment that clears the transfer by its own end date, counting everything paid ahead of it: the card's non-promo debt and its earlier-ending transfers. At 0% that total is divided by the months left. At a promo APR above 0 it is the amortized payment. A card's actual requirement is the largest of its rows. For a card with one transfer and no other debt, this is the balance ÷ months, as it was before #427.
+- **Pace** is the card's net balance change per month (window days ÷ 30.44), shown on each of its rows. It is measured over two windows:
   - the trailing 3 months;
   - the selected range.
 
-  Both are taken from balance history, so new purchases count against it. Both leave out the transfer's own posting and fee, and both show "—" for a window under 30 days.
-- **Projection and status** use the 3-month pace. Status is "Expires in N days" within 90 days, ahead of on-track or behind.
+  Both are taken from balance history, so new purchases count against them. Both leave out the card's transfer postings and fees, and both show "—" for a window under 30 days.
+- **Left at expiry** is the part of this transfer that would revert at the 3-month pace, once what's ahead of it is paid. It is never more than what's owed on the transfer: when the card's debt is growing, the excess is new non-promo debt, not promo balance.
+- **Status**, first match wins:
+  1. "Paid off": nothing is left on the transfer. It keeps its row until its promo ends, with "—" for Needed, pace and projection.
+  2. "Expires in N days": within 90 days of its end date.
+  3. "Too new to project".
+  4. "Behind" or "On track", from the 3-month pace.
 
-**Known v1 limitations.**
+**Known limitations.**
 
-- While a promo is active, the card's **whole** balance counts as promotional, including purchases at the standard APR. Separating them would mean modelling how issuers allocate payments, so the required paydown is conservative for a card that's also used for purchases.
-- A card with several overlapping transfers gets **one** tracker row, keyed to its earliest-ending promo. Balance and pace are card-level facts, so per-transfer rows would double-count them.
-- Above 0%, interest is approximated at the nominal monthly rate (APR ÷ 12) on the current balance. It is not daily compounding, and not the interest postings in the ledger.
+- The split models how an issuer allocates payments. It isn't the issuer's own figures. Issuers send the minimum payment to the lowest-APR balance, and they may split payments between equal-APR promos differently. Where a statement shows per-promo balances, those are authoritative.
+- Non-promo debt is projected at the promo APR, because the card's standard APR isn't recorded yet (#110).
+- Above 0%, interest is approximated at the nominal monthly rate (APR ÷ 12). It is not daily compounding, and not the interest postings in the ledger.
 
 ## First-Launch Database Initialization
 
