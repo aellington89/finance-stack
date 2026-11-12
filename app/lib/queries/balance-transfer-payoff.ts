@@ -293,13 +293,158 @@ export function trackerStatus(input: {
   return { kind: "on_track" };
 }
 
+// ── The balance split ──────────────────────────────────────────────────
+
+/** One day of a card's balance history: `cumulative_balance`, ledger sign. */
+export interface BalancePoint {
+  date: string;
+  balance: number;
+}
+
+/** What the split needs to know about one active transfer. */
+export type SplitTransfer = Pick<
+  ActiveTransferRow,
+  | "balanceTransferId"
+  | "postingDate"
+  | "postingAmount"
+  | "feeDate"
+  | "feeAmount"
+  | "promoEndDate"
+>;
+
+export interface CardBalanceSplit {
+  /** What is left on each active transfer, by balanceTransferId. A magnitude. */
+  owed: ReadonlyMap<number, number>;
+  /**
+   * The card's debt that is on no active transfer: purchases, interest, an
+   * older balance, and the leftover of any promo that has already ended.
+   */
+  nonPromo: number;
+}
+
+/**
+ * The order payments reach a card's transfers once its non-promo debt is
+ * cleared: soonest end date first, ties by id. It is also the order the
+ * tracker lists a card's rows in.
+ */
+export const byPayoffOrder = (
+  a: Pick<ActiveTransferRow, "promoEndDate" | "balanceTransferId">,
+  b: Pick<ActiveTransferRow, "promoEndDate" | "balanceTransferId">
+): number =>
+  a.promoEndDate.localeCompare(b.promoEndDate) ||
+  a.balanceTransferId - b.balanceTransferId;
+
+const toCents = (dollars: number): number => Math.round(dollars * 100);
+
+/** What is owed on a card, in cents: zero when the card is in credit. */
+const debtCents = (balance: number): number => Math.max(0, -toCents(balance));
+
+/**
+ * Splits a card's debt between its active balance transfers and everything
+ * else (Issue #427), by replaying its daily balance history:
+ *
+ * - A transfer's balance starts at its posting amount, on the posting date.
+ *   Its linked fee joins it on the fee's own date (or the posting's, if the
+ *   fee is dated earlier), because issuers add the fee to the transfer's
+ *   balance. A fee that did not add debt joins nothing.
+ * - Debt beyond the transfers' balances is non-promo debt.
+ * - When the card's debt falls below the transfers' total, the difference
+ *   comes off the transfers in payoff order (byPayoffOrder).
+ *
+ * Clamping is all the replay does, and it is enough. A rise in debt never
+ * touches a transfer, so new charges land in non-promo debt. A fall comes off
+ * non-promo debt first, since a transfer is only cut once the transfers
+ * together exceed the debt, and only then off the soonest-ending transfer.
+ * That is the CARD Act's highest-APR-first rule for payments above the
+ * minimum, followed by the promo order that leaves the least to revert.
+ *
+ * Why a replay rather than a split of today's balance: a card with an older,
+ * longer promo that has been partly paid down, and then takes a new, shorter
+ * one. On the new posting's day the debt rises by its full amount, so no
+ * clamp fires and it keeps its whole balance. Splitting today's balance alone
+ * would read it as paid off.
+ *
+ * Only active transfers are passed in. A promo that ended before `asOf` ends
+ * before every active one, so it would sit ahead of all of them in payoff
+ * order anyway. Counting its leftover as non-promo debt therefore changes no
+ * active transfer's balance, which is why the history can start at the
+ * earliest *active* posting.
+ *
+ * `history` is the card's balance rows, ascending, from that posting through
+ * `asOf`. A missing day only delays an event to the next row. A final clamp
+ * against `asOfBalance` means a gap at the end can't leave a transfer above
+ * the card's debt. The arithmetic is in whole cents, so float noise can't
+ * leave a transfer a cent short of paid off.
+ */
+export function splitCardBalance(
+  transfers: readonly SplitTransfer[],
+  history: readonly BalancePoint[],
+  asOf: string,
+  asOfBalance: number
+): CardBalanceSplit {
+  const order = [...transfers].sort(byPayoffOrder);
+  const owed = new Map<number, number>(order.map((t) => [t.balanceTransferId, 0]));
+
+  const events: { date: string; id: number; cents: number }[] = [];
+  for (const t of order) {
+    if (t.postingAmount < 0) {
+      events.push({
+        date: t.postingDate,
+        id: t.balanceTransferId,
+        cents: -toCents(t.postingAmount),
+      });
+    }
+    if (t.feeDate !== null && t.feeAmount !== null && t.feeAmount < 0) {
+      events.push({
+        date: laterOf(t.feeDate, t.postingDate),
+        id: t.balanceTransferId,
+        cents: -toCents(t.feeAmount),
+      });
+    }
+  }
+  events.sort((a, b) => a.date.localeCompare(b.date));
+
+  let next = 0;
+  const applyEventsThrough = (date: string) => {
+    for (; next < events.length && events[next].date <= date; next++) {
+      const { id, cents } = events[next];
+      owed.set(id, (owed.get(id) ?? 0) + cents);
+    }
+  };
+  const total = () => Array.from(owed.values()).reduce((s, c) => s + c, 0);
+  const clamp = (debt: number) => {
+    let excess = total() - debt;
+    for (const t of order) {
+      if (excess <= 0) break;
+      const current = owed.get(t.balanceTransferId) ?? 0;
+      const take = Math.min(current, excess);
+      owed.set(t.balanceTransferId, current - take);
+      excess -= take;
+    }
+  };
+
+  for (const point of history) {
+    if (point.date > asOf) break;
+    applyEventsThrough(point.date);
+    clamp(debtCents(point.balance));
+  }
+  applyEventsThrough(asOf);
+  const finalDebt = debtCents(asOfBalance);
+  clamp(finalDebt);
+
+  return {
+    owed: new Map(Array.from(owed, ([id, cents]) => [id, cents / 100])),
+    nonPromo: (finalDebt - total()) / 100,
+  };
+}
+
 // ── Assembly ───────────────────────────────────────────────────────────
 
 /** The key the start-balance map is looked up by. */
 export const balanceKey = (accountId: number, date: string): string =>
   `${accountId}:${date}`;
 
-/** Each card's active transfers, earliest end date first. Ties go by id. */
+/** Each card's active transfers, in payoff order. */
 function groupByCard(
   rows: readonly ActiveTransferRow[]
 ): ActiveTransferRow[][] {
@@ -310,11 +455,7 @@ function groupByCard(
     byCard.set(row.accountId, list);
   }
   return Array.from(byCard.values()).map((list) =>
-    [...list].sort(
-      (a, b) =>
-        a.promoEndDate.localeCompare(b.promoEndDate) ||
-        a.balanceTransferId - b.balanceTransferId
-    )
+    [...list].sort(byPayoffOrder)
   );
 }
 

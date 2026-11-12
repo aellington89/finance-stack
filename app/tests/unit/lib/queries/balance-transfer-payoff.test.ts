@@ -10,8 +10,10 @@ import {
   paceWindowStarts,
   projectedDebt,
   requiredPayment,
+  splitCardBalance,
   trackerStatus,
   type ActiveTransferRow,
+  type SplitTransfer,
 } from "@/lib/queries/balance-transfer-payoff";
 
 // All figures are synthetic (Issue #417's worked example and variations).
@@ -298,6 +300,239 @@ describe("trackerStatus", () => {
     if (status.kind === "behind") {
       expect(status.shortPerMonth).toBeCloseTo(43.65, 2);
     }
+  });
+});
+
+// Issue #427. Each history is the card's balance on the days it changed: the
+// split only acts on a change, so those rows are all a full daily history
+// would add. Balances are ledger sign, so -4000 means $4,000 owed.
+describe("splitCardBalance", () => {
+  const transfer = (overrides: Partial<SplitTransfer> = {}): SplitTransfer => ({
+    balanceTransferId: 1,
+    postingDate: "2026-01-10",
+    postingAmount: -4000,
+    feeDate: null,
+    feeAmount: null,
+    promoEndDate: "2027-01-10",
+    ...overrides,
+  });
+
+  /** Splits as of the last history row, unless told otherwise. */
+  const split = (
+    transfers: SplitTransfer[],
+    history: [string, number][],
+    asOf?: { date: string; balance: number }
+  ) => {
+    const last = history[history.length - 1];
+    const result = splitCardBalance(
+      transfers,
+      history.map(([date, balance]) => ({ date, balance })),
+      asOf?.date ?? last[0],
+      asOf?.balance ?? last[1]
+    );
+    return { owed: Object.fromEntries(result.owed), nonPromo: result.nonPromo };
+  };
+
+  it("starts a transfer at its posting amount", () => {
+    expect(split([transfer()], [["2026-01-10", -4000]])).toEqual({
+      owed: { 1: 4000 },
+      nonPromo: 0,
+    });
+  });
+
+  it("clears non-promo debt first, then the soonest-ending transfer", () => {
+    const transfers = [
+      transfer({ balanceTransferId: 2, postingAmount: -10000, promoEndDate: "2026-12-01" }),
+      transfer({ balanceTransferId: 1, postingAmount: -4000, promoEndDate: "2026-06-01" }),
+    ];
+    // $1,000 already owed, then both transfers post.
+    const history: [string, number][] = [
+      ["2026-01-10", -15000],
+      ["2026-02-01", -13500], // $1,500 paid: the $1,000, then $500 of the first
+      ["2026-03-01", -8500], //  $5,000 paid: the first's $3,500, then the second
+    ];
+
+    expect(split(transfers, history.slice(0, 2))).toEqual({
+      owed: { 1: 3500, 2: 10000 },
+      nonPromo: 0,
+    });
+    expect(split(transfers, history)).toEqual({
+      owed: { 1: 0, 2: 8500 },
+      nonPromo: 0,
+    });
+  });
+
+  it("puts new charges in non-promo debt only", () => {
+    expect(
+      split(
+        [transfer()],
+        [
+          ["2026-01-10", -4000],
+          ["2026-02-01", -4300], // a $300 purchase
+          ["2026-03-01", -4100], // a $200 payment, which goes to the purchase
+        ]
+      )
+    ).toEqual({ owed: { 1: 4000 }, nonPromo: 100 });
+  });
+
+  it("adds the fee to its transfer on the fee's own date", () => {
+    const withFee = transfer({ feeDate: "2026-01-13", feeAmount: -120 });
+
+    expect(
+      split([withFee], [["2026-01-10", -4000], ["2026-01-13", -4120]])
+    ).toEqual({ owed: { 1: 4120 }, nonPromo: 0 });
+
+    // Paid off before the fee posts: the fee still joins the transfer rather
+    // than reading as a purchase. Joined on the posting date, it would have
+    // been cut with the rest, leaving $120 of non-promo debt.
+    expect(
+      split(
+        [withFee],
+        [["2026-01-10", -4000], ["2026-01-11", 0], ["2026-01-13", -120]]
+      )
+    ).toEqual({ owed: { 1: 120 }, nonPromo: 0 });
+  });
+
+  it("leaves out a fee dated after the as-of date", () => {
+    expect(
+      split([transfer({ feeDate: "2026-02-01", feeAmount: -120 })], [["2026-01-10", -4000]], {
+        date: "2026-01-20",
+        balance: -4000,
+      })
+    ).toEqual({ owed: { 1: 4000 }, nonPromo: 0 });
+  });
+
+  it("joins a fee dated before its posting on the posting date", () => {
+    expect(
+      split(
+        [transfer({ feeDate: "2026-01-08", feeAmount: -120 })],
+        [["2026-01-08", -120], ["2026-01-10", -4120]]
+      )
+    ).toEqual({ owed: { 1: 4120 }, nonPromo: 0 });
+  });
+
+  it("adds nothing for a linked fee that did not add debt", () => {
+    expect(
+      split(
+        [transfer({ feeDate: "2026-01-13", feeAmount: 120 })],
+        [["2026-01-10", -4000], ["2026-01-13", -3880]]
+      )
+    ).toEqual({ owed: { 1: 3880 }, nonPromo: 0 });
+  });
+
+  it("keeps the full balance of a shorter promo posted after a longer one was partly paid", () => {
+    const longer = transfer({ postingAmount: -10000, promoEndDate: "2027-07-01" });
+    const shorter = transfer({
+      balanceTransferId: 2,
+      postingDate: "2026-04-01",
+      postingAmount: -2000,
+      promoEndDate: "2026-10-01",
+    });
+
+    expect(
+      split(
+        [longer, shorter],
+        [
+          ["2026-01-10", -10000],
+          ["2026-03-01", -7000],
+          ["2026-04-01", -9000],
+        ]
+      )
+    ).toEqual({ owed: { 1: 7000, 2: 2000 }, nonPromo: 0 });
+  });
+
+  it("breaks an end-date tie by id", () => {
+    const sameEnd = { postingAmount: -1000, promoEndDate: "2026-09-01" };
+    expect(
+      split(
+        [
+          transfer({ balanceTransferId: 7, ...sameEnd }),
+          transfer({ balanceTransferId: 3, ...sameEnd }),
+        ],
+        [["2026-01-10", -2000], ["2026-02-01", -1500]]
+      )
+    ).toEqual({ owed: { 3: 500, 7: 1000 }, nonPromo: 0 });
+  });
+
+  it("counts debt from before the posting, such as an ended promo's leftover, as paid first", () => {
+    // $3,000 left over from a promo that has ended, then a new transfer.
+    expect(
+      split([transfer()], [["2026-01-10", -7000], ["2026-02-01", -5000]])
+    ).toEqual({ owed: { 1: 4000 }, nonPromo: 1000 });
+  });
+
+  it("owes nothing on any transfer once the card is in credit", () => {
+    expect(
+      split(
+        [transfer(), transfer({ balanceTransferId: 2, promoEndDate: "2028-01-01" })],
+        [["2026-01-10", -8000], ["2026-02-01", 25]]
+      )
+    ).toEqual({ owed: { 1: 0, 2: 0 }, nonPromo: 0 });
+  });
+
+  it("applies a posting with no balance row that day at the next row", () => {
+    expect(split([transfer()], [["2026-01-12", -4000]])).toEqual({
+      owed: { 1: 4000 },
+      nonPromo: 0,
+    });
+  });
+
+  it("clamps against the as-of balance when history ends early", () => {
+    expect(
+      split([transfer()], [["2026-01-10", -4000]], { date: "2026-01-20", balance: -1000 })
+    ).toEqual({ owed: { 1: 1000 }, nonPromo: 0 });
+  });
+
+  it("ignores history after the as-of date", () => {
+    expect(
+      split([transfer()], [["2026-01-10", -4000], ["2026-02-01", 0]], {
+        date: "2026-01-20",
+        balance: -4000,
+      })
+    ).toEqual({ owed: { 1: 4000 }, nonPromo: 0 });
+  });
+
+  it("works in cents, so float noise leaves nothing behind", () => {
+    // 0.1 + 0.2 is 0.30000000000000004 in floating point.
+    expect(
+      split(
+        [transfer({ postingAmount: -0.1, feeDate: "2026-01-10", feeAmount: -0.2 })],
+        [["2026-01-10", -0.3]]
+      )
+    ).toEqual({ owed: { 1: 0.3 }, nonPromo: 0 });
+  });
+
+  describe("the issue's worked example", () => {
+    // Two 0% transfers on a card with no other balance: $4,000 + $120 ending
+    // first, $10,000 + $300 ending three months later. $14,420 in all.
+    const transfers = [
+      transfer({ feeDate: "2026-01-12", feeAmount: -120, promoEndDate: "2026-12-10" }),
+      transfer({
+        balanceTransferId: 2,
+        postingAmount: -10000,
+        feeDate: "2026-01-12",
+        feeAmount: -300,
+        promoEndDate: "2027-03-10",
+      }),
+    ];
+    const start: [string, number][] = [
+      ["2026-01-10", -14000],
+      ["2026-01-12", -14420],
+    ];
+
+    it("pays off the first transfer once $4,120 has been paid", () => {
+      expect(split(transfers, [...start, ["2026-11-01", -8000]])).toEqual({
+        owed: { 1: 0, 2: 8000 },
+        nonPromo: 0,
+      });
+    });
+
+    it("leaves part of the first while less than that has been paid", () => {
+      expect(split(transfers, [...start, ["2026-11-01", -12000]])).toEqual({
+        owed: { 1: 1700, 2: 10300 },
+        nonPromo: 0,
+      });
+    });
   });
 });
 
