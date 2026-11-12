@@ -145,6 +145,28 @@ async function linkTransfer(posting: number, fee: number | null, promoEndDate = 
   return row.id;
 }
 
+/**
+ * Adds a $600 transfer to card B on Apr 15, 2020, on a promo that ends on
+ * Jan 15, 2021, before the scenario's own. Payments reach it first, once the
+ * card's $500 of earlier debt is cleared (by May 1), so the Jun, Jul and Aug
+ * payments pay it off on Aug 1. The rest of that payment ($150) and the four
+ * after it reach the scenario's transfer, which is left with
+ * 3,090 - 1,150 = 1,940: all of the card's debt.
+ */
+async function addPaidOffTransfer(s: Scenario) {
+  const posting = await insertTx({
+    accountId: s.card, date: "2020-04-15", amount: "-600.00", categoryId: s.category,
+    typeId: INTERNAL_TRANSFER, relatedAccountId: s.source,
+  });
+  await rebuild(s.card);
+  const paidOff = await linkTransfer(posting, null, "2021-01-15");
+  const [{ id: transferId }] = await db
+    .select({ id: balanceTransfers.balanceTransferId })
+    .from(balanceTransfers)
+    .where(eq(balanceTransfers.transferTransactionId, s.posting));
+  return { ...s, paidOff, transferId };
+}
+
 async function rebuild(...ids: number[]) {
   for (const id of ids) await rebuildAccountBalance(db, id);
 }
@@ -191,7 +213,7 @@ describe("getActiveBalanceTransfers", () => {
     expect(row).toBeDefined();
     expect(row.accountName).toBe("BT Test - Card B");
     expect(row.asOf).toBe(AS_OF);
-    expect(row.primary).toMatchObject({
+    expect(row.transfer).toMatchObject({
       sourceAccountName: "BT Test - Card A",
       postingDate: POSTING_DATE,
       transferredAmount: 3000,
@@ -199,9 +221,11 @@ describe("getActiveBalanceTransfers", () => {
       promoEndDate: PROMO_END,
       promoApr: 0,
     });
-    // -500 - 3000 - 90 + 9 × 250
-    expect(row.balance).toBe(-1340);
-    expect(row.debt).toBe(1340);
+    // The card owes -500 - 3000 - 90 + 9 × 250 = 1,340. The $500 owed before
+    // the transfer was cleared by the first two payments, so all of it is
+    // left on the transfer.
+    expect(row.owed).toBe(1340);
+    expect(row.aheadOfIt).toBe(0);
     expect(row.monthsRemaining).toBe(9);
   });
 
@@ -239,8 +263,8 @@ describe("getActiveBalanceTransfers", () => {
 
     expect(await onCard(s.card, RANGE_FROM, "2020-04-15")).toHaveLength(0);
     const [row] = await onCard(s.card, RANGE_FROM, AS_OF);
-    expect(row.primary.transferredAmount).toBe(3500);
-    expect(row.primary.postingDate).toBe("2020-05-01");
+    expect(row.transfer.transferredAmount).toBe(3500);
+    expect(row.transfer.postingDate).toBe("2020-05-01");
   });
 
   it("drops a posting moved to an asset account", async () => {
@@ -276,7 +300,7 @@ describe("getActiveBalanceTransfers", () => {
     await rebuild(s.card, s.revolving);
 
     const [row] = await onCard(s.card, RANGE_FROM, AS_OF);
-    expect(row.primary.feeAmount).toBeNull();
+    expect(row.transfer.feeAmount).toBeNull();
   });
 
   it("shows External when the posting has no related account", async () => {
@@ -287,11 +311,12 @@ describe("getActiveBalanceTransfers", () => {
       .where(eq(transactions.transactionId, s.posting));
 
     const [row] = await onCard(s.card, RANGE_FROM, AS_OF);
-    expect(row.primary.sourceAccountName).toBeNull();
+    expect(row.transfer.sourceAccountName).toBeNull();
   });
 
-  it("gives a card with overlapping transfers one row", async () => {
+  it("gives each of a card's overlapping transfers its own row, splitting the balance between them", async () => {
     const s = await buildScenario();
+    // $800 more on Jun 1, the same day as a $250 payment, on a longer promo.
     const second = await insertTx({
       accountId: s.card, date: "2020-06-01", amount: "-800.00", categoryId: s.category,
       typeId: INTERNAL_TRANSFER, relatedAccountId: s.source,
@@ -300,9 +325,34 @@ describe("getActiveBalanceTransfers", () => {
     await linkTransfer(second, null, "2022-06-01");
 
     const rows = await onCard(s.card, RANGE_FROM, AS_OF);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].primary.promoEndDate).toBe(PROMO_END);
-    expect(rows[0].others.map((o) => o.transferredAmount)).toEqual([800]);
+    // The first transfer ends sooner, so the payments after Jun 1 all reach
+    // it: 3,090 - 250 (the Jun 1 payment, once the $500 was cleared) - 6 × 250.
+    expect(rows.map((r) => [r.transfer.promoEndDate, r.owed, r.aheadOfIt])).toEqual([
+      [PROMO_END, 1340, 0],
+      ["2022-06-01", 800, 1340],
+    ]);
+    // Pace is the card's, on both rows.
+    expect(rows[0].threeMonthPace).toBe(rows[1].threeMonthPace);
+  });
+
+  it("reads an earlier-ending transfer as paid off once the payments have cleared it", async () => {
+    const s = await addPaidOffTransfer(await buildScenario());
+    const rows = await onCard(s.card, RANGE_FROM, AS_OF);
+
+    expect(rows.map((r) => r.transfer.balanceTransferId)).toEqual([s.paidOff, s.transferId]);
+    expect(rows[0]).toMatchObject({
+      owed: 0,
+      requiredPerMonth: null,
+      threeMonthPace: null,
+      projectedAtExpiry: null,
+      status: { kind: "paid_off" },
+    });
+    // It no longer sets the deadline: the other transfer is judged on its own
+    // end date, nine months out, rather than "Expires in 15 days".
+    expect(rows[1].owed).toBe(1940);
+    expect(rows[1].monthsRemaining).toBe(9);
+    expect(rows[1].requiredPerMonth).toBeCloseTo(1940 / 9, 10);
+    expect(rows[1].status.kind).not.toBe("expiring");
   });
 });
 
@@ -434,7 +484,7 @@ describe("balance_transfers constraints", () => {
       .where(eq(balanceTransfers.transferTransactionId, s.posting));
     expect(row.feeTransactionId).toBeNull();
     const [tracked] = await onCard(s.card, RANGE_FROM, AS_OF);
-    expect(tracked.primary.feeAmount).toBeNull();
+    expect(tracked.transfer.feeAmount).toBeNull();
   });
 
   it("refuses linking a posting twice", async () => {
@@ -520,7 +570,7 @@ describe("the Finances_Test fixture transfer", () => {
     const [row] = await onCard(DISCOVER, "2020-01-01");
 
     expect(row).toBeDefined();
-    expect(row.primary).toMatchObject({
+    expect(row.transfer).toMatchObject({
       sourceAccountName: "Test Credit Card - Visa",
       transferredAmount: 1200,
       feeAmount: 36,

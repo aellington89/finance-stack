@@ -9,31 +9,37 @@ import {
 
 /**
  * The payoff math behind the Liabilities drilldown's Balance transfers card
- * (Issue #417).
+ * (Issues #417 and #427).
  *
  * Kept apart from balance-transfers.ts, and free of any database import, so
  * the unit project can reach every boundary directly, the same way
- * asset-performance.ts is. getActiveBalanceTransfers() is two queries plus
- * calls into this module: balanceProbes() says which balances the second
- * query must fetch, and buildBalanceTransferTracker() does the rest.
+ * asset-performance.ts is. getActiveTransferBalances() is two queries plus
+ * calls into this module: historyStarts() says where the second query starts
+ * reading each card's balance history, and splitActiveTransfers() works out
+ * what is left on each transfer. buildBalanceTransferTracker() turns that into
+ * the card's rows.
  *
  * Sign convention. Card balances keep the ledger's sign (negative = owed), as
  * everywhere in the liabilities layer. Everything this module derives from them
- * is a magnitude: `debt` is what is owed, a pace is positive when the debt is
- * falling, and transferred and fee amounts are shown as their absolute values.
+ * is a magnitude: `owed` is what is left on a transfer, a pace is positive when
+ * the debt is falling, and transferred and fee amounts are shown as their
+ * absolute values.
  *
- * The card is the unit of the payoff math. Balance, pace and required paydown
- * come from the card's balance history, which cannot be split between two
- * promos on the same card. A card carrying several active transfers therefore
- * gets one tracker row, whose deadline is its earliest-ending promo. Its later
- * transfers ride along as `others`, showing their own terms only. Otherwise
- * each row would restate the same whole-card balance and the required
- * paydowns would double-count.
+ * The transfer is the unit of the tracker (Issue #427). splitCardBalance()
+ * divides the card's debt between its active transfers and its non-promo debt
+ * by replaying the card's balance history, so each transfer gets its own row:
+ * its own deadline, what is left on it, and what the card must pay to clear it
+ * in time, counting the debt that is paid ahead of it. Pace stays a fact about
+ * the card, repeated on each of its rows. Before #427 a card had one row, keyed
+ * to its earliest-ending promo, so a promo already paid off still set the
+ * card's deadline.
  *
- * v1 limitation, carried from the issue. While a promo is active, the card's
- * whole balance counts as promotional, including purchases at the standard
- * APR. The required paydown is therefore conservative for a card that is
- * also used for purchases.
+ * Known limitation. The split models how an issuer allocates payments. It is
+ * not the issuer's own figures: issuers send the minimum payment to the
+ * lowest-APR balance, they may split payments between equal-APR promos
+ * differently, and non-promo debt is projected here at the promo APR, because
+ * the card's standard APR isn't recorded yet (#110). Where a statement shows
+ * per-promo balances, those are authoritative.
  */
 
 // ── Inputs ─────────────────────────────────────────────────────────────
@@ -50,6 +56,8 @@ export type ActiveTransferRow = {
   balanceTransferId: number;
   accountId: number;
   accountName: string;
+  /** The card's account type. */
+  accountTypeId: number;
   postingTransactionId: number;
   postingDate: string;
   /** Ledger sign: negative, because the posting added debt to the card. */
@@ -66,6 +74,20 @@ export type ActiveTransferRow = {
   asOf: string;
 };
 
+/**
+ * An active transfer with its share of the card's debt, as
+ * getActiveTransferBalances() returns it. Both figures are magnitudes.
+ */
+export type ActiveTransfer = ActiveTransferRow & {
+  /** What is left on this transfer. */
+  owed: number;
+  /**
+   * What payments reach before this transfer: the card's non-promo debt, plus
+   * what is left on its transfers that end sooner.
+   */
+  aheadOfIt: number;
+};
+
 /** A ledger amount that must not count as paydown or as falling behind. */
 export interface LinkedPosting {
   date: string;
@@ -75,6 +97,7 @@ export interface LinkedPosting {
 // ── Outputs ────────────────────────────────────────────────────────────
 
 export type TrackerStatus =
+  | { kind: "paid_off" }
   | { kind: "on_track" }
   | { kind: "behind"; shortPerMonth: number }
   | { kind: "expiring"; daysLeft: number }
@@ -91,28 +114,40 @@ export interface TransferTerms {
   feeAmount: number | null;
 }
 
+/**
+ * One tracker row: one active transfer. A card's rows are adjacent, in payoff
+ * order. A paid-off transfer keeps its row until its promo ends, with `null`
+ * for every figure that has nothing left to measure.
+ */
 export interface BalanceTransferTrackerRow {
   accountId: number;
   accountName: string;
+  accountTypeId: number;
   asOf: string;
-  /** The card's balance on `asOf`, ledger sign. */
-  balance: number;
-  /** What is owed: `max(0, -balance)`. */
-  debt: number;
-  /** The earliest-ending active transfer, which sets the deadline. */
-  primary: TransferTerms;
-  /** The card's other active transfers, by end date. Usually empty. */
-  others: TransferTerms[];
+  transfer: TransferTerms;
+  /** What is left on this transfer. */
+  owed: number;
+  /** Paid ahead of it: non-promo debt and earlier-ending transfers. */
+  aheadOfIt: number;
+  /** Until this transfer's own end date. */
   monthsRemaining: number;
   daysLeft: number;
-  /** Interest per month at the promo APR. `null` at 0%. */
+  /** Interest per month on `owed` at the promo APR. `null` at 0% or paid off. */
   monthlyInterest: number | null;
-  requiredPerMonth: number;
-  /** Net paydown per month over the trailing 3 months. `null` = "—". */
+  /**
+   * What the card must pay each month to clear this transfer by its end date,
+   * counting `aheadOfIt`. `null` (shown as "—") once it is paid off. The
+   * card's actual requirement is the largest of its rows.
+   */
+  requiredPerMonth: number | null;
+  /** The card's net paydown per month over the trailing 3 months. `null` = "—". */
   threeMonthPace: number | null;
-  /** Net paydown per month over the selected range. `null` = "—". */
+  /** The card's net paydown per month over the selected range. `null` = "—". */
   rangePace: number | null;
-  /** Debt left at expiry at the 3-month pace. `null` when that pace is. */
+  /**
+   * What of this transfer would revert at expiry, at the 3-month pace, once
+   * what is ahead of it is paid. `null` when that pace is, or when paid off.
+   */
   projectedAtExpiry: number | null;
   status: TrackerStatus;
 }
@@ -266,25 +301,32 @@ export function projectedDebt(
 }
 
 /**
- * The status shown in the card's last column, first match wins:
+ * The status shown in a row's last column, first match wins:
  *
- * 1. Nothing owed: on track.
+ * 1. Nothing left on this transfer: paid off (Issue #427).
  * 2. 90 days or fewer left: "Expires in N days", whatever the pace. The
  *    projection column still shows what would be left.
  * 3. No 3-month pace yet: too new to project.
  * 4. The implied gross payment falls short of the required one by at least a
  *    cent: behind, short by that much a month.
  * 5. Otherwise on track.
+ *
+ * `debt` is what must be paid by this transfer's end date: what is left on it
+ * plus what is paid ahead of it. The gross payment is the pace plus a month's
+ * interest on that, not on the whole card. Interest on the card's later
+ * transfers is a new charge, which lands in non-promo debt ahead of this one,
+ * so it uses up exactly that share of the payment.
  */
 export function trackerStatus(input: {
+  owed: number;
   debt: number;
   daysLeft: number;
   apr: number;
   requiredPerMonth: number;
   threeMonthPace: number | null;
 }): TrackerStatus {
-  const { debt, daysLeft, apr, requiredPerMonth, threeMonthPace } = input;
-  if (debt < CENT_EPSILON) return { kind: "on_track" };
+  const { owed, debt, daysLeft, apr, requiredPerMonth, threeMonthPace } = input;
+  if (owed < CENT_EPSILON) return { kind: "paid_off" };
   if (daysLeft <= EXPIRY_WARNING_DAYS) return { kind: "expiring", daysLeft };
   if (threeMonthPace === null) return { kind: "too_new" };
   const gross = threeMonthPace + debt * monthlyRate(apr);
@@ -440,15 +482,9 @@ export function splitCardBalance(
 
 // ── Assembly ───────────────────────────────────────────────────────────
 
-/** The key the start-balance map is looked up by. */
-export const balanceKey = (accountId: number, date: string): string =>
-  `${accountId}:${date}`;
-
 /** Each card's active transfers, in payoff order. */
-function groupByCard(
-  rows: readonly ActiveTransferRow[]
-): ActiveTransferRow[][] {
-  const byCard = new Map<number, ActiveTransferRow[]>();
+function groupByCard<T extends ActiveTransferRow>(rows: readonly T[]): T[][] {
+  const byCard = new Map<number, T[]>();
   for (const row of rows) {
     const list = byCard.get(row.accountId) ?? [];
     list.push(row);
@@ -466,23 +502,47 @@ const promotionalSince = (card: readonly ActiveTransferRow[]): string =>
   );
 
 /**
- * The `(account, date)` balances the second query must fetch: each card's
- * two window starts. Nothing is returned when no transfer is active, so the
- * query can be skipped outright.
+ * Where the second query starts reading each card's balance history: its
+ * earliest active posting. The split replays from there, and both pace
+ * windows start on or after it, so one range read serves both. Nothing is
+ * returned when no transfer is active, so the query can be skipped outright.
  */
-export function balanceProbes(
+export function historyStarts(
+  rows: readonly ActiveTransferRow[]
+): { accountId: number; since: string }[] {
+  return groupByCard(rows).map((card) => ({
+    accountId: card[0].accountId,
+    since: promotionalSince(card),
+  }));
+}
+
+/**
+ * Every active transfer with what is left on it and what is paid ahead of
+ * it, from splitCardBalance() over its card's history. Grouped by card, in
+ * payoff order. `history` is keyed by account id; a card with none reads as
+ * owing what its as-of balance says.
+ */
+export function splitActiveTransfers(
   rows: readonly ActiveTransferRow[],
-  dateFrom: string
-): { accountId: number; date: string }[] {
-  const probes = new Map<string, { accountId: number; date: string }>();
-  for (const card of groupByCard(rows)) {
-    const { accountId, asOf } = card[0];
-    const starts = paceWindowStarts(asOf, dateFrom, promotionalSince(card));
-    for (const date of [starts.threeMonth, starts.range]) {
-      probes.set(balanceKey(accountId, date), { accountId, date });
-    }
-  }
-  return Array.from(probes.values());
+  history: ReadonlyMap<number, readonly BalancePoint[]>
+): ActiveTransfer[] {
+  return groupByCard(rows).flatMap((card) => {
+    const { accountId, asOf, balance } = card[0];
+    const { owed, nonPromo } = splitCardBalance(
+      card,
+      history.get(accountId) ?? [],
+      asOf,
+      balance
+    );
+    // Cents, so the running total adds up to the card's debt exactly.
+    let aheadCents = toCents(nonPromo);
+    return card.map((row) => {
+      const owedCents = toCents(owed.get(row.balanceTransferId) ?? 0);
+      const transfer = { ...row, owed: owedCents / 100, aheadOfIt: aheadCents / 100 };
+      aheadCents += owedCents;
+      return transfer;
+    });
+  });
 }
 
 const termsOf = (row: ActiveTransferRow): TransferTerms => ({
@@ -508,77 +568,110 @@ const linkedPostings = (card: readonly ActiveTransferRow[]): LinkedPosting[] =>
   });
 
 /**
- * One tracker row per card with an active promo, soonest deadline first.
+ * One transfer's row. Everything that has to be paid by its end date is
+ * `cumulative`: what is left on it plus what is paid ahead of it. Needed / mo,
+ * the projection and the status are the single-balance functions above,
+ * applied to that. Left at expiry is this transfer's part of what the
+ * projection leaves, and payments reach it last, so that part comes first.
  *
- * `startBalances` holds the balances balanceProbes() asked for, keyed by
- * balanceKey(). A probe with no balance row makes that pace `null`.
+ * For a card with one transfer and no other debt, `cumulative` is the card's
+ * debt, so every figure is what it was when the card was the unit.
+ */
+function trackerRow(
+  t: ActiveTransfer,
+  pace: { threeMonth: number | null; range: number | null }
+): BalanceTransferTrackerRow {
+  const months = monthsRemaining(t.asOf, t.promoEndDate);
+  const daysLeft = daysRemaining(t.asOf, t.promoEndDate);
+  const apr = t.promoApr;
+  const paidOff = t.owed < CENT_EPSILON;
+  const cumulative = t.aheadOfIt + t.owed;
+  const requiredPerMonth = paidOff ? null : requiredPayment(cumulative, apr, months);
+  const threeMonthPace = paidOff ? null : pace.threeMonth;
+
+  return {
+    accountId: t.accountId,
+    accountName: t.accountName,
+    accountTypeId: t.accountTypeId,
+    asOf: t.asOf,
+    transfer: termsOf(t),
+    owed: t.owed,
+    aheadOfIt: t.aheadOfIt,
+    monthsRemaining: months,
+    daysLeft,
+    monthlyInterest: apr > 0 && !paidOff ? t.owed * monthlyRate(apr) : null,
+    requiredPerMonth,
+    threeMonthPace,
+    rangePace: paidOff ? null : pace.range,
+    projectedAtExpiry:
+      threeMonthPace === null
+        ? null
+        : Math.min(t.owed, projectedDebt(cumulative, apr, months, threeMonthPace)),
+    status: trackerStatus({
+      owed: t.owed,
+      debt: cumulative,
+      daysLeft,
+      apr,
+      requiredPerMonth: requiredPerMonth ?? 0,
+      threeMonthPace,
+    }),
+  };
+}
+
+/**
+ * One tracker row per active transfer, a card's rows together in payoff
+ * order.
+ *
+ * Pace is the card's: both windows start no earlier than its earliest active
+ * posting, and every active transfer's posting and fee are taken out of it.
+ * Start balances are read from `history`, which getActiveTransferBalances()
+ * reads from that same posting, so it holds every window start. A start date
+ * with no balance row makes that pace `null`.
+ *
+ * Cards are ordered by the soonest end date among their transfers that still
+ * have a balance. A card whose transfers are all paid off goes last, since
+ * nothing on it is due. Ties go by account id.
  */
 export function buildBalanceTransferTracker(
-  rows: readonly ActiveTransferRow[],
-  startBalances: ReadonlyMap<string, number>,
+  transfers: readonly ActiveTransfer[],
+  history: ReadonlyMap<number, readonly BalancePoint[]>,
   dateFrom: string
 ): BalanceTransferTrackerRow[] {
-  const tracker = groupByCard(rows).map((card) => {
-    const [primaryRow, ...otherRows] = card;
-    const { accountId, accountName, asOf, balance } = primaryRow;
-    const debt = Math.max(0, -balance);
-    const apr = primaryRow.promoApr;
-
-    const months = monthsRemaining(asOf, primaryRow.promoEndDate);
-    const daysLeft = daysRemaining(asOf, primaryRow.promoEndDate);
+  const cards = groupByCard(transfers).map((card) => {
+    const { accountId, asOf, balance } = card[0];
     const starts = paceWindowStarts(asOf, dateFrom, promotionalSince(card));
     const linked = linkedPostings(card);
-    const startBalance = (date: string) =>
-      startBalances.get(balanceKey(accountId, date)) ?? null;
-
-    const threeMonthPace = monthlyPace({
-      startBalance: startBalance(starts.threeMonth),
-      endBalance: balance,
-      start: starts.threeMonth,
-      end: asOf,
-      linked,
-    });
-    const rangePace = monthlyPace({
-      startBalance: startBalance(starts.range),
-      endBalance: balance,
-      start: starts.range,
-      end: asOf,
-      linked,
-    });
-
-    const requiredPerMonth = requiredPayment(debt, apr, months);
-
-    return {
-      accountId,
-      accountName,
-      asOf,
-      balance,
-      debt,
-      primary: termsOf(primaryRow),
-      others: otherRows.map(termsOf),
-      monthsRemaining: months,
-      daysLeft,
-      monthlyInterest: apr > 0 ? debt * monthlyRate(apr) : null,
-      requiredPerMonth,
-      threeMonthPace,
-      rangePace,
-      projectedAtExpiry:
-        threeMonthPace === null
-          ? null
-          : projectedDebt(debt, apr, months, threeMonthPace),
-      status: trackerStatus({
-        debt,
-        daysLeft,
-        apr,
-        requiredPerMonth,
-        threeMonthPace,
-      }),
+    const balanceOn = new Map(
+      (history.get(accountId) ?? []).map((p) => [p.date, p.balance])
+    );
+    const paceFrom = (start: string) =>
+      monthlyPace({
+        startBalance: balanceOn.get(start) ?? null,
+        endBalance: balance,
+        start,
+        end: asOf,
+        linked,
+      });
+    const pace = {
+      threeMonth: paceFrom(starts.threeMonth),
+      range: paceFrom(starts.range),
     };
+    return card.map((t) => trackerRow(t, pace));
   });
 
-  return tracker.sort(
-    (a, b) =>
-      a.primary.promoEndDate.localeCompare(b.primary.promoEndDate) ||
-      a.accountId - b.accountId
-  );
+  const nextDue = (card: BalanceTransferTrackerRow[]) =>
+    card.find((row) => row.status.kind !== "paid_off");
+
+  return cards
+    .sort((a, b) => {
+      const dueA = nextDue(a);
+      const dueB = nextDue(b);
+      if (!dueA !== !dueB) return dueA ? -1 : 1;
+      return (
+        (dueA ?? a[0]).transfer.promoEndDate.localeCompare(
+          (dueB ?? b[0]).transfer.promoEndDate
+        ) || a[0].accountId - b[0].accountId
+      );
+    })
+    .flat();
 }
