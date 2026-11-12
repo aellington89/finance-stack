@@ -225,8 +225,8 @@ export const accountBalanceHistory = pgTable("account_balance_history", {
 // time, so correcting the posting corrects the transfer.
 //
 // A promo is active on the half-open interval [posting date, promo_end_date).
-// Ask that through promoActiveOn() / accountHasActivePromo() in
-// lib/queries/_aggregates.ts rather than restating it.
+// Ask that through promoActiveOn() in lib/queries/_aggregates.ts rather than
+// restating it.
 //
 // The two foreign keys differ on purpose. The posting is RESTRICT: without it
 // the transfer has no card, amount or start date, and the hand-entered terms

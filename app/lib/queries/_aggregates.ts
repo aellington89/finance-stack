@@ -143,10 +143,10 @@ export function balanceRowPerAccount(dateTo?: string): SQL {
  *
  * A promo is active on the half-open interval [posting date, promo_end_date):
  * the posting's own day counts, and the end day does not. This is the one
- * place that rule is written down in SQL. Every query that asks "is this card
- * promotional on D" composes it, directly or through accountHasActivePromo(),
- * so the answer cannot drift between the tracker card, the debt-mix split and
- * the performance badge.
+ * place that rule is written down in SQL. The tracker card, the debt-mix split
+ * and the performance badge all read the one query that composes it
+ * (getActiveTransferBalances() in balance-transfers.ts), so the answer cannot
+ * drift between them. The edit page's Active/Ended chip composes it too.
  *
  * `p.amount < 0` belongs to the same question. The action only links a
  * posting that added debt, and a posting later edited into a credit drops out
@@ -162,28 +162,4 @@ export function balanceRowPerAccount(dateTo?: string): SQL {
  */
 export function promoActiveOn(date: string | SQL): SQL {
   return sql`(p.amount < 0 AND p.transaction_date <= ${date}::date AND ${date}::date < bt.promo_end_date)`;
-}
-
-/**
- * Pattern E — does account `a` carry an active balance-transfer promo on
- * `date`? (Issue #417)
- *
- *   EXISTS (SELECT 1 FROM balance_transfers bt
- *           JOIN transactions p ON p.transaction_id = bt.transfer_transaction_id
- *           WHERE p.account_id = a.account_id AND <promoActiveOn(date)>)
- *
- * The card is whichever account the posting is on now, so editing the
- * posting's account moves the promo with it. balance_transfers is small and
- * both of its links are UNIQUE-indexed, so this is a cheap probe per account.
- *
- * Assumes the `accounts` table is aliased `a` in the surrounding query. The
- * subquery's own `bt` and `p` shadow any outer aliases of the same name.
- */
-export function accountHasActivePromo(date: string | SQL): SQL {
-  return sql`EXISTS (
-    SELECT 1 FROM balance_transfers bt
-    JOIN transactions p ON p.transaction_id = bt.transfer_transaction_id
-    WHERE p.account_id = a.account_id
-      AND ${promoActiveOn(date)}
-  )`;
 }

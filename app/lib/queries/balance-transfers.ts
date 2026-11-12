@@ -177,11 +177,12 @@ async function loadActiveTransfers(
 }
 
 /**
- * loadActiveTransfers() for every card, once per request. React's `cache`
- * makes every reader in one server request share a single execution, as
- * ensureTodayBalances() does for the layout and the page, so no two parts of
- * a page can disagree about it. Outside a React server render (the
- * integration tests) `cache` is a pass-through, and every call queries afresh.
+ * loadActiveTransfers() for every card, once per request. The drilldown asks
+ * three things of it, the tracker, the debt-mix split and the badge, and
+ * React's `cache` makes them share one execution, as ensureTodayBalances()
+ * does for the layout and the page. So the three can't disagree within a
+ * page. Outside a React server render (the integration tests) `cache` is a
+ * pass-through, and every call queries afresh.
  *
  * `cache` keys on the arguments as passed, so callers pass `dateTo` even when
  * it is undefined: `f()` and `f(undefined)` would be two entries.

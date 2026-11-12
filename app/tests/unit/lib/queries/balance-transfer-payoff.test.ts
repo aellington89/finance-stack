@@ -8,6 +8,8 @@ import {
   monthsRemaining,
   paceWindowStarts,
   projectedDebt,
+  promoBadgeByAccount,
+  promoBalanceByType,
   requiredPayment,
   splitActiveTransfers,
   splitCardBalance,
@@ -868,5 +870,64 @@ describe("buildBalanceTransferTracker", () => {
       [20, 6],
       [22, 8],
     ]);
+  });
+});
+
+describe("promoBalanceByType", () => {
+  const owing = (overrides: Partial<ActiveTransfer>): ActiveTransfer => ({
+    ...row(overrides),
+    owed: 0,
+    aheadOfIt: 0,
+    ...overrides,
+  });
+
+  it("sums what is left on each type's active transfers, in the ledger's sign", () => {
+    const byType = promoBalanceByType([
+      owing({ balanceTransferId: 1, accountId: 9, owed: 1700 }),
+      owing({ balanceTransferId: 2, accountId: 9, owed: 10300 }),
+      owing({ balanceTransferId: 3, accountId: 12, owed: 0.1 }),
+      owing({ balanceTransferId: 4, accountId: 30, accountTypeId: 16, owed: 0.2 }),
+    ]);
+    expect(Object.fromEntries(byType)).toEqual({ 15: -12000.1, 16: -0.2 });
+  });
+
+  it("leaves out a type whose transfers are all paid off, so it doesn't split", () => {
+    const byType = promoBalanceByType([
+      owing({ balanceTransferId: 1, owed: 0 }),
+      owing({ balanceTransferId: 2, accountId: 12, owed: 0 }),
+    ]);
+    expect(byType.size).toBe(0);
+  });
+});
+
+describe("promoBadgeByAccount", () => {
+  const owing = (overrides: Partial<ActiveTransfer>): ActiveTransfer => ({
+    ...row(overrides),
+    owed: 0,
+    aheadOfIt: 0,
+    ...overrides,
+  });
+
+  it("names each card's earliest-ending transfer that still has a balance", () => {
+    const badges = promoBadgeByAccount([
+      owing({ balanceTransferId: 2, promoEndDate: "2027-03-10", promoApr: 3.99, owed: 8000 }),
+      owing({ balanceTransferId: 1, promoEndDate: "2026-12-10", owed: 0 }),
+      owing({ balanceTransferId: 3, promoEndDate: "2028-01-01", owed: 500 }),
+    ]);
+    expect(Object.fromEntries(badges)).toEqual({
+      9: { apr: 3.99, endDate: "2027-03-10" },
+    });
+  });
+
+  it("breaks an end-date tie by id, as payments do", () => {
+    const badges = promoBadgeByAccount([
+      owing({ balanceTransferId: 7, promoApr: 1, owed: 10 }),
+      owing({ balanceTransferId: 3, promoApr: 2, owed: 10 }),
+    ]);
+    expect(badges.get(9)?.apr).toBe(2);
+  });
+
+  it("gives no badge to a card whose active transfers are all paid off", () => {
+    expect(promoBadgeByAccount([owing({ owed: 0 }), owing({ balanceTransferId: 2, owed: 0.004 })]).size).toBe(0);
   });
 });

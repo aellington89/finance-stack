@@ -6,7 +6,6 @@ import {
   balanceAtDate,
   valueList,
   promoActiveOn,
-  accountHasActivePromo,
 } from "@/lib/queries/_aggregates";
 
 // Render a SQL fragment to its parameterized text + params so we can assert the
@@ -106,19 +105,5 @@ describe("promoActiveOn", () => {
       "(p.amount < 0 AND p.transaction_date <= CURRENT_DATE::date AND CURRENT_DATE::date < bt.promo_end_date)"
     );
     expect(params).toEqual([]);
-  });
-});
-
-describe("accountHasActivePromo", () => {
-  it("correlates on the outer account alias and reuses promoActiveOn", () => {
-    const { sql: text, params } = render(accountHasActivePromo("2026-03-01"));
-    const flat = text.replace(/\s+/g, " ").trim();
-    expect(flat).toBe(
-      "EXISTS ( SELECT 1 FROM balance_transfers bt " +
-        "JOIN transactions p ON p.transaction_id = bt.transfer_transaction_id " +
-        "WHERE p.account_id = a.account_id " +
-        "AND (p.amount < 0 AND p.transaction_date <= $1::date AND $2::date < bt.promo_end_date) )"
-    );
-    expect(params).toEqual(["2026-03-01", "2026-03-01"]);
   });
 });

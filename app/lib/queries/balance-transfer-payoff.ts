@@ -17,7 +17,8 @@ import {
  * calls into this module: historyStarts() says where the second query starts
  * reading each card's balance history, and splitActiveTransfers() works out
  * what is left on each transfer. buildBalanceTransferTracker() turns that into
- * the card's rows.
+ * the card's rows, and promoBalanceByType() and promoBadgeByAccount() into the
+ * debt-mix split and the performance-table badge.
  *
  * Sign convention. Card balances keep the ledger's sign (negative = owed), as
  * everywhere in the liabilities layer. Everything this module derives from them
@@ -56,7 +57,7 @@ export type ActiveTransferRow = {
   balanceTransferId: number;
   accountId: number;
   accountName: string;
-  /** The card's account type. */
+  /** The card's account type, which the debt-mix split groups by. */
   accountTypeId: number;
   postingTransactionId: number;
   postingDate: string;
@@ -674,4 +675,43 @@ export function buildBalanceTransferTracker(
       );
     })
     .flat();
+}
+
+// ── The debt-mix split and the badge ───────────────────────────────────
+
+/**
+ * What is left on active transfers, per account type, in the ledger's sign,
+ * for the debt-mix split (Issue #427). Only that becomes a type's "balance
+ * transfer" half; everything else on its cards, purchases included, stays
+ * revolving. A type whose active transfers are all paid off is absent, so it
+ * doesn't split at all.
+ */
+export function promoBalanceByType(
+  transfers: readonly ActiveTransfer[]
+): Map<number, number> {
+  const cents = new Map<number, number>();
+  for (const t of transfers) {
+    cents.set(t.accountTypeId, (cents.get(t.accountTypeId) ?? 0) + toCents(t.owed));
+  }
+  const byType = new Map<number, number>();
+  for (const [typeId, total] of cents) {
+    if (total > 0) byType.set(typeId, -total / 100);
+  }
+  return byType;
+}
+
+/**
+ * The promo each card's performance-table badge names: its earliest-ending
+ * active transfer that still has a balance (Issue #427). A card whose active
+ * transfers are all paid off gets no badge.
+ */
+export function promoBadgeByAccount(
+  transfers: readonly ActiveTransfer[]
+): Map<number, { apr: number; endDate: string }> {
+  const badges = new Map<number, { apr: number; endDate: string }>();
+  for (const t of [...transfers].sort(byPayoffOrder)) {
+    if (t.owed < CENT_EPSILON || badges.has(t.accountId)) continue;
+    badges.set(t.accountId, { apr: t.promoApr, endDate: t.promoEndDate });
+  }
+  return badges;
 }
