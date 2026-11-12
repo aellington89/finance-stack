@@ -40,6 +40,16 @@ export function transferName(t: AccountBalanceTransfer): string {
 }
 
 /**
+ * What is left on an active transfer, "$3,120.00 left" or "Paid off" (Issue
+ * #427). `null` when there is no figure to show: an ended transfer, or one
+ * the split doesn't cover.
+ */
+export function remainingText(t: AccountBalanceTransfer): string | null {
+  if (t.remaining === null) return null;
+  return t.remaining < 0.005 ? "Paid off" : `${formatCurrency(t.remaining)} left`;
+}
+
+/**
  * The account edit page's Balance transfers section (Issue #417), shown on
  * liability accounts only. It lists the account's transfers, active ones
  * first, and adds, edits and removes them in dialogs, the way the settings
@@ -65,8 +75,8 @@ export function BalanceTransfersCard({
           <CardDescription>
             Record a promotional rate on this card by linking the transfer as it
             posted, and its fee. While a promo is active, the Liabilities page
-            tracks its payoff, and the card&apos;s whole balance counts as
-            promotional.
+            tracks what&apos;s left on it. Payments clear the card&apos;s other
+            debt first, then the promo that ends soonest.
           </CardDescription>
           <CardAction>
             <Button
@@ -88,48 +98,52 @@ export function BalanceTransfersCard({
             </p>
           ) : (
             <ul className="divide-y" aria-label="Balance transfers">
-              {transfers.map((t) => (
-                <li
-                  key={t.balanceTransferId}
-                  data-testid={`balance-transfer-${t.balanceTransferId}`}
-                  className="flex items-start gap-2 py-2 text-sm"
-                >
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-medium">{transferName(t)}</span>
-                      {/* Outline rather than the settings cards' muted chip,
-                          whose grey-on-grey measures 4.34:1 in axe. */}
-                      <Badge variant="outline">{t.isActive ? "Active" : "Ended"}</Badge>
+              {transfers.map((t) => {
+                const remaining = remainingText(t);
+                return (
+                  <li
+                    key={t.balanceTransferId}
+                    data-testid={`balance-transfer-${t.balanceTransferId}`}
+                    className="flex items-start gap-2 py-2 text-sm"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-medium">{transferName(t)}</span>
+                        {/* Outline rather than the settings cards' muted chip,
+                            whose grey-on-grey measures 4.34:1 in axe. */}
+                        <Badge variant="outline">{t.isActive ? "Active" : "Ended"}</Badge>
+                        {remaining && <span>{remaining}</span>}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatApr(t.promoApr)} until {formatLongDate(t.promoEndDate)}
+                        {" · "}posted {formatLongDate(t.postingDate)}
+                        {" · "}
+                        {t.feeAmount === null
+                          ? "no fee linked"
+                          : `fee ${formatCurrency(Math.abs(t.feeAmount))}`}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatApr(t.promoApr)} until {formatLongDate(t.promoEndDate)}
-                      {" · "}posted {formatLongDate(t.postingDate)}
-                      {" · "}
-                      {t.feeAmount === null
-                        ? "no fee linked"
-                        : `fee ${formatCurrency(Math.abs(t.feeAmount))}`}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Edit balance transfer of ${transferName(t)}`}
+                        onClick={() => setEditTarget(t)}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Delete balance transfer of ${transferName(t)}`}
+                        onClick={() => setDeleteTarget(t)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Edit balance transfer of ${transferName(t)}`}
-                      onClick={() => setEditTarget(t)}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Delete balance transfer of ${transferName(t)}`}
-                      onClick={() => setDeleteTarget(t)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>

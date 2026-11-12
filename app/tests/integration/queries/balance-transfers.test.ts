@@ -609,10 +609,34 @@ describe("getBalanceTransfersForAccount", () => {
       feeAmount: -90,
       promoEndDate: PROMO_END,
       promoApr: 0,
-      // A 2020–21 promo is long over.
+      // A 2020–21 promo is long over, so there is nothing left to track.
       isActive: false,
+      remaining: null,
     });
     expect(await getBalanceTransfersForAccount(s.revolving)).toEqual([]);
+  });
+
+  it("says what is left on each active transfer today, from the same split", async () => {
+    // The scenario's transfers, on promos that run until long after today.
+    const s = await buildScenario(false);
+    const main = await linkTransfer(s.posting, s.fee, "2099-01-01");
+    const posting = await insertTx({
+      accountId: s.card, date: "2020-04-15", amount: "-600.00", categoryId: s.category,
+      typeId: INTERNAL_TRANSFER, relatedAccountId: s.source,
+    });
+    await rebuild(s.card);
+    const paidOff = await linkTransfer(posting, null, "2098-01-01");
+
+    const list = await getBalanceTransfersForAccount(s.card);
+    // The same figures as addPaidOffTransfer(): the card has had no activity
+    // since 2020, so today's split is Dec 31, 2020's.
+    expect(list.map((t) => [t.balanceTransferId, t.isActive, t.remaining])).toEqual([
+      [paidOff, true, 0],
+      [main, true, 1940],
+    ]);
+    // And the drilldown, with no end date, agrees.
+    const tracked = await onCard(s.card, RANGE_FROM);
+    expect(tracked.map((t) => t.owed)).toEqual([0, 1940]);
   });
 });
 

@@ -225,16 +225,29 @@ export interface AccountBalanceTransfer {
   promoApr: number;
   /** Active today, by the same rule the drilldown uses. */
   isActive: boolean;
+  /**
+   * What is left on an active transfer today, from the same balance split the
+   * drilldown uses (Issue #427): 0 when it is paid off. `null` for an ended
+   * transfer, and for one the split doesn't cover (a closed card).
+   */
+  remaining: number | null;
 }
 
 /**
  * The account's transfers, active ones first (soonest end first), then the
  * rest, most recently ended first.
+ *
+ * "Today" for `remaining` is the card's latest balance row, the one
+ * balanceRowPerAccount() picks without a date. This page is outside the
+ * dashboard and doesn't carry balances forward, but a carried-forward row
+ * only repeats the latest balance, so the figure is the drilldown's with no
+ * end date either way.
  */
 export async function getBalanceTransfersForAccount(
   accountId: number
 ): Promise<AccountBalanceTransfer[]> {
-  const result = await db.execute(sql`
+  const [result, { transfers: active }] = await Promise.all([
+    db.execute(sql`
     SELECT
       bt.balance_transfer_id,
       p.transaction_id AS transfer_transaction_id,
@@ -256,7 +269,10 @@ export async function getBalanceTransfersForAccount(
       ON fee.transaction_id = bt.fee_transaction_id
      AND fee.account_id = p.account_id
     WHERE p.account_id = ${accountId}
-  `);
+  `),
+    loadActiveTransfers(undefined, accountId),
+  ]);
+  const owed = new Map(active.map((t) => [t.balanceTransferId, t.owed]));
 
   type Row = {
     balance_transfer_id: number;
@@ -289,6 +305,7 @@ export async function getBalanceTransfersForAccount(
       promoEndDate: r.promo_end_date,
       promoApr: parseFloat(r.promo_apr),
       isActive: r.is_active,
+      remaining: r.is_active ? (owed.get(r.balance_transfer_id) ?? null) : null,
     }))
     .sort((a, b) => {
       if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
