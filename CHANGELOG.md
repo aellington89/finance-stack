@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-11
+
+**Migration:** none
+
 ### Fixed
 
 - **The balance-transfer tracker now splits a card's balance between its transfers, so a paid-off promo no longer sets the card's deadline.** ([Issue #427](https://github.com/aellington89/finance-stack/issues/427)) Before, a card with more than one active transfer was tracked as if its whole balance were owed on the promo that ends first. A transfer that had already been paid off still set the card's deadline, its needed monthly payment and its badge. Purchases on a promo card counted as promotional too. Now the app works out what's left on each transfer by replaying the card's balance history:
@@ -755,7 +759,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Unified, persistent sidebar navigation (shadcn Sidebar) connecting all application sections, with a Next.js route-group split for the landing page vs. the app shell ([Issue #77](https://github.com/aellington89/finance-stack/issues/77)).
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/aellington89/finance-stack/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/aellington89/finance-stack/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aellington89/finance-stack/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aellington89/finance-stack/compare/v1.1.2...v1.2.0
