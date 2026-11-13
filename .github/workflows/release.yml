@@ -372,21 +372,44 @@ jobs:
           done
           echo "✓ finance-backup produced a dump and reports healthy"
 
-          # finance-importer has no healthcheck, so the assertion is that it is
-          # still up rather than restart-looping — which is what a bad
-          # DATABASE_URL, a missing finance_importer role, or an import that
-          # crashes poll.py on startup all look like. Waiting out a full 60s poll
-          # interval would only slow the release: the failure this catches
-          # happens at start.
-          sleep 30
+          # finance-importer (#132). Its healthcheck passes only once poll.py has
+          # completed a sweep and touched /tmp/importer-heartbeat. Being up is not
+          # enough, and this used to check only that. poll() catches connection
+          # errors inside its loop and retries with backoff, so a bad
+          # DATABASE_URL or a missing finance_importer role never exits and never
+          # restarts: the container sat at `running 0` and passed the old check
+          # while importing nothing. `healthy` proves the image connected as
+          # finance_importer, loaded its lookup maps and swept /input.
+          #
+          # Docker 25+ probes every 5s during start_period, so this normally
+          # clears a few seconds after the first sweep. The 150s timeout is
+          # pg-backup's. It also covers an older engine, which waits one full
+          # 60s interval before the first probe.
+          echo "Waiting for the importer container healthcheck…"
           IMPORTER_CID="$(docker compose ps -q importer)"
-          IMPORTER_STATE="$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$IMPORTER_CID")"
-          if [ "$IMPORTER_STATE" != "running 0" ]; then
-            echo "::error::importer reported '$IMPORTER_STATE', expected 'running 0' — the container is down or restart-looping"
+          IMPORTER_TIMEOUT=150
+          IMPORTER_ELAPSED=0
+          until [ "$(docker inspect -f '{{.State.Health.Status}}' "$IMPORTER_CID")" = "healthy" ]; do
+            STATE="$(docker inspect -f '{{.State.Health.Status}}' "$IMPORTER_CID")"
+            if [ "$IMPORTER_ELAPSED" -ge "$IMPORTER_TIMEOUT" ]; then
+              echo "::error::importer reported '$STATE', expected 'healthy', after ${IMPORTER_TIMEOUT}s — no poll cycle completed"
+              docker inspect -f '{{json .State.Health}}' "$IMPORTER_CID" | jq . || true
+              echo "--- importer logs ---"; docker compose logs --no-color importer || true
+              exit 1
+            fi
+            sleep 5
+            IMPORTER_ELAPSED=$((IMPORTER_ELAPSED + 5))
+          done
+
+          # And it got there without restarting. Health resets on every start,
+          # so a container that crashed and came back can still read `healthy`.
+          IMPORTER_RESTARTS="$(docker inspect -f '{{.RestartCount}}' "$IMPORTER_CID")"
+          if [ "$IMPORTER_RESTARTS" != "0" ]; then
+            echo "::error::importer restarted ${IMPORTER_RESTARTS} time(s) before reporting healthy"
             echo "--- importer logs ---"; docker compose logs --no-color importer || true
             exit 1
           fi
-          echo "✓ finance-importer is running"
+          echo "✓ finance-importer completed a poll cycle and reports healthy"
 
       - name: Tear down stack
         working-directory: deploy
