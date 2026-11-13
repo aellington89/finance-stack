@@ -453,4 +453,11 @@ diff .bundle-backup/compose.yml compose.yml          # what the last upgrade cha
 
 `finance-app` will not start until `migrate` has exited 0, so a stack stuck with
 no app is almost always a migrate failure — read that log first. `pg-backup`
-reports unhealthy if no dump is newer than 1.5× the backup interval.
+reports unhealthy if no dump is newer than 1.5× the backup interval. `importer`
+reports unhealthy when its poll loop has made no progress for three poll
+intervals (three minutes by default). That means a parser is stuck on a file or
+every cycle is failing, often because it cannot log in to the database. Read
+`docker compose logs importer`. Right after a start, both read
+`health: starting` until their first poll or dump completes, which is normal.
+See
+[Importer health](https://github.com/aellington89/finance-stack/blob/master/docs/importer.md#health).
