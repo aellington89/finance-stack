@@ -1,9 +1,9 @@
 # Build context for the importer image (Issue #224). The Dockerfile copies
-# requirements.txt, poll.py and lookups.py by name, so nothing else needs to
-# reach the daemon — and parsers/ specifically must not: it is gitignored,
-# user-specific,
-# and encodes how someone categorizes their own transactions. Keeping it out of
-# the context keeps it out of the build cache as well as the image.
+# requirements.txt, poll.py, lookups.py and heartbeat.py by name, so nothing
+# else needs to reach the daemon — and parsers/ specifically must not: it is
+# gitignored, user-specific, and encodes how someone categorizes their own
+# transactions. Keeping it out of the context keeps it out of the build cache
+# as well as the image.
 parsers/
 
 # The test suite and its dependencies are build-time-only (#124). The Dockerfile

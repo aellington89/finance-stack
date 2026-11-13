@@ -32,6 +32,15 @@ gives the loop two properties it did not have before:
 
 Quarantine is keyed on content, so fixing the file lifts it automatically; a
 restart lifts it too, on the assumption that the operator changed the parser.
+
+Catching every failure has a cost, and the heartbeat pays it (issue #132). A
+loop that never exits also never shows up as broken. poll() therefore touches a
+heartbeat file each time it makes progress: after each file, and at the end of
+each sweep that completes. The Compose healthcheck (`python /app/heartbeat.py`)
+reports the container unhealthy once that file goes stale. A hung parser goes
+stale, and so does a loop that fails every cycle: a failed cycle never gets its
+closing beat, and the backoff between retries soon outgrows the limit. See
+heartbeat.py and docs/importer.md.
 """
 
 import hashlib
@@ -43,11 +52,14 @@ import traceback
 
 import psycopg2
 
+import heartbeat
 import lookups
 
 INPUT_DIR = "/input"
 PARSERS_DIR = "/app/parsers"
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", 60))
+# Parsed by heartbeat.py so the healthcheck, a separate process, judges the loop
+# by the same interval the loop sleeps on.
+POLL_INTERVAL = heartbeat.read_poll_interval()
 
 # Statements are read in chunks rather than slurped: these are PDFs, and the
 # container is capped at 512M.
@@ -516,12 +528,21 @@ def connect(database_url):
     return conn, lookup_maps
 
 
-def poll_once(conn, lookup_maps, input_dir, retry_failed=False):
+def poll_once(conn, lookup_maps, input_dir, retry_failed=False, beat=None):
     """
     Run exactly one sweep of the drop folder. Returns counts by outcome.
 
     Split out from poll() so the sweep can be exercised without a loop to break
     out of — see importer/tests/test_poll.py.
+
+    `beat` is called each time the sweep makes progress (issue #132): after each
+    file, whatever its outcome, and once more when the sweep completes. Per file,
+    not only per sweep, because the first sweep after a restart retries every
+    quarantined file, and a backlog can run for minutes. A long sweep that keeps
+    moving must not read as a stalled one. The final beat comes only after the
+    closing rollback succeeds, so a sweep that loses its connection, at any
+    point, does not count as completed. Optional, like process_file's
+    `refresh_once`, so this stays callable without one.
     """
     stats = {"imported": 0, "skipped": 0, "failed": 0}
     reloaded = False
@@ -591,6 +612,8 @@ def poll_once(conn, lookup_maps, input_dir, retry_failed=False):
                 refresh_once=refresh_once,
             )
             stats[outcome] += 1
+            if beat is not None:
+                beat()
 
     # Imports and failures end their own transactions, but a sweep that only
     # skipped files leaves the last lookup_import() SELECT open — and the loop
@@ -598,6 +621,9 @@ def poll_once(conn, lookup_maps, input_dir, retry_failed=False):
     # the lookup tables and surfaces as the `migrate` service hanging, so the
     # connection is returned to idle before the caller sleeps.
     conn.rollback()
+    # The beat every cycle gets, including one with nothing to import.
+    if beat is not None:
+        beat()
     return stats
 
 
@@ -614,6 +640,35 @@ def poll():
     # re-parsed every minute forever.
     retry_failed = True
 
+    # `docker restart` keeps /tmp, so a heartbeat from the last run would vouch
+    # for this one before it has done anything. Health reflects this process.
+    heartbeat.clear()
+    heartbeat_ok = True
+
+    def beat():
+        """
+        Record progress for the healthcheck (issue #132).
+
+        A write that fails does not stop the import. It is logged once, when the
+        writes start failing, and again only when they recover, so a full /tmp
+        does not print a line per file. The healthcheck goes unhealthy in the
+        meantime, because this container can no longer show it is making
+        progress.
+        """
+        nonlocal heartbeat_ok
+        ok = heartbeat.beat()
+        if not ok and heartbeat_ok:
+            print(
+                f"WARNING: cannot write the heartbeat file "
+                f"{heartbeat.HEARTBEAT_FILE}. Imports continue, but the "
+                f"healthcheck will report this container unhealthy until it can.",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif ok and not heartbeat_ok:
+            print("Heartbeat file is writable again.", flush=True)
+        heartbeat_ok = ok
+
     print(f"Polling {input_dir} subdirectories every {POLL_INTERVAL}s...", flush=True)
     while True:
         try:
@@ -622,7 +677,9 @@ def poll():
                 conn, lookup_maps = connect(database_url)
                 print(f"Loaded {lookup_summary(lookup_maps)}.", flush=True)
 
-            stats = poll_once(conn, lookup_maps, input_dir, retry_failed=retry_failed)
+            stats = poll_once(
+                conn, lookup_maps, input_dir, retry_failed=retry_failed, beat=beat
+            )
             if stats["imported"] or stats["failed"]:
                 print(
                     f"Cycle complete: {stats['imported']} imported, "
@@ -636,6 +693,13 @@ def poll():
         except Exception as exc:
             # Only connection-level failures and bugs in the loop itself reach
             # here; per-file parser failures were handled in process_file.
+            #
+            # No beat here, deliberately (#132). A cycle that ends in this branch
+            # did not complete, whatever files it handled first. A loop that
+            # fails every cycle, because of a wrong password, a database that is
+            # down or an /input it cannot read, is the failure the healthcheck
+            # exists to surface. The backoff below doubles, so the gap between
+            # beats outgrows the limit within a few retries.
             traceback.print_exc()
             print(f"Poll cycle failed: {exc}", file=sys.stderr, flush=True)
             if conn is not None:

@@ -238,12 +238,13 @@ finance-stack/
 │   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
-│   ├── Dockerfile                         # finance-importer image — bakes poll.py, lookups.py + pinned deps, non-root (#224)
+│   ├── Dockerfile                         # finance-importer image — bakes poll.py, lookups.py, heartbeat.py + pinned deps, non-root (#224)
 │   ├── requirements.txt                   # Pinned Python deps, installed at build time (Dependabot `pip`)
 │   ├── requirements-dev.txt               # Test-only deps (pytest) — excluded from the build context
 │   ├── poll.py                            # Polling loop and parser dispatcher (committed, baked into the image)
 │   ├── lookups.py                         # Name-based PK resolution for parsers — no hardcoded ids (#273)
-│   ├── tests/                             # pytest suite — dispatch loop, lookup resolution, import_log constraints
+│   ├── heartbeat.py                       # Liveness heartbeat poll.py touches, and the Compose healthcheck that reads it (#132)
+│   ├── tests/                             # pytest suite — dispatch loop, lookup resolution, heartbeat, import_log constraints
 │   └── parsers/                           # One module per import type (gitignored, bind-mounted)
 ├── imports/                               # Drop folders — one per import type (gitignored)
 ├── backups/                               # pg_dump output from the pg-backup service (contents gitignored)

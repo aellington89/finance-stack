@@ -8,10 +8,13 @@ database in test_import_log.py.
 """
 
 import hashlib
+import os
+import time
 
 import psycopg2
 import pytest
 
+import heartbeat
 import lookups
 import poll
 from conftest import FakeConn, FakeParser, lookup_query_results
@@ -99,13 +102,22 @@ def has_run(verbs, pattern):
     )
 
 
-def run_sweep(monkeypatch, parser, input_dir, conn, retry_failed=False, lookup_maps=None):
+def run_sweep(
+    monkeypatch,
+    parser,
+    input_dir,
+    conn,
+    retry_failed=False,
+    lookup_maps=None,
+    beat=None,
+):
     monkeypatch.setattr(poll, "load_parser", lambda import_type: parser)
     return poll.poll_once(
         conn,
         {} if lookup_maps is None else lookup_maps,
         input_dir,
         retry_failed=retry_failed,
+        beat=beat,
     )
 
 
@@ -771,3 +783,273 @@ def test_a_non_mapping_failure_is_not_retried(monkeypatch, drop_folder):
     assert stats == {"imported": 0, "skipped": 0, "failed": 1}
     assert parser.seen == ["march.pdf"]
     assert reloads == []
+
+
+# ── the heartbeat (#132) ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("poll_interval", "limit"),
+    [(60, 180), (600, 1800), (5, 120), (0, 120)],
+)
+def test_the_stale_limit_is_three_intervals_with_a_floor(poll_interval, limit):
+    # Three intervals tolerates one failed cycle. The floor stops a short test
+    # interval from turning one slow PDF into a false alarm.
+    assert heartbeat.limit_for(poll_interval) == limit
+
+
+def test_poll_interval_is_read_once_for_both_processes():
+    # The loop and the healthcheck are separate processes. They agree only
+    # because both take the interval from this one function.
+    assert heartbeat.read_poll_interval({}) == 60
+    assert heartbeat.read_poll_interval({"POLL_INTERVAL": "5"}) == 5
+    assert poll.POLL_INTERVAL == heartbeat.read_poll_interval()
+
+
+def test_beat_creates_the_file(tmp_path):
+    target = tmp_path / "hb"
+    assert heartbeat.beat(str(target)) is True
+    assert target.exists()
+
+
+def test_beat_advances_an_old_mtime(tmp_path):
+    target = tmp_path / "hb"
+    target.touch()
+    an_hour_ago = time.time() - 3600
+    os.utime(target, (an_hour_ago, an_hour_ago))
+
+    assert heartbeat.beat(str(target)) is True
+    assert target.stat().st_mtime > an_hour_ago + 3000
+
+
+def test_a_failed_beat_reports_it_without_raising(tmp_path):
+    # Instrumentation must never stop an import, so an unwritable path is a
+    # False, not an exception the loop would have to survive.
+    assert heartbeat.beat(str(tmp_path / "no-such-dir" / "hb")) is False
+
+
+def test_clear_removes_the_file_and_tolerates_its_absence(tmp_path):
+    target = tmp_path / "hb"
+    target.touch()
+    heartbeat.clear(str(target))
+    assert not target.exists()
+    heartbeat.clear(str(target))
+
+
+def heartbeat_aged(tmp_path, seconds, now):
+    """A heartbeat file whose mtime is `seconds` before `now`."""
+    target = tmp_path / "hb"
+    target.touch()
+    os.utime(target, (now - seconds, now - seconds))
+    return str(target)
+
+
+def test_a_fresh_heartbeat_passes(tmp_path):
+    now = float(int(time.time()))  # whole seconds survive utime exactly
+    fresh, reason = heartbeat.check(heartbeat_aged(tmp_path, 30, now), 180, now)
+    assert fresh is True
+    assert reason == "last progress 30s ago (limit 180s)"
+
+
+def test_a_heartbeat_at_the_limit_still_passes(tmp_path):
+    now = float(int(time.time()))  # whole seconds survive utime exactly
+    fresh, _ = heartbeat.check(heartbeat_aged(tmp_path, 180, now), 180, now)
+    assert fresh is True
+
+
+def test_a_stale_heartbeat_fails_and_says_how_stale(tmp_path):
+    now = float(int(time.time()))  # whole seconds survive utime exactly
+    fresh, reason = heartbeat.check(heartbeat_aged(tmp_path, 181, now), 180, now)
+    assert fresh is False
+    # Docker keeps this line in .State.Health.Log, so it has to explain itself.
+    assert "181s ago, over the 180s limit" in reason
+    assert "docker compose logs importer" in reason
+
+
+def test_a_missing_heartbeat_fails(tmp_path):
+    fresh, reason = heartbeat.check(str(tmp_path / "hb"), 180)
+    assert fresh is False
+    assert "no poll cycle has made progress since the importer started" in reason
+
+
+def test_a_heartbeat_from_the_future_passes(tmp_path):
+    # A clock that stepped back says nothing about whether the loop has stopped.
+    now = float(int(time.time()))  # whole seconds survive utime exactly
+    fresh, reason = heartbeat.check(heartbeat_aged(tmp_path, -600, now), 180, now)
+    assert fresh is True
+    assert reason.startswith("last progress 0s ago")
+
+
+def test_check_takes_its_limit_from_poll_interval(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLL_INTERVAL", "100")
+    now = float(int(time.time()))  # whole seconds survive utime exactly
+    assert heartbeat.check(heartbeat_aged(tmp_path, 299, now), now=now)[0] is True
+    assert heartbeat.check(heartbeat_aged(tmp_path, 301, now), now=now)[0] is False
+
+
+def test_the_healthcheck_exits_by_freshness(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(heartbeat, "HEARTBEAT_FILE", str(tmp_path / "hb"))
+    monkeypatch.delenv("POLL_INTERVAL", raising=False)
+
+    assert heartbeat.main() == 1
+    assert "no heartbeat" in capsys.readouterr().out
+
+    heartbeat.beat()
+    assert heartbeat.main() == 0
+    assert "last progress" in capsys.readouterr().out
+
+
+def beats(conn):
+    return conn.verbs.count("beat")
+
+
+def test_a_sweep_beats_after_every_file_and_once_at_the_end(
+    monkeypatch, drop_folder
+):
+    # Progress is any outcome, a quarantine included. A failing file is handled,
+    # and the loop moves on.
+    parser = FakeParser(behaviour={"b.pdf": ValueError("Could not find Pay Date")})
+    conn = FakeConn(fetchone_result=None)
+
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("a.pdf", "b.pdf", "c.pdf"),
+        conn,
+        beat=lambda: conn.note("beat"),
+    )
+
+    assert stats == {"imported": 2, "skipped": 0, "failed": 1}
+    assert beats(conn) == 4, conn.verbs
+    # The last beat says the sweep completed, so it follows the closing rollback.
+    assert conn.verbs[-2:] == ["rollback", "beat"], conn.verbs
+
+
+def test_an_empty_sweep_still_beats(monkeypatch, drop_folder):
+    # The steady state. An idle importer is a healthy one.
+    conn = FakeConn(fetchone_result=None)
+
+    run_sweep(
+        monkeypatch, FakeParser(), drop_folder(), conn, beat=lambda: conn.note("beat")
+    )
+
+    assert conn.verbs == ["rollback", "beat"], conn.verbs
+
+
+def test_a_type_skipped_by_the_preflight_still_beats_once(monkeypatch, drop_folder):
+    # A missing lookup row is a configuration fault reported in the log, not a
+    # stall. The loop is running, and it lifts on the next poll once fixed.
+    parser = FakeParser(required_lookups={"transaction_categories": ("Nowhere",)})
+    conn = FakeConn(fetchone_result=None)
+    monkeypatch.setattr(poll, "load_lookup_maps", lambda c: paystub_maps())
+
+    stats = run_sweep(
+        monkeypatch,
+        parser,
+        drop_folder("a.pdf", "b.pdf"),
+        conn,
+        lookup_maps=paystub_maps(),
+        beat=lambda: conn.note("beat"),
+    )
+
+    assert stats == {"imported": 0, "skipped": 2, "failed": 0}
+    assert beats(conn) == 1, conn.verbs
+
+
+def test_a_lost_connection_ends_the_beats(monkeypatch, drop_folder):
+    # The file before the failure was progress. The sweep itself never
+    # completed, so it gets no closing beat.
+    parser = FakeParser(
+        behaviour={"b.pdf": psycopg2.OperationalError("server closed the connection")}
+    )
+    conn = FakeConn(fetchone_result=None)
+
+    with pytest.raises(psycopg2.OperationalError):
+        run_sweep(
+            monkeypatch,
+            parser,
+            drop_folder("a.pdf", "b.pdf", "c.pdf"),
+            conn,
+            beat=lambda: conn.note("beat"),
+        )
+
+    assert beats(conn) == 1, conn.verbs
+
+
+class StopLoop(BaseException):
+    """Escapes poll()'s `except Exception`, which is how a test ends the loop."""
+
+
+def run_poll_until_first_sleep(monkeypatch, tmp_path, connect, heartbeat_file):
+    """
+    Run poll() for one cycle, stopping at the first sleep, whether that is the
+    poll interval after a sweep or the backoff after a failure.
+    """
+    input_dir = tmp_path / "input"
+    input_dir.mkdir(exist_ok=True)
+    monkeypatch.setattr(heartbeat, "HEARTBEAT_FILE", str(heartbeat_file))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unused/unused")
+    monkeypatch.setenv("INPUT_DIR", str(input_dir))
+    monkeypatch.setattr(poll, "connect", connect)
+
+    def stop(seconds):
+        raise StopLoop
+
+    monkeypatch.setattr(poll.time, "sleep", stop)
+    with pytest.raises(StopLoop):
+        poll.poll()
+    return input_dir
+
+
+def test_a_completed_cycle_leaves_a_fresh_heartbeat(monkeypatch, tmp_path):
+    target = tmp_path / "hb"
+
+    run_poll_until_first_sleep(
+        monkeypatch, tmp_path, lambda url: (FakeConn(), {}), target
+    )
+
+    assert heartbeat.check(str(target), 180)[0] is True
+
+
+def test_a_failed_cycle_writes_no_heartbeat_and_clears_the_last_runs(
+    monkeypatch, tmp_path
+):
+    # A loop that fails every cycle, for example on a wrong importer password,
+    # never exits, so before #132 the container stayed `Up`. It must go stale.
+    #
+    # The file planted here stands in for a heartbeat left by the previous run of
+    # the same container (`docker restart` keeps /tmp). Startup has to clear it,
+    # or the probe would vouch for a process that has done nothing.
+    target = tmp_path / "hb"
+    target.touch()
+
+    def refuse(url):
+        raise psycopg2.OperationalError(
+            'password authentication failed for user "finance_importer"'
+        )
+
+    run_poll_until_first_sleep(monkeypatch, tmp_path, refuse, target)
+
+    assert not target.exists()
+
+
+def test_an_unwritable_heartbeat_warns_once_and_the_import_continues(
+    monkeypatch, tmp_path, capsys
+):
+    parser = FakeParser()
+    monkeypatch.setattr(poll, "load_parser", lambda import_type: parser)
+    stamps = tmp_path / "input" / "paystubs"
+    stamps.mkdir(parents=True)
+    for name in ("a.pdf", "b.pdf"):
+        (stamps / name).write_text(name)
+
+    run_poll_until_first_sleep(
+        monkeypatch,
+        tmp_path,
+        lambda url: (FakeConn(fetchone_result=None), {}),
+        tmp_path / "no-such-dir" / "hb",
+    )
+
+    # Three failed writes, two files and the end of the sweep, and one line.
+    assert parser.seen == ["a.pdf", "b.pdf"]
+    assert capsys.readouterr().err.count("cannot write the heartbeat file") == 1

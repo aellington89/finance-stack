@@ -481,7 +481,7 @@ with. Editing any of these means rebuilding before the change takes effect:
 | --- | --- |
 | `app/**` | `docker compose build finance-app` |
 | `init-db/roles/*.sql`, `init-db/seeds/*.sql`, `app/scripts/*.sh`, `scripts/verify-db-roles.sh` | `docker compose build migrate` |
-| `importer/poll.py`, `importer/requirements.txt` | `docker compose build importer` |
+| `importer/poll.py`, `importer/lookups.py`, `importer/heartbeat.py`, `importer/requirements.txt` | `docker compose build importer` |
 | `importer/tests/**`, `importer/requirements-dev.txt` | no rebuild — excluded from the build context |
 | `scripts/backup.sh`, `scripts/restore.sh`, `scripts/update-account-balance-history.sql` | `docker compose build pg-backup` |
 
