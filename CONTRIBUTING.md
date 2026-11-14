@@ -379,7 +379,10 @@ the other three's findings in the same run rather than across four.
    that no application-level bump could clear. (The `migrate` stage keeps npm
    deliberately — it runs `npx drizzle-kit` — so expect findings there that
    `finance-app` does not have.)
-3. **Rebuild on a patched base image** — `node:24-alpine` in `app/Dockerfile`,
+3. **Rebuild on a patched base image** — the `node:<major>-alpine` base in
+   `app/Dockerfile` (the file names the current major in all four stages; a
+   *major* bump moves the CI toolchain with it, listed at the `docker` entry in
+   [`.github/dependabot.yml`](.github/dependabot.yml)),
    `python:3.15-slim` in `importer/Dockerfile`. **`postgres` in
    `scripts/Dockerfile` is not free to move**: `pg_dump` must stay version-matched
    to the server, so bumping it means bumping `docker-compose.yml` and the

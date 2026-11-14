@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CI now reports type errors in the `ci` job.** ([Issue #195](https://github.com/aellington89/finance-stack/issues/195)) The `ci` job runs `npm run typecheck` after lint, and lists every error as `tsc` output. Before, the only type check was the one `next build` runs in the `image` and `e2e` jobs. It stops at the first error, so a type error showed up as a failed Docker build or an E2E server that would not start. The script now runs `next typegen` before `tsc --noEmit`, so a fresh checkout checks the same files as a dev machine, including Next's check of route exports.
 
+### Changed
+
+- **The app and migration images now run on Node.js 26, the current LTS line, and CI tests on 26 too.** ([Issue #211](https://github.com/aellington89/finance-stack/issues/211)) Node 26 became LTS on 2026-10-28 and is supported until April 2029. Node 24, which the images ran on before, moved to maintenance on 2026-10-20. All four stages of `app/Dockerfile` and every CI job that runs Node moved in one change, so the tests run on the version the images ship.
+
+  A deployment bundle needs nothing extra: it pulls the new images on its next update. A checkout picks up Node 26 the next time it rebuilds with `scripts/build.sh`, and an image already built on 24 keeps working until then.
+
+  `@types/node` was already on 26 ([#245](https://github.com/aellington89/finance-stack/pull/245)), a major ahead of the runtime, so the type check accepted Node 26 APIs that the shipped image did not have. This change brings the runtime up to match it. Dependabot no longer proposes `@types/node` majors on its own. The major now moves with the runtime, and the `docker` entry in `.github/dependabot.yml` lists everything that moves with it.
+
 ## [1.4.1] - 2026-11-11
 
 **Migration:** none

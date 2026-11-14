@@ -10,7 +10,7 @@ const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000)
   .toISOString()
   .slice(0, 10);
 
-// The Finances_Test database is seeded with 8 accounts spanning 12 months.
+// The Finances_Test database is seeded with 9 accounts spanning 12 months.
 // These tests validate the shape and correctness of the drill-down queries
 // against that seed data.
 

@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -684,8 +684,9 @@ jobs:
         with:
           image-ref: finance-app:latest
           severity: HIGH,CRITICAL
-          # node:24-alpine carries OS CVEs with no upstream fix; blocking on
-          # those makes the gate un-actionable rather than safer.
+          # The node:<major>-alpine base (app/Dockerfile) carries OS CVEs with no
+          # upstream fix; blocking on those makes the gate un-actionable rather
+          # than safer.
           ignore-unfixed: true
           exit-code: 1
           trivyignores: .trivyignore
@@ -708,10 +709,10 @@ jobs:
           # pretending each new stdlib CVE was individually reviewed. Everything
           # else in the image is still scanned and still blocks.
           skip-files: app/node_modules/**/bin/esbuild
-          # Same node:24-alpine base as finance-app, but this stage deliberately
-          # keeps npm (it runs `npx drizzle-kit`), so it carries npm's vendored
-          # dependencies that the runner stage deletes — expect findings here that
-          # finance-app does not have.
+          # Same node:<major>-alpine base as finance-app, but this stage
+          # deliberately keeps npm (it runs `npx drizzle-kit`), so it carries
+          # npm's vendored dependencies that the runner stage deletes — expect
+          # findings here that finance-app does not have.
           ignore-unfixed: true
           exit-code: 1
           trivyignores: .trivyignore
@@ -809,7 +810,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: app/package-lock.json
 
