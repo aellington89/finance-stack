@@ -41,6 +41,11 @@ on:
       # right — but its base image is what keeps pg_dump version-matched to the
       # server, so a change there should re-run the round trip.
       - 'scripts/Dockerfile'
+      # The seeds the round trip loads. The assertion below counts their
+      # accounts, so a seed change can break this job without touching anything
+      # above: #417 added a ninth account, this filter did not list the seeds,
+      # and the job next ran, red, on #444.
+      - 'init-db/seeds/**'
       - '.github/workflows/backup-smoke.yml'
 
 jobs:
@@ -135,7 +140,8 @@ jobs:
         run: |
           count="$(psql -d Finances_Restore_Check -tAc 'SELECT COUNT(*) FROM accounts;')"
           echo "accounts in restored database: $count"
-          if [ "$count" != "8" ]; then
-            echo "::error::Expected 8 accounts after restore, got $count — backup/restore round-trip is broken"
+          # The account count in init-db/seeds/finances-test-mock-data.sql.
+          if [ "$count" != "9" ]; then
+            echo "::error::Expected 9 accounts after restore, got $count — backup/restore round-trip is broken"
             exit 1
           fi
