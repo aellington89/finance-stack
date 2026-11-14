@@ -27,6 +27,7 @@ The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` sh
 | `npm run dev` | Start dev server with Turbopack on port 3001 |
 | `npm run build` | Production build (outputs to `.next/standalone`) |
 | `npm run lint` | Run ESLint |
+| `npm run typecheck` | Type-check the whole app, tests and scripts included (generates Next's route types first) |
 | `npm test` | Run all tests |
 | `npm run test:unit` | Unit tests only (no DB required) |
 | `npm run test:integration` | Integration tests (requires `Finances_Test` DB) |
