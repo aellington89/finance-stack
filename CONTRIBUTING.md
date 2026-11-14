@@ -506,12 +506,14 @@ npm run typecheck          # next typegen, then tsc --noEmit over the whole app
 npm run test:coverage      # all three projects; requires the Finances_Test database
 ```
 
-`typecheck` is the only step that type-checks the whole tree
+`typecheck` is the step that reports type errors as type errors
 ([Issue #195](https://github.com/aellington89/finance-stack/issues/195)).
-ESLint doesn't report type errors. Vitest strips types without checking them.
-`next build`, in the `image` job, checks only what the build graph reaches,
-which leaves out `tests/` and `scripts/`. So when a type-only Dependabot bump
-goes red, look at `ci` → `Typecheck` first. The script runs `next typegen`
+ESLint doesn't report them, and Vitest strips types without checking them.
+`next build` checks the same files, but only in the `image` and `e2e` jobs,
+after it compiles, and it stops at the first error. There a type error reads
+as a failed Docker build or an E2E server that would not start. So when a
+type-only Dependabot bump goes red, look at `ci` → `Typecheck` first, because
+it lists every error. The script runs `next typegen`
 before `tsc` because `tsconfig.json` includes `next-env.d.ts` and
 `.next/types/`, and all of them are gitignored. Typegen generates them, so CI
 checks the same program a dev machine does, including Next's check of every

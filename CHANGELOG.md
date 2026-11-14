@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The release smoke test now waits for the importer to report healthy. Before, it only checked that the container was still running, and that passed a broken database login, because the importer retries a failed login instead of restarting.
 
-- **CI now type-checks the whole app.** ([Issue #195](https://github.com/aellington89/finance-stack/issues/195)) The `ci` job runs `npm run typecheck` after lint. Before, a type error in `tests/` or `scripts/` could reach `master`, because neither ESLint nor Vitest checks types and `next build` sees only the build graph. The script now runs `next typegen` before `tsc --noEmit`, so a fresh checkout checks the same files as a dev machine, including Next's check of route exports.
+- **CI now reports type errors in the `ci` job.** ([Issue #195](https://github.com/aellington89/finance-stack/issues/195)) The `ci` job runs `npm run typecheck` after lint, and lists every error as `tsc` output. Before, the only type check was the one `next build` runs in the `image` and `e2e` jobs. It stops at the first error, so a type error showed up as a failed Docker build or an E2E server that would not start. The script now runs `next typegen` before `tsc --noEmit`, so a fresh checkout checks the same files as a dev machine, including Next's check of route exports.
 
 ## [1.4.1] - 2026-11-11
 
