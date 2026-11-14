@@ -115,6 +115,23 @@ updates:
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
+      # @types/node majors move with the runtime, by hand, never on their own.
+      # The types major has to match the Node major the image runs. Ahead of
+      # it, `tsc` admits APIs that do not exist at runtime; behind it, it
+      # rejects ones that do. This entry cannot see the runtime (the `docker`
+      # entry below owns app/Dockerfile), so it proposed @types/node 26 while
+      # the image ran 24, and that PR merged (#245, 2026-08-08). For three
+      # months the repo type-checked against Node 26 while shipping 24. That is
+      # the drift #210 gave as its reason to close #209, and nothing caught it.
+      # #211 closed the gap from the runtime side.
+      #
+      # Minor and patch updates within the current major still arrive in the
+      # dev-dependencies group. This rule does not lift: when the Node major
+      # moves, bump `@types/node` in the same change (the `docker` entry below
+      # lists everything that moves with it).
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
 
   # Importer service Python dependencies. Directory-scoped, so it covers both
   # requirements.txt (runtime, baked into the image) and requirements-dev.txt
@@ -129,13 +146,27 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
-  # Base images in app/Dockerfile (node:24-alpine).
+  # Base images in app/Dockerfile (node:<major>-alpine, all four stages).
   #
-  # The node line is tracked on LTS releases only, and a bump here is only ever
-  # half the change: `docker` reads Dockerfiles, so it cannot touch the
-  # `node-version:` pins in ci.yml, release.yml and backup-smoke.yml, or
-  # `@types/node` in app/package.json. Move all four together or CI tests on a
-  # different runtime than the image ships (Issue #210).
+  # The node line is tracked on LTS releases only. When this entry proposes a
+  # major that has not reached LTS yet, close the PR by hand, and without
+  # `@dependabot ignore this major version`: that suppresses the major for good,
+  # including the LTS bump you will want later (#196, #211).
+  #
+  # A bump here is only ever part of the change: `docker` reads Dockerfiles, so
+  # it cannot touch the rest of the toolchain. A Node major moves in one change,
+  # across all of:
+  #   - the four `FROM` lines in app/Dockerfile;
+  #   - every `node-version:` pin under .github/workflows/ — find them with
+  #     `git grep -n 'node-version:' .github/workflows` rather than a list,
+  #     because ci.yml grew a second one (the e2e job) after this note first
+  #     named three files;
+  #   - the `@types/node` major in app/package.json, which the npm entry above
+  #     holds back from Dependabot for exactly this reason;
+  #   - the version note in docs/testing.md.
+  # Miss one and CI tests on a different runtime than the image ships (Issues
+  # #210, #211). Nothing enforces this list yet; #442 tracks a CI check that
+  # would.
   - package-ecosystem: docker
     directory: /app
     target-branch: patch
