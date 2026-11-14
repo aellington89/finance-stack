@@ -126,9 +126,22 @@
 # --- npm's own vendored dependencies (finance-migrate) ----------------------
 # The migrate stage deliberately keeps npm — it runs `npx drizzle-kit` — where
 # the runner stage deletes it precisely because of findings like these. They live
-# in /usr/local/lib/node_modules/npm/node_modules/ and are fixed only when
-# node:24-alpine ships a newer bundled npm; no application-level bump reaches
-# them, and `npm update` inside the image would defeat the pinned build.
+# in /usr/local/lib/node_modules/npm/node_modules/ and are fixed only when the
+# node:<major>-alpine base in app/Dockerfile ships a newer bundled npm; no
+# application-level bump reaches them, and `npm update` inside the image would
+# defeat the pinned build.
+#
+# A Node major bump is not that fix by itself. #211 moved the base from 24 to
+# 26: Node 24.22 bundles npm 11.19.1 and Node 26.13 bundles npm 11.20.0, and npm's
+# own package-lock.json at those two tags pins the same vendored undici (6.28.0)
+# and brace-expansion (5.0.9). So every entry below kept matching across the
+# move. What reaches them is a release of npm that bumps those two, shipped in
+# the node image. Before assuming a base bump will clear anything, read the
+# vendored versions from npm's package-lock.json at the bundled npm's tag
+# (github.com/npm/cli, `packages["node_modules/undici"].version`) and compare
+# them with the fix versions below. All six expire 2026-11-17 and have never
+# been extended; whether to renew them or drop npm from the migrate stage is
+# tracked in #441.
 CVE-2026-102276 exp:2026-11-17
 # brace-expansion 5.0.9, fixed in 5.0.10. npm-vendored, as above.
 CVE-2026-102278 exp:2026-11-17

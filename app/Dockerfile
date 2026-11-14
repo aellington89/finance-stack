@@ -2,13 +2,13 @@
 # Requires output: "standalone" in next.config.ts.
 
 # --- Stage 1: Install dependencies ---
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # --- Stage 2: Build the application ---
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 # Build metadata baked into the bundle at build time (standalone has no package.json
 # at runtime). Defaults keep a plain `docker compose up` working with gitSha "dev".
@@ -22,7 +22,7 @@ RUN mkdir -p public && npm run build
 
 # --- Stage 2b: Migration runner ---
 # Used by the `migrate` Compose service: drizzle-kit + psql, no Next.js build.
-FROM node:24-alpine AS migrate
+FROM node:26-alpine AS migrate
 WORKDIR /app
 RUN apk add --no-cache postgresql-client bash
 COPY --from=deps /app/node_modules ./node_modules
@@ -96,7 +96,7 @@ LABEL org.opencontainers.image.source="https://github.com/aellington89/finance-s
 ENTRYPOINT ["bash", "/app/scripts/migrate-and-seed.sh"]
 
 # --- Stage 3: Production runner ---
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -123,6 +123,12 @@ RUN adduser --system --uid 1001 nextjs
 # here for that one administrative command was the rejected alternative — it
 # would undo this deletion for the entire runtime to serve a command run once
 # per deployment.
+#
+# Since the move to Node 26 (Issue #211) only npm and npx are actually there to
+# delete. Node stopped distributing corepack in 25, and the official node images
+# stopped installing yarn at 26. The yarn and corepack paths stay listed anyway:
+# `-f` makes them a no-op when absent, and they strip a base that brings either
+# back.
 RUN rm -rf /usr/local/lib/node_modules/npm \
            /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx \
