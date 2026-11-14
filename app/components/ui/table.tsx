@@ -5,10 +5,40 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [scrollable, setScrollable] = React.useState(false)
+
+  // Issue #428. An overflow-x-auto container with no focusable content cannot
+  // be scrolled by a keyboard, which axe reports as scrollable-region-focusable
+  // (serious, WCAG 2.1.1). Make it a named, tabbable region only while it
+  // actually overflows, so tables that fit add no extra tab stop. Observing the
+  // table as well as the container catches column width changes that do not
+  // resize the card.
+  React.useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const update = () =>
+      setScrollable(container.scrollWidth > container.clientWidth)
+    update()
+
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(update)
+    observer.observe(container)
+    if (container.firstElementChild) {
+      observer.observe(container.firstElementChild)
+    }
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div
+      ref={containerRef}
       data-slot="table-container"
       className="relative w-full overflow-x-auto"
+      role={scrollable ? "region" : undefined}
+      aria-label={scrollable ? "Table" : undefined}
+      tabIndex={scrollable ? 0 : undefined}
     >
       <table
         data-slot="table"
