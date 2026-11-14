@@ -45,6 +45,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Issue #442. The Node runtime is declared in app/Dockerfile (the image
+      # that ships), in every `node-version:` pin under .github/workflows/ (what
+      # CI tests on), and in app/package.json's @types/node (what tsc checks
+      # against). Dependabot's `docker` and npm ecosystems each read one of
+      # those, so either can move a surface alone — #210 and #245 are the two
+      # times it happened, both caught by review rather than CI. This runs
+      # before the expensive database work so the same drift is reported in
+      # seconds, naming the file and line that disagree.
+      - name: Node version gate
+        run: npm run check:node-version
+
       # Issue #124. The importer is the one Python component in the stack, and
       # until now nothing in CI ran it. Pinned by SHA like every other action
       # here; Dependabot's github-actions ecosystem keeps it current.

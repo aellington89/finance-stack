@@ -134,8 +134,15 @@ updates:
   # The node line is tracked on LTS releases only, and a bump here is only ever
   # half the change: `docker` reads Dockerfiles, so it cannot touch the
   # `node-version:` pins in ci.yml, release.yml and backup-smoke.yml, or
-  # `@types/node` in app/package.json. Move all four together or CI tests on a
-  # different runtime than the image ships (Issue #210).
+  # `@types/node` in app/package.json. Move all of them together (Issue #210):
+  #
+  #   1. all four `FROM node:` stages in app/Dockerfile;
+  #   2. every `node-version:` pin under .github/workflows/;
+  #   3. `@types/node` in app/package.json, which must be `^<that major>`.
+  #
+  # The `npm run check:node-version` step in the ci job is this checklist as a
+  # gate: it fails on a half-change and names the file and line that disagree,
+  # so a Dockerfile-only Dependabot PR cannot merge on a green run.
   - package-ecosystem: docker
     directory: /app
     target-branch: patch
