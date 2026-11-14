@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "auth:create-user": "tsx scripts/create-user.ts",
     "check:seed-references": "tsx scripts/check-seed-references.ts",
     "check:audit": "tsx scripts/check-audit.ts",
