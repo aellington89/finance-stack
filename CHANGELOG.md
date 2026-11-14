@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-14
+
+**Migration:** none
+
 ### Added
 
 - **`docker compose ps` now shows when the importer has stopped working.** ([Issue #132](https://github.com/aellington89/finance-stack/issues/132)) The importer never exits on an error. It logs the error and tries again, so a stuck importer used to show `Up` forever while importing nothing. That covered a parser hung on a file, a wrong `FINANCE_IMPORTER_DB_PASSWORD`, Postgres being down, or an `imports/` folder the container can't read.
@@ -786,7 +790,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Unified, persistent sidebar navigation (shadcn Sidebar) connecting all application sections, with a Next.js route-group split for the landing page vs. the app shell ([Issue #77](https://github.com/aellington89/finance-stack/issues/77)).
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/aellington89/finance-stack/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/aellington89/finance-stack/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/aellington89/finance-stack/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aellington89/finance-stack/compare/v1.2.0...v1.3.0
