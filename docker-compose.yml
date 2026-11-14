@@ -293,6 +293,21 @@ services:
     networks:
       - appnet
     logging: *default-logging
+    # Unhealthy once no poll cycle has made progress for max(3 x POLL_INTERVAL,
+    # 120s), so 180s at the 60 above (#132). poll.py touches
+    # /tmp/importer-heartbeat after each file and at the end of each sweep it
+    # completes, never after a failed one. A hung parser goes stale, and so does
+    # a loop that fails every cycle, such as one with a wrong
+    # FINANCE_IMPORTER_DB_PASSWORD. That loop never exits, so before this the
+    # container stayed `Up`. heartbeat.py is its own file so that an image
+    # without it fails closed (unhealthy) rather than running a second poller.
+    # Docker does not restart an unhealthy container; this is a signal only.
+    healthcheck:
+      test: ["CMD", "python", "/app/heartbeat.py"]
+      interval: 60s                  # Not shorter: after a laptop resume the next beat can be up to POLL_INTERVAL late
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     deploy:
       resources:
         limits:

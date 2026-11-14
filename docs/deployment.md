@@ -238,6 +238,12 @@ images, waits for Postgres, runs the one-shot `migrate` job — which creates th
 databases, roles and seeds — then starts the app, importer and backup services,
 and does not return success until `/api/health` reports that version.
 
+In step 5, `importer` and `pg-backup` may read `health: starting` until their
+first poll or dump completes, usually within seconds. Both should then read
+`healthy`. An
+importer that turns `unhealthy` a few minutes later most often cannot log in as
+`finance_importer`; see [Importer health](importer.md#health).
+
 **Every `changeme` in `.env` has to go.** `deploy.sh` refuses to run with a
 placeholder still in place, and requires these eight to be set to something real:
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `AUTH_SECRET`,

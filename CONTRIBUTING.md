@@ -481,7 +481,7 @@ with. Editing any of these means rebuilding before the change takes effect:
 | --- | --- |
 | `app/**` | `docker compose build finance-app` |
 | `init-db/roles/*.sql`, `init-db/seeds/*.sql`, `app/scripts/*.sh`, `scripts/verify-db-roles.sh` | `docker compose build migrate` |
-| `importer/poll.py`, `importer/requirements.txt` | `docker compose build importer` |
+| `importer/poll.py`, `importer/lookups.py`, `importer/heartbeat.py`, `importer/requirements.txt` | `docker compose build importer` |
 | `importer/tests/**`, `importer/requirements-dev.txt` | no rebuild — excluded from the build context |
 | `scripts/backup.sh`, `scripts/restore.sh`, `scripts/update-account-balance-history.sql` | `docker compose build pg-backup` |
 
@@ -496,14 +496,28 @@ creation moved into the `migrate` job under
 [#225](https://github.com/aellington89/finance-stack/issues/225), so it needs a
 `docker compose build migrate` like everything else in that table.
 
-### Lint and tests
+### Lint, typecheck and tests
 
 After the gates pass, CI runs:
 
 ```sh
 npm run lint
+npm run typecheck          # next typegen, then tsc --noEmit over the whole app
 npm run test:coverage      # all three projects; requires the Finances_Test database
 ```
+
+`typecheck` is the step that reports type errors as type errors
+([Issue #195](https://github.com/aellington89/finance-stack/issues/195)).
+ESLint doesn't report them, and Vitest strips types without checking them.
+`next build` checks the same files, but only in the `image` and `e2e` jobs,
+after it compiles, and it stops at the first error. There a type error reads
+as a failed Docker build or an E2E server that would not start. So when a
+type-only Dependabot bump goes red, look at `ci` → `Typecheck` first, because
+it lists every error. The script runs `next typegen`
+before `tsc` because `tsconfig.json` includes `next-env.d.ts` and
+`.next/types/`, and all of them are gitignored. Typegen generates them, so CI
+checks the same program a dev machine does, including Next's check of every
+route module's exports. It needs no build, database or env.
 
 The importer is Python and sits outside Vitest, so it runs as its own step in
 the same job — after the migrations and grants, because half the suite asserts

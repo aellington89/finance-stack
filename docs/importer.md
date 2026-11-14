@@ -29,7 +29,9 @@ What that leaves as a mount is only what cannot be baked:
 | `/input` | `./imports` | user documents |
 | `/app/parsers` | `./importer/parsers` | gitignored and user-specific |
 
-`parsers/` is deliberately excluded from the build context by [`importer/.dockerignore`](../importer/.dockerignore), so your parsers never enter the image or the build cache. Because `poll.py` and `lookups.py` are baked rather than mounted, **editing either takes effect only after a rebuild**:
+The container writes one file of its own: `/tmp/importer-heartbeat`, which its healthcheck reads. See [Health](#health).
+
+`parsers/` is deliberately excluded from the build context by [`importer/.dockerignore`](../importer/.dockerignore), so your parsers never enter the image or the build cache. Because `poll.py`, `lookups.py` and `heartbeat.py` are baked rather than mounted, **editing any of them takes effect only after a rebuild**:
 
 ```sh
 docker compose build importer && docker compose up -d importer
@@ -86,6 +88,42 @@ The full traceback is in the container log (`docker compose logs importer`); `er
 Because `import_log` is append-only, a file that failed and then succeeded keeps both rows — the newest row is the one that describes where it stands.
 
 **A dropped database connection is not a parser failure** and quarantines nothing. The poller abandons the cycle, reconnects with exponential backoff (from `POLL_INTERVAL`, doubling to a 15-minute ceiling), and picks up where it left off. This distinction is why a Postgres restart no longer poisons the whole drop folder.
+
+## Health
+
+`docker compose ps` shows the importer **healthy** while its poll loop is making progress, and **unhealthy** once it stops (Issue #132). The loop never exits by itself. It logs each failure and retries, so before this a stuck importer showed `Up` indefinitely while importing nothing.
+
+**How it works.** `poll.py` touches `/tmp/importer-heartbeat` inside the container after every file it handles, whether imported, skipped or quarantined. It touches it once more at the end of every sweep that completes, including a sweep with nothing to do. The healthcheck, [`importer/heartbeat.py`](../importer/heartbeat.py), fails once that file is older than three poll intervals: 180 seconds at the default `POLL_INTERVAL` of 60, and never less than 120. Docker runs it every 60 seconds and calls the container unhealthy after three failures in a row. **So unhealthy shows up about five to six minutes after the last progress.** Right after a start it reads `health: starting` until the first poll completes, normally within a few seconds.
+
+What turns it unhealthy:
+
+- **A parser that hangs** on a file, for example stuck inside a PDF library or waiting on a database lock.
+- **A loop that fails every cycle.** Causes include a wrong `FINANCE_IMPORTER_DB_PASSWORD`, a missing `finance_importer` role, Postgres being down, or a folder under `imports/` the container cannot read (it runs as uid 1001). A failed cycle never gets its closing touch, and the backoff before each retry doubles, so within a few retries this looks the same as a hang.
+- **An importer image built before this change**, running with a newer compose file. That image has no `heartbeat.py`, so the probe fails. Rebuild it with `docker compose build importer`.
+
+What does not:
+
+- **Files that fail to import.** Quarantining a file is the loop working as designed. Look in `import_log` for those (see [When a file fails](#when-a-file-fails)).
+- **A short database restart.** One failed cycle fits inside the limit. A longer outage does turn it unhealthy. It stays unhealthy until the reconnect backoff, which can reach 15 minutes, brings the loop back.
+- **A crash loop.** That already shows as `Restarting` in `docker compose ps`.
+
+To find out why:
+
+```sh
+docker compose ps importer
+docker inspect -f '{{json .State.Health}}' importer   # each probe's verdict, e.g. "last progress 412s ago, over the 180s limit"
+docker compose logs --tail 100 importer
+```
+
+**Docker does not restart an unhealthy container.** The status is a signal, not a fix. A restart would not help a hung parser anyway: a file the parser never returned from is not quarantined, so the new process would pick the same file and hang again. Move that file out of `imports/`, fix the parser, then `docker compose restart importer`.
+
+If `migrate` is hanging at the same time, a stuck parser may be holding a lock on the tables it needs. Look for the importer's session:
+
+```sql
+SELECT pid, state, now() - xact_start AS open_for, left(query, 80) AS query
+FROM pg_stat_activity
+WHERE usename = 'finance_importer';
+```
 
 ## Adding a New Import Type
 
@@ -210,7 +248,7 @@ asserting that no two reference rows in `Finances_Test` share a name.
 
 ## Tests
 
-`importer/tests/` covers the dispatch loop and lookup resolution. It runs in CI and locally:
+`importer/tests/` covers the dispatch loop, lookup resolution and the heartbeat. It runs in CI and locally:
 
 ```sh
 pip install -r importer/requirements-dev.txt

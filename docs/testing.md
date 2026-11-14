@@ -207,7 +207,7 @@ pytest tests
 
 | File | Covers | Requires DB? |
 |---|---|---|
-| `tests/test_poll.py` | The dispatch loop — dedup, quarantine, backoff, error classification, the lookup preflight | No |
+| `tests/test_poll.py` | The dispatch loop — dedup, quarantine, backoff, error classification, the lookup preflight, the heartbeat and its healthcheck | No |
 | `tests/test_lookups.py` | Name-based PK resolution — missing rows, ambiguous names, last-4 collisions | No |
 | `tests/test_import_log.py` | The `import_log` constraints and the importer's privileges | Yes (`Finances_Test`) |
 | `tests/test_lookups_live.py` | That the lookup maps match the schema, and that no two reference rows share a name | Yes (`Finances_Test`) |
@@ -260,6 +260,27 @@ removes a *silent* wrong answer rather than a crash:
 - Make the `len(candidates) > 1` branch in `resolve_account_by_last4`
   unreachable — three `test_last4_*` cases go red. That is the old behaviour
   exactly: a replaced card silently redirects a net-pay distribution.
+
+The heartbeat added in Issue
+[#132](https://github.com/aellington89/finance-stack/issues/132) fails in the
+other direction: a wrong beat reports a stuck importer as healthy, which looks
+exactly like a working one. Five mutations of `importer/poll.py`, each of which
+goes red:
+
+- Beat at the top of every `while` iteration in `poll()`, or in its `except`
+  branch — `test_a_failed_cycle_writes_no_heartbeat_and_clears_the_last_runs`
+  goes red. Either way a loop that fails every cycle, such as one with a wrong
+  `FINANCE_IMPORTER_DB_PASSWORD`, stays healthy forever.
+- Delete the `heartbeat.clear()` at the start of `poll()` — the same test goes
+  red, on the file it plants first. `docker restart` keeps `/tmp`, so without
+  the clear a beat from the last run vouches for a process that has done
+  nothing.
+- Delete the beat after the closing `conn.rollback()` in `poll_once` —
+  `test_an_empty_sweep_still_beats` and three others go red. An idle importer
+  would then go unhealthy every few minutes.
+- Delete the per-file beat — `test_a_sweep_beats_after_every_file_and_once_at_the_end`
+  and `test_a_lost_connection_ends_the_beats` go red. A long first sweep after a
+  restart would then read as a stall.
 
 ## Coverage
 

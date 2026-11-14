@@ -7,7 +7,7 @@
 # lockfile's control, and left the service unable to run from a registry image.
 #
 # What is baked and what is mounted:
-#   baked   poll.py, lookups.py + the pinned deps from requirements.txt
+#   baked   poll.py, lookups.py, heartbeat.py + the pinned deps from requirements.txt
 #   mounted /app/parsers (user-specific, gitignored) and /input (the drop folder)
 #
 # Bumping this base is a Dependabot `docker` PR against /importer — see the
@@ -104,11 +104,18 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # lookups.py alongside poll.py rather than inside it: parsers under the mounted
 # /app/parsers import it directly for name-based PK resolution (#273), and /app
 # is already sys.path[0] because poll.py runs as a top-level script.
-COPY poll.py lookups.py ./
+#
+# heartbeat.py is the Compose healthcheck (#132), run as `python
+# /app/heartbeat.py`. It is a file of its own rather than a flag on poll.py so
+# that an older image, which does not have it, fails the probe instead of
+# starting a second poller. See the module docstring.
+COPY poll.py lookups.py heartbeat.py ./
 
-# Non-root (#132). The importer only ever reads /input and /app/parsers and
-# writes nothing to the filesystem — it inserts through the database connection —
-# so it needs no ownership of either mount.
+# Non-root (#132). The importer only ever reads /input and /app/parsers — it
+# inserts through the database connection — so it needs no ownership of either
+# mount. The one file it writes is the heartbeat, /tmp/importer-heartbeat, and
+# /tmp is world-writable in the base image, so that needs no ownership either.
+# A future `read_only: true` root filesystem would need a tmpfs on /tmp.
 RUN useradd --system --uid 1001 --create-home importer
 USER importer
 

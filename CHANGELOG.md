@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`docker compose ps` now shows when the importer has stopped working.** ([Issue #132](https://github.com/aellington89/finance-stack/issues/132)) The importer never exits on an error. It logs the error and tries again, so a stuck importer used to show `Up` forever while importing nothing. That covered a parser hung on a file, a wrong `FINANCE_IMPORTER_DB_PASSWORD`, Postgres being down, or an `imports/` folder the container can't read.
+
+  Now the importer has a healthcheck:
+  - The importer touches a heartbeat file after each file it handles, and again at the end of each poll that finishes, even one with nothing to import. A poll that fails doesn't count.
+  - The container reports **unhealthy** about five to six minutes after the last progress. The limit is three poll intervals, three minutes by default.
+  - Right after a start it reads `health: starting`, then `healthy` once its first poll finishes, normally within seconds.
+  - A file that fails to import doesn't make it unhealthy. Quarantining a file is normal, and those failures are still listed in `import_log`.
+  - Docker won't restart an unhealthy container. The status is a signal only.
+
+  To see why it's unhealthy, run `docker inspect -f '{{json .State.Health}}' importer`, then `docker compose logs importer`. [Importer health](docs/importer.md#health) explains each cause and what to do.
+
+  **Rebuild the importer after updating a checkout** (`docker compose build importer`). An image built before this change has no healthcheck script, so it reports unhealthy, though it keeps importing. A deployment bundle pulls the matching image, so it needs nothing extra.
+
+  The release smoke test now waits for the importer to report healthy. Before, it only checked that the container was still running, and that passed a broken database login, because the importer retries a failed login instead of restarting.
+
+- **CI now reports type errors in the `ci` job.** ([Issue #195](https://github.com/aellington89/finance-stack/issues/195)) The `ci` job runs `npm run typecheck` after lint, and lists every error as `tsc` output. Before, the only type check was the one `next build` runs in the `image` and `e2e` jobs. It stops at the first error, so a type error showed up as a failed Docker build or an E2E server that would not start. The script now runs `next typegen` before `tsc --noEmit`, so a fresh checkout checks the same files as a dev machine, including Next's check of route exports.
+
 ## [1.4.1] - 2026-11-11
 
 **Migration:** none

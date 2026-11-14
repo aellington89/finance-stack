@@ -564,6 +564,29 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Issue #195. Nothing else in this job type-checks the code:
+      # - eslint reports lint rules, not type errors;
+      # - vitest transpiles through esbuild, which strips types without
+      #   checking them.
+      #
+      # `next build` does check the same files, the whole tsconfig program, but
+      # only in the `image` and `e2e` jobs and only after it compiles. It stops
+      # at the first error, so there a type error reads as a failed Docker build
+      # or a Playwright webServer that would not start. It also depends on Next
+      # being able to host the compiler, which TypeScript 7 broke (#246). This
+      # step reports every error, as tsc output, in the job you would look in.
+      #
+      # The script runs `next typegen` before `tsc --noEmit` because
+      # tsconfig.json includes next-env.d.ts and .next/types/, and all of them
+      # are gitignored. Without typegen, a fresh checkout type-checks a smaller
+      # program than a dev machine does. The part it would lose is Next's
+      # validator.ts, which checks every route module's exports against Next's
+      # contract, such as a route handler declaring `params` as a plain object
+      # rather than a Promise. typegen runs offline, needs no database or env,
+      # and writes only gitignored paths.
+      - name: Typecheck
+        run: npm run typecheck
+
       # Issue #142. One step rather than the `test:unit` + `test:jsdom` +
       # `test:integration` trio this replaces, because a coverage threshold is
       # only meaningful over the merged map. lib/queries and lib/actions are
