@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Caddy moves to 2.11.8-alpine and Metabase to v0.58.40** (from 2.11.7-alpine and v0.58.39). ([PR #413](https://github.com/aellington89/finance-stack/pull/413), [PR #445](https://github.com/aellington89/finance-stack/pull/445)) Both are patch releases on their current lines. Metabase stays on the 0.58 LTS line, so it runs no one-way metadata migration. Caddy 2.11.8 lists breaking changes, but they are in directives the shipped `caddy/Caddyfile` does not use. That file is one `reverse_proxy` with a JSON access log, and it validates and proxies unchanged on 2.11.8. The one change it does see is a `400` for a request whose host is invalid, such as `..`. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.
+
+- **GlitchTip moves to 7.0.0** (from 6.2.6), **and its service no longer sets `SERVER_ROLE`.** ([PR #446](https://github.com/aellington89/finance-stack/pull/446)) 7.0 always runs its web server, task worker and scheduler in one process, and migrates its own database each time it starts. That made `SERVER_ROLE=all_in_one` a setting that did nothing, so it is gone from both compose files. Every other variable the service sets is still read under the same name. 7.0's two upgrade requirements are already met: it needs PostgreSQL 15 or later, and the stack runs 18.6; it needs a database last migrated by 6.0.9 or later, and 6.2.6 is the only GlitchTip this stack has shipped.
+
+  Only hosts that run the `errors` profile are affected, and an upgrade picks this up by itself. The first start applies 7.0's migrations to the `glitchtip` database. That was tested on throwaway containers. A database 6.2.6 had migrated went healthy on 7.0.0 with no warnings, kept its issues, and took a new event under the DSN made on 6.2.6, so `ERROR_DSN` needs no change. Pinning 6.2.6 again on the migrated database also started and took events, but GlitchTip does not document going back down a major, so treat that as a way out rather than a supported path. The `glitchtip` database is in the default `BACKUP_DBS`, so the daily dump from before the upgrade is the supported way back.
+
 ## [1.5.0] - 2026-11-14
 
 **Migration:** none
