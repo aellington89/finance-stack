@@ -105,7 +105,7 @@ function MultiSelectFilter({
         ))}
         {selectedIds.length > 2 && (
           <span
-            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-sm font-medium text-muted-foreground"
+            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-sm font-medium text-foreground"
             title={selectedIds
               .slice(2)
               .map((id) => options.find((o) => o.id === id)?.name)
@@ -163,7 +163,7 @@ function DescriptionFilter({
         ))}
         {selectedDescriptions.length > 2 && (
           <span
-            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-sm font-medium text-muted-foreground"
+            className="shrink-0 cursor-default rounded-sm bg-muted px-1.5 text-sm font-medium text-foreground"
             title={selectedDescriptions.slice(2).join(", ")}
           >
             +{selectedDescriptions.length - 2}
@@ -298,7 +298,11 @@ export function AccountingFilters({
           value={filters.timeGrouping ?? "month"}
           onValueChange={handleTimeGrouping}
         >
-          <SelectTrigger>
+          {/* Named explicitly (Issue #358). A combobox never takes its name
+              from its content, so the visible "Month" is its value, not its
+              name, and this filter bar has no visible labels to borrow one
+              from. */}
+          <SelectTrigger aria-label="Time grouping">
             <span>{TIME_GROUPING_LABELS[filters.timeGrouping ?? "month"]}</span>
           </SelectTrigger>
           <SelectContent>

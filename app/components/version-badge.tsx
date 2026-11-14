@@ -24,7 +24,7 @@ export function VersionBadge() {
         className="text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         v{version}
-        {isDev && <span className="ml-1 opacity-50">(dev)</span>}
+        {isDev && <span className="ml-1">(dev)</span>}
       </TooltipTrigger>
       <TooltipContent side="top" align="start">
         <div className="flex flex-col gap-0.5">

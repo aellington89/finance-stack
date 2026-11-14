@@ -71,6 +71,41 @@ describe("EntityCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Issue #358: the lock was a span, so its tooltip, the only place the reason
+  // appears, opened for a mouse alone. Reached the way a keyboard user reaches
+  // it, with Tab, and read back the way a screen reader reads it on focus.
+  it("lets the keyboard reach a protected row's lock and its reason", async () => {
+    const user = userEvent.setup();
+    render(
+      <EntityCard
+        {...base}
+        items={[{ id: 1, name: "Groceries", lockedReason: "Referenced by the importer" }]}
+      />
+    );
+
+    await user.tab();
+    const lock = screen.getByRole("button", { name: "Groceries is protected" });
+    expect(lock).toHaveFocus();
+    expect(lock).toHaveAttribute("type", "button");
+    expect(lock).toHaveAccessibleDescription("Referenced by the importer");
+  });
+
+  it("gives each protected row its own reason", () => {
+    render(
+      <EntityCard
+        {...base}
+        items={[
+          { id: 1, name: "Groceries", lockedReason: "Referenced by the importer" },
+          { id: 2, name: "Other", lockedReason: "The fallback category" },
+        ]}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Other is protected" })
+    ).toHaveAccessibleDescription("The fallback category");
+  });
+
   it("offers edit and delete on an unprotected row", () => {
     render(<EntityCard {...base} items={items} createAction={action()} />);
     expect(screen.getByRole("button", { name: "Edit Groceries" })).toBeInTheDocument();
@@ -90,11 +125,33 @@ describe("EntityCard", () => {
     expect(screen.getByText("Debt")).toBeInTheDocument();
   });
 
+  // Issue #358: the chip was muted text on a muted fill, 4.34:1 under axe. It
+  // is an outline Badge now, foreground text on the card. jsdom cannot measure
+  // contrast, so this pins the component that fixed it; axe in a real browser
+  // is the authority on the ratio.
+  it("renders the role as an outline badge", () => {
+    const { container } = render(
+      <EntityCard
+        {...base}
+        createAction={action()}
+        items={[{ id: 1, name: "Mortgage", role: { key: "debt", label: "Debt" } }]}
+      />
+    );
+    const chip = container.querySelector('[data-slot="badge"]');
+    expect(chip).toHaveTextContent("Debt");
+    expect(chip).toHaveClass("text-foreground");
+    expect(chip).not.toHaveClass("text-muted-foreground");
+    // The override has to win tailwind-merge, or both weights ship and the
+    // stylesheet's order decides.
+    expect(chip).toHaveClass("font-normal");
+    expect(chip).not.toHaveClass("font-medium");
+  });
+
   it("omits the role chip for a row that carries none", () => {
     const { container } = render(
       <EntityCard {...base} items={items} createAction={action()} />
     );
-    expect(container.querySelectorAll(".bg-muted.px-1\\.5")).toHaveLength(0);
+    expect(container.querySelectorAll('[data-slot="badge"]')).toHaveLength(0);
   });
 
   it("opens the edit dialog for the row whose pencil was clicked", async () => {
