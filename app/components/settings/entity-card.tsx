@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -63,6 +64,8 @@ export function EntityCard({
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EntityItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EntityItem | null>(null);
+  // One per card, suffixed per row, so two cards on a page never share an id.
+  const lockedReasonId = useId();
 
   return (
     <>
@@ -98,31 +101,44 @@ export function EntityCard({
                   // Visible without hovering, like the lock: a role changes what
                   // the row does to the Liabilities totals, so it is the kind of
                   // thing you want to see while scanning the list rather than
-                  // discover by opening each row in turn.
-                  <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                  // discover by opening each row in turn. An outline Badge
+                  // (Issue #358): muted text on a muted fill measured 4.34:1,
+                  // under AA's 4.5:1. Normal weight, not the Badge's medium,
+                  // so the role does not outweigh the category it describes.
+                  <Badge variant="outline" className="font-normal">
                     {item.role.label}
-                  </span>
+                  </Badge>
                 )}
                 {item.lockedReason ? (
                   // The lock stays visible without hovering — it is the reason
                   // the row looks different, so hiding it until hover would be
-                  // hiding the explanation. It is a plain span rather than a
-                  // disabled Button because buttonVariants sets
-                  // disabled:pointer-events-none, which would stop the tooltip
-                  // from ever opening.
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span
-                          className="flex size-6 shrink-0 items-center justify-center text-muted-foreground"
-                          aria-label={`${item.name} is protected`}
-                        />
-                      }
-                    >
-                      <Lock className="size-3.5" />
-                    </TooltipTrigger>
-                    <TooltipContent side="left">{item.lockedReason}</TooltipContent>
-                  </Tooltip>
+                  // hiding the explanation.
+                  //
+                  // It is an enabled <button> (Issue #358), the trigger's
+                  // default element, so Tab reaches it and focus opens the
+                  // tooltip as hover does. It was a span, which only a mouse
+                  // could open. It is not a disabled Button either, because
+                  // buttonVariants sets disabled:pointer-events-none, which
+                  // would stop the tooltip from ever opening. Base UI does not
+                  // tie the tooltip's text to its trigger, so the reason is
+                  // also the button's description, from a visually hidden copy,
+                  // and a screen reader reads it on focus.
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger
+                        type="button"
+                        aria-label={`${item.name} is protected`}
+                        aria-describedby={`${lockedReasonId}-${item.id}`}
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        <Lock className="size-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent side="left">{item.lockedReason}</TooltipContent>
+                    </Tooltip>
+                    <span id={`${lockedReasonId}-${item.id}`} className="sr-only">
+                      {item.lockedReason}
+                    </span>
+                  </>
                 ) : (
                   <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button

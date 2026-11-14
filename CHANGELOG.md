@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Screen readers now find one main area, a named sidebar, a named time-grouping filter, and the reason a Settings row is locked. Four low-contrast labels now pass.** ([Issue #358](https://github.com/aellington89/finance-stack/issues/358)) axe-core, run on the logged-in pages during [#144](https://github.com/aellington89/finance-stack/issues/144)'s check, found these on top of what #144 fixed:
+  - **Every page had two `main` landmarks.** The sidebar layout already provides one, and the page sat in a second one nested inside it. The inner one is now a plain container.
+  - **The sidebar was outside any landmark**, so a screen reader had no way to jump to it or past it. It is now a navigation landmark named "Main", holding the app name, the links, Sign out and the version.
+  - **The time-grouping filter on Personal Accounting was an unnamed combobox.** It is now announced as "Time grouping", with the current grouping ("Month" by default) as its value.
+  - **A protected row's lock**, on Settings → Categories and on Admin, was an icon whose tooltip only a mouse could open. It is now a button: Tab reaches it, focus opens the tooltip, and a screen reader reads the reason as its description.
+  - **Contrast:**
+    - The reporting-role chips on Settings → Categories, such as "Debt — interest accrued", measured 4.34:1 in light mode, under the 4.5:1 that WCAG AA asks for. They are now outline badges and measure 19.79:1.
+    - The "+N" count that a Personal Accounting filter shows once more than two values are picked measured 4.34:1 too. It now matches the chips beside it, at 18.15:1.
+    - The "(dev)" marker beside the version, shown only on builds without a release stamp, measured 1.92:1. It now measures 4.54:1, and 6.93:1 in dark mode, up from 2.68:1.
+
+  After the change, axe reports nothing on Summary, Assets, Personal Accounting, Work Expenses, Settings → Categories or Admin. On Net Worth, Liabilities and Accounts it reports only the green gain text, tracked in [#357](https://github.com/aellington89/finance-stack/issues/357) and [#406](https://github.com/aellington89/finance-stack/issues/406). Two related problems are tracked separately:
+  - filter and picker controls that have no name, or lose it once a value is chosen ([#449](https://github.com/aellington89/finance-stack/issues/449));
+  - tables that scroll inside their card at narrow widths ([#450](https://github.com/aellington89/finance-stack/issues/450)).
+
 ## [1.5.0] - 2026-11-14
 
 **Migration:** none

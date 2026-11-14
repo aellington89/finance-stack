@@ -56,6 +56,16 @@ describe("AccountingFilters", () => {
     expect(screen.getByText("Clear All")).toBeInTheDocument();
   });
 
+  // Issue #358: axe's only critical finding on Accounting. The trigger is a
+  // combobox, which takes no name from its content, so without an explicit
+  // label a screen reader announced it as an unnamed combobox.
+  it("names the time-grouping combobox, keeping the grouping as its text", () => {
+    render(<AccountingFilters {...props} filters={{ timeGrouping: "quarter" }} />);
+    expect(
+      screen.getByRole("combobox", { name: "Time grouping" })
+    ).toHaveTextContent("Quarter");
+  });
+
   it("treats empty arrays as no filter", () => {
     render(
       <AccountingFilters {...props} filters={{ accountIds: [], descriptions: [] }} />
