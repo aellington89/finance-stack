@@ -567,10 +567,14 @@ jobs:
       # Issue #195. Nothing else in this job type-checks the code:
       # - eslint reports lint rules, not type errors;
       # - vitest transpiles through esbuild, which strips types without
-      #   checking them;
-      # - `next build` checks only what the build graph reaches, so tests/ and
-      #   scripts/ go unchecked, and it runs in the `image` job, where a type
-      #   error shows up as a Docker exit code rather than as tsc output.
+      #   checking them.
+      #
+      # `next build` does check the same files, the whole tsconfig program, but
+      # only in the `image` and `e2e` jobs and only after it compiles. It stops
+      # at the first error, so there a type error reads as a failed Docker build
+      # or a Playwright webServer that would not start. It also depends on Next
+      # being able to host the compiler, which TypeScript 7 broke (#246). This
+      # step reports every error, as tsc output, in the job you would look in.
       #
       # The script runs `next typegen` before `tsc --noEmit` because
       # tsconfig.json includes next-env.d.ts and .next/types/, and all of them
