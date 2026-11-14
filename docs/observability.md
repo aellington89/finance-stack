@@ -314,12 +314,13 @@ in `.env` as `ERROR_DSN` — using the container name, `glitchtip`, not localhos
 because finance-app resolves it over the Compose network.
 
 **It is one container, not the three a Sentry-compatible stack usually implies.**
-`SERVER_ROLE=all_in_one` runs the web process, the background worker and its own
-Django migrations together, and `VALKEY_URL=""` puts the task queue, cache and
-sessions on Postgres. That second setting is load-bearing beyond saving a
-container: `lib/security/rate-limit.ts` and [deployment](deployment.md) both
-state there is no Redis in this stack, and the in-process rate limiter is
-justified partly on that. Adding one here would have quietly reopened it.
+GlitchTip runs its web server, background worker and scheduler as one process and
+applies its own Django migrations each time it starts, and `VALKEY_URL=""` puts
+the task queue, cache and sessions on Postgres. That setting is load-bearing
+beyond saving a container: `lib/security/rate-limit.ts` and
+[deployment](deployment.md) both state there is no Redis in this stack, and the
+in-process rate limiter is justified partly on that. Adding one here would have
+quietly reopened it.
 
 Its database rides the existing `postgres` service, owned by a role that holds
 nothing else in the cluster — the Metabase pattern exactly
