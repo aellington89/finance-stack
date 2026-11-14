@@ -352,8 +352,9 @@ in:
 - `components/**/*.tsx` — 30 files at **77.0%**, which is #142's deferred
   "~70% for components" criterion, met. It first entered the denominator at
   28.8%; what moved it was emptying the chart files of logic (below) and
-  writing render tests for everything else. Every file but `app-sidebar.tsx`
-  now has one.
+  writing render tests for everything else. Every file now has one. The last
+  was `app-sidebar.tsx`, which gained one with its landmark fix in
+  [#358](https://github.com/aellington89/finance-stack/issues/358).
 - `hooks/**/*.ts` — note the old `hooks/**` exclusion was itself
   belt-and-braces, since no `include` glob ever reached it. Measuring it meant
   *adding* `hooks/**/*.ts` to `include`, not just deleting an exclude entry.

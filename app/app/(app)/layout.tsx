@@ -27,7 +27,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
           </header>
-          <main className="flex-1">{children}</main>
+          {/* A div, not a main (Issue #358): SidebarInset already renders the
+              page's one <main>, and a second one nested inside it is three axe
+              landmark violations on every page. */}
+          <div className="flex-1">{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

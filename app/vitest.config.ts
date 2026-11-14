@@ -258,8 +258,8 @@ export default defineConfig({
         // first entered it. This is #142's deferred "~70% for components"
         // criterion, met. The 30 files are the component tree minus the
         // vendored shadcn primitives and the eleven recharts wrappers, both
-        // excluded above with their reasons; every remaining file but
-        // app-sidebar.tsx has a render test.
+        // excluded above with their reasons; every remaining file has a render
+        // test (app-sidebar.tsx was the last, in #358).
         "components/**/*.tsx": { statements: 74, branches: 63, functions: 66, lines: 76 },
 
         // 100 across the board over one file, use-mobile.ts. Issue #296 brought
