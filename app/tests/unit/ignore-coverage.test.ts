@@ -112,3 +112,7 @@ describe("credential files are excluded from the Docker build contexts", () => {
     expect(dockerignorePatterns(".dockerignore")).toContain("**/.env*");
   });
 });
+
+// Issue #195 scratch: a deliberate type error, outside next build's graph.
+// The Typecheck step must fail on this line. Do not merge.
+export const __issue195Scratch: number = "not a number";
