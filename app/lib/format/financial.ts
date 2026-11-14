@@ -53,8 +53,8 @@ export function signedPercent(n: number): string {
  * no room for one (both in components/dashboard/signed-change.tsx).
  */
 export function amountColorClass(n: number): string {
-  if (n > 0) return "text-green-600 dark:text-green-400";
-  if (n < 0) return "text-red-600 dark:text-red-400";
+  if (n > 0) return "text-gain";
+  if (n < 0) return "text-loss";
   return "";
 }
 

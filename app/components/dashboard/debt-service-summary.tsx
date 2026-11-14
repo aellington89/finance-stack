@@ -103,7 +103,7 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                 <div className="text-xs text-muted-foreground">
                   Interest Accrued
                 </div>
-                <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-red-600 dark:text-red-400">
+                <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-loss">
                   {formatCurrency(interestCost)}
                 </div>
               </div>
@@ -111,7 +111,7 @@ export function DebtServiceSummary({ data }: DebtServiceSummaryProps) {
                 <div className="text-xs text-muted-foreground">
                   Principal Paid (estimated)
                 </div>
-                <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-green-600 dark:text-green-400">
+                <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-gain">
                   {formatCurrency(data.principalPaid)}
                 </div>
               </div>

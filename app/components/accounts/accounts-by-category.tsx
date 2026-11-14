@@ -94,8 +94,8 @@ function CategoryCard({ category }: { category: CategoryGroup }) {
                     <span
                       className={`tabular-nums font-medium w-24 text-right ${
                         acct.balance >= 0
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400"
+                          ? "text-gain"
+                          : "text-loss"
                       }`}
                     >
                       {formatCurrency(acct.balance)}

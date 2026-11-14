@@ -156,7 +156,7 @@ const columns = columnHelper.columns([
     cell: (info) => {
       const val = info.getValue()
       return (
-        <span className={val < 0 ? "text-destructive" : "text-emerald-600"}>
+        <span className={val < 0 ? "text-loss" : "text-gain"}>
           {val < 0 ? "-" : "+"}${Math.abs(val).toFixed(2)}
         </span>
       )

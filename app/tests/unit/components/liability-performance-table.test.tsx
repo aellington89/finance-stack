@@ -106,7 +106,7 @@ describe("LiabilityPerformanceTable", () => {
 
     const catRow = screen.getByTestId("row-cat:5");
     const change = within(catRow).getByText("+$1,000.00");
-    expect(change).toHaveClass("text-green-600");
+    expect(change).toHaveClass("text-gain");
     expect(change.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
   });
 

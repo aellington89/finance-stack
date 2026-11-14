@@ -9,7 +9,7 @@ describe("SignedChange", () => {
     render(<SignedChange value={5}>+$5.00</SignedChange>);
 
     const change = screen.getByText("+$5.00");
-    expect(change).toHaveClass("text-green-600");
+    expect(change).toHaveClass("text-gain");
     expect(change.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
   });
 
@@ -17,7 +17,7 @@ describe("SignedChange", () => {
     render(<SignedChange value={-5}>-$5.00</SignedChange>);
 
     const change = screen.getByText("-$5.00");
-    expect(change).toHaveClass("text-red-600");
+    expect(change).toHaveClass("text-loss");
     expect(change.querySelector("svg.lucide-trending-down")).toBeInTheDocument();
   });
 
@@ -25,7 +25,7 @@ describe("SignedChange", () => {
     render(<SignedChange value={0}>$0.00</SignedChange>);
 
     const change = screen.getByText("$0.00");
-    expect(change.className).not.toMatch(/text-(green|red)-/);
+    expect(change.className).not.toMatch(/text-(gain|loss)/);
     expect(change.querySelector("svg")).toBeNull();
   });
 
@@ -34,7 +34,7 @@ describe("SignedChange", () => {
     render(<SignedChange value={null}>—</SignedChange>);
 
     const change = screen.getByText("—");
-    expect(change.className).not.toMatch(/text-(green|red)-/);
+    expect(change.className).not.toMatch(/text-(gain|loss)/);
     expect(change.querySelector("svg")).toBeNull();
   });
 
@@ -56,7 +56,7 @@ describe("SignedChange", () => {
 
     expect(screen.getByText("+$5.00")).toHaveClass(
       "inline-flex",
-      "text-green-600",
+      "text-gain",
       "text-5xl",
       "font-bold"
     );
@@ -70,7 +70,7 @@ describe("TrendIcon", () => {
     const { container } = render(<TrendIcon value={5} />);
 
     const icon = container.querySelector("svg.lucide-trending-up");
-    expect(icon).toHaveClass("text-green-600");
+    expect(icon).toHaveClass("text-gain");
     expect(icon).toHaveAttribute("aria-hidden", "true");
   });
 
@@ -78,7 +78,7 @@ describe("TrendIcon", () => {
     const { container } = render(<TrendIcon value={-5} />);
 
     expect(container.querySelector("svg.lucide-trending-down")).toHaveClass(
-      "text-red-600"
+      "text-loss"
     );
   });
 
@@ -96,6 +96,6 @@ describe("TrendIcon", () => {
   it("takes its size from the caller", () => {
     const { container } = render(<TrendIcon value={5} className="size-5" />);
 
-    expect(container.querySelector("svg")).toHaveClass("size-5", "text-green-600");
+    expect(container.querySelector("svg")).toHaveClass("size-5", "text-gain");
   });
 });

@@ -150,7 +150,7 @@ describe("AccountsTable", () => {
     await user.click(within(section("Liabilities")).getByTitle("Expand all"));
 
     const balance = screen.getByText("Visa").closest("tr")!;
-    expect(balance.innerHTML).toContain("text-red-600");
+    expect(balance.innerHTML).toContain("text-loss");
     expect(balance.querySelector("svg")).toBeNull();
   });
 

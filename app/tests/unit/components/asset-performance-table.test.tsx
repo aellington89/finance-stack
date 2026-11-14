@@ -70,7 +70,7 @@ describe("AssetPerformanceTable", () => {
     // Icon and colour on the one element: Issue #144's "icon + colour".
     for (const text of ["+$1,000.00", "+10.00%"]) {
       const change = within(catRow).getByText(text);
-      expect(change).toHaveClass("text-green-600");
+      expect(change).toHaveClass("text-gain");
       expect(change.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
     }
   });
@@ -115,7 +115,7 @@ describe("AssetPerformanceTable", () => {
 
     const catRow = screen.getByTestId("row-cat:1");
     const change = within(catRow).getByText("-$500.00");
-    expect(change).toHaveClass("text-red-600");
+    expect(change).toHaveClass("text-loss");
     expect(change.querySelector("svg.lucide-trending-down")).toBeInTheDocument();
   });
 
@@ -190,7 +190,7 @@ describe("AssetPerformanceTable", () => {
       expect(cell).toHaveTextContent("—");
       expect(cell.textContent).not.toContain("%");
       expect(cell.querySelector("svg")).toBeNull();
-      expect(cell.querySelector(".text-green-600, .text-red-600")).toBeNull();
+      expect(cell.querySelector(".text-gain, .text-loss")).toBeNull();
     }
   });
 
@@ -221,7 +221,7 @@ describe("AssetPerformanceTable", () => {
 
     const pctCell = screen.getByTestId("row-cat:1").querySelectorAll("td")[3];
     const figure = within(pctCell).getByText("+150.00%");
-    expect(figure).toHaveClass("text-green-600");
+    expect(figure).toHaveClass("text-gain");
     expect(figure.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
   });
 });

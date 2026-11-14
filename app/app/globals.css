@@ -31,6 +31,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -77,6 +79,12 @@
      tests/unit/components/destructive-contrast.test.ts is the gate that
      catches it. Kept inside the sRGB gamut so no browser gamut-maps it. */
   --destructive: oklch(0.49 0.19 27);
+  /* Semantic gain/loss text (Issue #406). Light-mode green-700 and red-700
+     from the default palette: both clear WCAG AA 4.5:1 on --card, unlike the
+     raw green-500/600, red-500 and emerald-600 they replace. Dark mode keeps
+     green-400/red-400, which already pass on the dark card. */
+  --gain: oklch(0.527 0.154 150.069);
+  --loss: oklch(0.505 0.213 27.518);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -112,6 +120,8 @@
   --accent: oklch(0.371 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --gain: oklch(0.792 0.209 151.711);
+  --loss: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);

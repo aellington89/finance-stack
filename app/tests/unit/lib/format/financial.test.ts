@@ -43,12 +43,12 @@ describe("signedPercent", () => {
 });
 
 describe("amountColorClass", () => {
-  it("returns green for positive values", () => {
-    expect(amountColorClass(1)).toContain("green");
+  it("returns the gain token for positive values", () => {
+    expect(amountColorClass(1)).toBe("text-gain");
   });
 
-  it("returns red for negative values", () => {
-    expect(amountColorClass(-1)).toContain("red");
+  it("returns the loss token for negative values", () => {
+    expect(amountColorClass(-1)).toBe("text-loss");
   });
 
   it("returns an empty class for zero", () => {

@@ -74,7 +74,7 @@ describe("AccountingKpiCard", () => {
         change={{ percent: -12.5, direction: "down", label: "vs. Feb" }}
       />
     );
-    expect(container.innerHTML).toContain("text-green-500");
+    expect(container.innerHTML).toContain("text-gain");
     expect(screen.getByText(/12\.50%/)).toBeInTheDocument();
   });
 
@@ -87,7 +87,7 @@ describe("AccountingKpiCard", () => {
         change={{ percent: -12.5, direction: "down", label: "vs. Feb" }}
       />
     );
-    expect(container.innerHTML).toContain("text-red-500");
+    expect(container.innerHTML).toContain("text-loss");
   });
 
   it("says 'No change' rather than showing an arrow and 0.00%", () => {

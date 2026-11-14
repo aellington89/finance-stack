@@ -63,11 +63,11 @@ describe("NetWorthDriversTable", () => {
 
     // Icon and colour on the one element: Issue #144's "icon + colour".
     const gain = within(row("Current Asset")).getByText("+$5,000.00");
-    expect(gain).toHaveClass("text-green-600");
+    expect(gain).toHaveClass("text-gain");
     expect(gain.querySelector("svg.lucide-trending-up")).toBeInTheDocument();
 
     const loss = within(row("Current Liability")).getByText("-$1,000.00");
-    expect(loss).toHaveClass("text-red-600");
+    expect(loss).toHaveClass("text-loss");
     expect(loss.querySelector("svg.lucide-trending-down")).toBeInTheDocument();
 
     // The shares are signed changes too, so they carry the icon as well.

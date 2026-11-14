@@ -47,8 +47,8 @@ export function AccountingKpiCard({
                 className={cn(
                   "font-medium",
                   change.direction === positiveDirection
-                    ? "text-green-500"
-                    : "text-red-500"
+                    ? "text-gain"
+                    : "text-loss"
                 )}
               >
                 {change.direction === "down" ? "\u2193" : "\u2191"}{" "}
