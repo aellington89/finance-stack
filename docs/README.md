@@ -8,6 +8,7 @@ Planning lives outside the repository: the roadmaps are GitHub [Projects](https:
 
 ## Guides
 
+- [Architecture](ARCHITECTURE.md) — the services and their profiles, the database roles, and how data flows: an app request and the audit log, imports, backups, releases, and the data model
 - [Authentication](auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](database.md) — schema, views, balance history, first-launch init, and the test database
 - [Deployment & Exposure](deployment.md) — installing and upgrading a release, rollback and database restore, and the trusted-network vs public-internet posture

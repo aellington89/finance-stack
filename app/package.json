@@ -13,7 +13,6 @@
     "check:audit": "tsx scripts/check-audit.ts",
     "check:changelog": "tsx scripts/check-changelog.ts",
     "check:docs": "tsx scripts/check-docs.ts",
-    "release:notes": "tsx scripts/release-notes.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

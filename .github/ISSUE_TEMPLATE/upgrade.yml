@@ -1,0 +1,51 @@
+name: Upgrade
+description: A dependency, runtime, or toolchain upgrade that needs more than a Dependabot merge
+title: 'Upgrade: '
+labels: ['type: upgrade']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        - **Title:** `Upgrade: <package> <from> → <to>`.
+        - **Next step:** `/upgrade <issue#>` researches, upgrades, and opens the PR from the upgrade PR template.
+        - **Process:** [PROCESS.md](https://github.com/aellington89/dev_process/blob/main/PROCESS.md) (9. Upgrades: risk tiers and the dependency path), and the project's high-risk packages in `docs/PROCESS.md`
+  - type: input
+    id: what
+    attributes:
+      label: What
+      placeholder: typescript 5.6.3 → 5.9.3
+    validations:
+      required: true
+  - type: dropdown
+    id: why
+    attributes:
+      label: Why now
+      multiple: true
+      options:
+        - Security fix or advisory
+        - Version is out of support
+        - Needed for a feature
+        - Bug fix upstream
+        - Routine currency
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Risk tier
+      options:
+        - Low (dev dependency patch or minor, GitHub Actions)
+        - Medium (production patch or minor, development tool major)
+        - High (the runtime or framework the product ships on, native modules, a language major)
+  - type: textarea
+    id: breaking
+    attributes:
+      label: Known breaking changes
+      description: Links to release notes or migration guides; `/upgrade` fills this in.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ] The verify command and the end-to-end tests pass
+        - [ ] The product starts, and existing user data still opens
+        - [ ] The release artifacts build for every target
+        - [ ] CHANGELOG.md entry under Unreleased, if users could notice the change

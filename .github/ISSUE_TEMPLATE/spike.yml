@@ -1,0 +1,45 @@
+name: Research spike
+description: A question to answer before committing to a design; the output is a decision, not code
+title: 'Spike: '
+labels: ['type: spike', 'stage: research']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        - **Title:** `Spike: <question>`.
+        - **Next step:** `/research <issue#>` posts a research note here, with a recommendation.
+        - **Standard:** [standards/designs.md](https://github.com/aellington89/dev_process/blob/main/standards/designs.md) (research notes)
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do we need to know?
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision it unblocks
+      description: Which issue or design choice is waiting on the answer?
+    validations:
+      required: true
+  - type: textarea
+    id: known
+    attributes:
+      label: What we already know
+      description: Constraints, past decisions (docs/decisions/), and options already on the table.
+  - type: dropdown
+    id: timebox
+    attributes:
+      label: Timebox
+      options: [1 hour, Half a day, 1 day]
+      default: 0
+  - type: dropdown
+    id: output
+    attributes:
+      label: Expected output
+      options:
+        - Recommendation
+        - Recommendation and an ADR draft
+        - Recommendation and a throwaway prototype branch
+      default: 0

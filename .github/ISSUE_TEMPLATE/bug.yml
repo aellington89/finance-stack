@@ -1,61 +1,63 @@
-name: Bug report
-description: Report something that isn't working.
-labels: ["bug"]
+name: Bug
+description: Something is broken or behaves unexpectedly
+title: 'X.Y.Z · '
+labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. See [CONTRIBUTING.md](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md)
-        for the dev workflow and CI gates.
-
+        - **Title:** `<feature id>.<n> · <name>`, for example `1.4.2 · Tag Filter Resets on Reload`.
+        - **Next step:** weekly triage. Add `release: blocker` if this can lose or corrupt user data, or breaks a core flow.
+        - **Standard:** [standards/issues.md](https://github.com/aellington89/dev_process/blob/main/standards/issues.md)
   - type: textarea
-    id: what-happened
+    id: summary
     attributes:
-      label: What happened?
-      description: Describe the bug, including what you expected to happen instead.
+      label: Summary
+      description: What goes wrong, in one or two sentences.
     validations:
       required: true
-
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
       value: |
         1.
-        2.
-        3.
     validations:
       required: true
-
-  - type: dropdown
-    id: area
-    attributes:
-      label: Area
-      description: Which part of the app does this touch? (Informational — doesn't auto-apply a label.)
-      options:
-        - frontend
-        - backend
-        - database / migrations
-        - importer
-        - infrastructure
-    validations:
-      required: false
-
   - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.0.4, or a commit SHA when running from source
+  - type: input
     id: environment
     attributes:
       label: Environment
-      value: |
-        - Run mode: docker compose / local `npm run dev`
-        - App version (sidebar footer badge, `/settings/about`, or `/api/health`):
-        - Browser / OS:
-    validations:
-      required: false
-
-  - type: textarea
-    id: logs
+      placeholder: The operating system, browser, or device, and anything else that matters
+  - type: checkboxes
+    id: impact
     attributes:
-      label: Relevant logs
-      render: shell
-    validations:
-      required: false
+      label: Impact
+      options:
+        - label: User data can be lost or corrupted
+        - label: Regression (this used to work)
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or notes
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we'll know it's fixed, including the regression test.
+      value: |
+        - [ ] A test reproduces the bug and passes with the fix
+        - [ ]

@@ -21,7 +21,8 @@ export type ChangelogProblem =
   | { kind: "tag-mismatch"; tag: string; expected: string }
   | { kind: "missing-migration-marker"; version: string }
   | { kind: "bad-migration-marker"; version: string; value: string }
-  | { kind: "breaking-not-major"; version: string; previous: string; expected: string };
+  | { kind: "breaking-not-major"; version: string; previous: string; expected: string }
+  | { kind: "breaking-migration-unmarked"; version: string };
 
 // First heading whose version is X.Y.Z — skips [Unreleased] / non-semver. null if none.
 export function newestRelease(releases: ChangelogRelease[]): ChangelogRelease | null {
@@ -95,6 +96,29 @@ export function checkBreakingIsMajor(releases: ChangelogRelease[]): ChangelogPro
   ];
 }
 
+// The version is computed from the entries, never from this marker: the shared
+// dev process's calculator (scripts/dev-process/release.mjs, docs/releases.md)
+// makes a release a major only for an entry that starts **Breaking:**. So a
+// section declaring **Migration:** breaking must carry one, or the calculator
+// offers a minor that checkBreakingIsMajor then refuses at the release.
+//
+// Checked on [Unreleased], so it fails on the branch that adds the migration,
+// and on the release being closed; history is not relitigated. Any section
+// counts, as it does for the calculator, and pre-1.0 is not exempt: the entry is
+// also where operators read what they must do.
+const BREAKING_ENTRY_RE = /^\*\*breaking:?\*\*:?/i;
+
+const hasBreakingEntry = (r: ChangelogRelease): boolean =>
+  r.sections.some((s) => s.items.some((i) => BREAKING_ENTRY_RE.test(i.raw)));
+
+export function checkBreakingIsMarked(releases: ChangelogRelease[]): ChangelogProblem[] {
+  const newest = newestRelease(releases);
+  return releases
+    .filter((r) => r.version === "Unreleased" || r === newest)
+    .filter((r) => r.migration === "breaking" && !hasBreakingEntry(r))
+    .map((r) => ({ kind: "breaking-migration-unmarked", version: r.version }));
+}
+
 export function checkChangelog(
   pkgVersion: string,
   releases: ChangelogRelease[],
@@ -105,7 +129,11 @@ export function checkChangelog(
   // Marker and bump problems are reported only once the version agrees: a mismatch
   // is the more fundamental failure, and fixing it changes which release is being
   // checked.
-  return [...checkMigrationMarkers(releases), ...checkBreakingIsMajor(releases)];
+  return [
+    ...checkMigrationMarkers(releases),
+    ...checkBreakingIsMajor(releases),
+    ...checkBreakingIsMarked(releases),
+  ];
 }
 
 // Combined with checkChangelog, enforces tag === v<version> === CHANGELOG top.

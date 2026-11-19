@@ -18,23 +18,37 @@ The app requires sign-in ([docs/auth.md](docs/auth.md)): set `AUTH_SECRET` in
 
 ## Branching & pull requests
 
-- **`master`** is the primary branch; all PRs target it.
-- **`test`** is the working branch, and day-to-day development happens directly
-  on it. There is no branch per issue — create one only when a change
-  specifically warrants isolation (a risky refactor you may want to abandon, or
-  work that would collide with something already in flight on `test`).
-- Commit to `test`, `git push origin test`, then open a PR from `test` into
-  `master`. CI runs on the push *and* on the PR; all gates must be green before
-  merging (see [CI gates](#ci-gates) below).
+Branches and pull requests follow the shared dev process
+([docs/PROCESS.md](docs/PROCESS.md)):
+
+- **`master`** is the only long-lived branch, and every PR targets it.
+- **One issue, one branch, one PR:** `issue/<n>-<slug>`, cut from `master`. The
+  other kinds are `release/vX.Y.Z`, `upgrade/<package>-<version>`, `docs/<slug>`,
+  `chore/<slug>`, and `spike/<n>-<slug>` for a throwaway prototype that is never
+  merged. Dependabot names its own.
+- **PR titles:** `Issue #<n> - <name>` (the issue title without its roadmap id),
+  with a body that starts `Closes #<n>` and fills in the pull request template.
+  The other kinds are `Upgrade: <package> <from> → <to>`, `Release: vX.Y.Z`,
+  `Docs: <summary>`, and `Chore: <summary>`. The `Title and description` check
+  enforces them; check one before opening it with
+  `node scripts/dev-process/check-pr.mjs --title "<title>" --body-file <file>`.
+- **Squash-merge** once every gate is green (see [CI gates](#ci-gates) below), so
+  the PR title is the commit that lands on `master`.
 
 ## Planning
 
-The roadmaps are GitHub [Projects](https://github.com/aellington89/finance-stack/projects): what is planned, and
-what is in flight. There is no roadmap file in the repository.
+The roadmap is GitHub [milestones](https://github.com/aellington89/finance-stack/milestones),
+one per phase, named `Phase N — <theme>`; the
+[Projects](https://github.com/aellington89/finance-stack/projects) board shows what
+is planned and what is in flight. There is no roadmap file in the repository.
+New issues come from the shared issue forms (feature, bug, spike, and upgrade). A
+feature is titled `<N>.<n> · <name>` in its phase, and a follow-up or bug on it
+adds a counter: `<N>.<n>.<m> · <name>`.
 
 ## Commit messages
 
-Format: **`Issue #N - <short imperative>`**
+On an issue branch: **`Issue #N - <short imperative>`**. On any other branch:
+`<Kind>: <summary>`, such as `Docs:`, `Chore:`, `Upgrade:`, or `Release: vX.Y.Z`.
 
 ```
 Issue #150 - Centralize date-range validation
@@ -43,13 +57,12 @@ Issue #174 - Add CONTRIBUTING.md (dev workflow, conventions, release process)
 ```
 
 Every commit that closes or advances an issue should carry the issue number.
-The `(#N)` trailing-reference form (e.g. `Clean up .gitignore files (#154)`)
-is tolerated by the release-notes generator but is not preferred — use the
-`Issue #N -` prefix for consistency.
+The squash merge replaces a branch's commits with its PR title, so the title is
+what lands on `master`.
 
 ## CI gates
 
-CI runs on every push to `master`/`test` and on all PRs. There are five gates
+CI runs on every push to `master` and on all PRs. There are five gates
 that can fail a build before lint and tests even run, plus an image-scan gate
 and an end-to-end gate that each run in a parallel job; all are fast to satisfy
 locally:
@@ -121,8 +134,9 @@ See [Roles & Privileges](docs/database.md#roles--privileges).
 Fails if `app/package.json` version doesn't equal the newest released version
 in `CHANGELOG.md`, if that release doesn't declare a valid `**Migration:**`
 marker, if a release declaring `**Migration:** breaking` didn't increment its
-major version (pre-1.0 releases exempt), or (on a `v*` tag push) if the tag
-isn't a well-formed `vX.Y.Z` matching that version.
+major version (pre-1.0 releases exempt), if a section declaring
+`**Migration:** breaking` has no entry that starts `**Breaking:**`, or (on a `v*`
+tag push) if the tag isn't a well-formed `vX.Y.Z` matching that version.
 
 **Fix:** run locally before pushing:
 
@@ -613,10 +627,12 @@ weekly:
 
 Two things to know when reviewing these:
 
-- **They don't follow the `Issue #N -` commit convention.** Dependabot can't
-  know the issue number, so its PRs are the one accepted exception. Everything
-  else applies — all gates must be green, and a user-visible bump still needs a
-  `CHANGELOG.md` entry.
+- **They open against `master`, titled `Upgrade: bump …`,** and labeled
+  `dependencies` and `type: upgrade`. The PR standards check leaves Dependabot's
+  own title and body alone. None is merged automatically: all gates must be
+  green, and a bump that ships needs a `CHANGELOG.md` entry, under
+  `### Dependencies` unless an operator would notice it
+  ([docs/releases.md](docs/releases.md#choosing-the-bump)).
 - **Actions are pinned by commit SHA, not tag.** Dependabot rewrites the SHA and
   its trailing `# vX.Y.Z` comment together. Never "simplify" a pin back to a
   mutable tag: on 19 March 2026 an attacker force-pushed malware over
@@ -641,7 +657,9 @@ next tag ships that base to a deployment host.
 
 Every PR that ships user-visible changes should add a bullet under
 `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) — in the appropriate
-subsection (`Added`, `Changed`, `Fixed`, or `Security`) — with an issue link:
+subsection (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`,
+`Dependencies`, or `Internal`) — with an issue link. The section decides the
+next version ([docs/releases.md](docs/releases.md#choosing-the-bump)):
 
 ```markdown
 ## [Unreleased]
@@ -658,9 +676,10 @@ downgrade it. The marker describes the release as a whole, not the last PR to
 touch it, so a `breaking` already declared by an earlier PR stays `breaking`.
 `[Unreleased]` may carry no marker at all until something needs one, but once it
 does the value must be one of the three or the gate fails. Escalating to
-`breaking` also commits the release to a **major** version, and the release-notes
-generator reads your marker to suggest one — so the value you set here decides
-the next version number, not just the rollback advice.
+`breaking` also commits the release to a **major** version: start your entry
+`**Breaking:**` and say what operators must do, because the version is computed
+from the entries, not the marker, and the gate fails a `breaking` marker that has
+no such entry.
 
 ## Schema changes
 
@@ -696,48 +715,42 @@ packages are public — pulls on a deployment host need no authentication. Full
 detail, including the one-time visibility step on first publish, is in
 [docs/releases.md](docs/releases.md#published-images).
 
-**Brief sequence** (full steps and tagging rules are in [docs/releases.md](docs/releases.md)):
+**Brief sequence** (full steps and tagging rules are in
+[docs/releases.md](docs/releases.md#release-procedure)), on a `release/vX.Y.Z`
+branch with a `Release: vX.Y.Z` pull request; `/release` does steps 1 to 3:
 
-1. **Draft changelog entries.** Run the release-notes generator for a suggested
-   bump and a draft bullet list:
+1. **Derive the version.** Check that every PR since the last tag has its entry,
+   in the right section, under `## [Unreleased]`. Then, from the repository root:
 
    ```sh
-   cd app
-   npm run release:notes -- <prev-tag>..HEAD --changelog
+   node scripts/dev-process/release.mjs next
    ```
 
-   The script prints a draft Keep-a-Changelog block (issue-linked bullets and a
-   suggested major/minor/patch bump) to **stdout** — it does not edit any files.
-   The suggestion keys a major off a `breaking` `**Migration:**` marker on
-   `[Unreleased]`, and a minor off an `### Added` entry there or an `enhancement`
-   label on any issue or PR in the range; pass `--bump=major` for a breaking
-   change that ships no migration. See
+   It prints the next version and every reason for the bump. See
    [docs/releases.md](docs/releases.md#choosing-the-bump).
-   Re-sort the bullets into the correct `Added`/`Changed`/`Fixed`/`Security`
-   subsections under `## [Unreleased]` in `CHANGELOG.md`.
 
-2. **Close the changelog section.** In `CHANGELOG.md`, rename
-   `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh empty
-   `## [Unreleased]` above it. Update the reference links at the bottom. Make sure
+2. **Close the changelog section.** `node scripts/dev-process/release.mjs prepare`
+   (or `prepare X.Y.Z` to override) moves `## [Unreleased]` under a new
+   `## [X.Y.Z] - YYYY-MM-DD` heading and updates the reference links. Make sure
    the closed section declares its `**Migration:** none | backward-compatible |
    breaking` marker directly under the heading — the changelog gate requires it.
 
 3. **Bump the version.** `cd app && npm version X.Y.Z --no-git-tag-version` —
    this keeps `package-lock.json` in step, which editing `app/package.json` by
-   hand does not. The tag is created separately, in step 5.
+   hand does not. The tag is created separately, in step 4.
 
-4. **Commit.** E.g. `git commit -m "Release vX.Y.Z"`.
-
-5. **Tag and push** (annotated), once the release commit is on `master`:
+4. **Merge, then tag and push** (annotated), once the squash-merged release
+   commit is on `master`:
 
    ```sh
    git tag -a vX.Y.Z -m "vX.Y.Z — <one-line summary>"
    git push origin vX.Y.Z
    ```
 
-   `release.yml` takes it from here and publishes the Release. Watch the run;
-   if the gate rejects the tag, nothing is published and the tag can be
-   deleted and re-pushed.
+   `release.yml` takes it from here: it runs the changelog gate and
+   `release.mjs verify`, then publishes the Release. Watch the run; if a gate
+   rejects the tag, nothing is published and the tag can be deleted and
+   re-pushed.
 
 See [docs/releases.md](docs/releases.md) for the complete procedure, tagging
 rules (`vX.Y.Z` — annotated, `v` prefix, no stray dots), and the local-fallback

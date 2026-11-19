@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseChangelog } from "@/lib/changelog";
 import {
   checkBreakingIsMajor,
+  checkBreakingIsMarked,
   checkChangelog,
   checkMigrationMarkers,
   checkTag,
@@ -256,8 +257,10 @@ describe("checkTag", () => {
 // version against what the release actually says it does.
 describe("checkBreakingIsMajor", () => {
   const md = (...sections: string[]): string => sections.join("\n\n");
+  // A breaking release carries its **Breaking:** entry, so only this rule is under test.
   const release = (version: string, migration: string): string =>
-    `## [${version}] - 2026-09-12\n\n**Migration:** ${migration}\n\n### Changed\n\n- A change.`;
+    `## [${version}] - 2026-09-12\n\n**Migration:** ${migration}\n\n### Changed\n\n- ` +
+    `${migration === "breaking" ? "**Breaking:** " : ""}A change.`;
 
   it("returns [] when a breaking release incremented the major", () => {
     const releases = parseChangelog(md(release("2.0.0", "breaking"), release("1.4.2", "none")));
@@ -326,5 +329,59 @@ describe("checkBreakingIsMajor", () => {
   it("suppresses the problem while the package.json version still mismatches", () => {
     const releases = parseChangelog(md(release("1.0.3", "breaking"), release("1.0.2", "none")));
     expect(checkChangelog("9.9.9", releases)).toMatchObject([{ kind: "version-mismatch" }]);
+  });
+});
+
+// The shared calculator computes the version from the entries and never reads
+// the marker, so a breaking migration needs a **Breaking:** entry to be offered
+// as a major. Checked on [Unreleased] and the release being closed only.
+describe("checkBreakingIsMarked", () => {
+  const md = (...sections: string[]): string => sections.join("\n\n");
+  const section = (version: string, migration: string, entry: string, heading = "Changed") =>
+    `## [${version}]${version === "Unreleased" ? "" : " - 2026-11-19"}\n\n` +
+    `**Migration:** ${migration}\n\n### ${heading}\n\n- ${entry}`;
+
+  it("flags [Unreleased] declaring a breaking migration with no **Breaking:** entry", () => {
+    const releases = parseChangelog(md(section("Unreleased", "breaking", "A new column.")));
+    expect(checkBreakingIsMarked(releases)).toEqual([
+      { kind: "breaking-migration-unmarked", version: "Unreleased" },
+    ]);
+  });
+
+  it("accepts an entry that starts **Breaking:**, in any section and any case", () => {
+    for (const entry of ["**Breaking:** Restore a dump to roll back.", "**breaking**: Restore."]) {
+      const releases = parseChangelog(md(section("Unreleased", "breaking", entry, "Added")));
+      expect(checkBreakingIsMarked(releases)).toEqual([]);
+    }
+  });
+
+  it("does not count **Breaking:** in the middle of an entry", () => {
+    const releases = parseChangelog(
+      md(section("Unreleased", "breaking", "Not **Breaking:** here.")),
+    );
+    expect(checkBreakingIsMarked(releases)).toHaveLength(1);
+  });
+
+  it("flags the release being closed, and leaves older releases alone", () => {
+    const releases = parseChangelog(
+      md(section("2.0.0", "breaking", "A new column."), section("1.0.0", "breaking", "Old.")),
+    );
+    expect(checkBreakingIsMarked(releases)).toEqual([
+      { kind: "breaking-migration-unmarked", version: "2.0.0" },
+    ]);
+  });
+
+  it("ignores sections whose migration is not breaking", () => {
+    const releases = parseChangelog(
+      md(section("Unreleased", "backward-compatible", "A table."), section("1.1.0", "none", "X.")),
+    );
+    expect(checkBreakingIsMarked(releases)).toEqual([]);
+  });
+
+  it("is part of checkChangelog once the version agrees", () => {
+    const releases = parseChangelog(md(section("2.0.0", "breaking", "A new column.")));
+    expect(checkChangelog("2.0.0", releases)).toEqual([
+      { kind: "breaking-migration-unmarked", version: "2.0.0" },
+    ]);
   });
 });
