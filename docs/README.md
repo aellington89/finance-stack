@@ -20,4 +20,5 @@ Planning lives outside the repository: the roadmaps are GitHub [Projects](https:
 - [Testing](testing.md) — running tests and the static lookup-table fixtures
 - [Importer](importer.md) — the importer service and adding new import types
 - [Project Structure](project-structure.md) — repository layout and directory tree
+- [Development Process](PROCESS.md) — how work moves from an issue to a release: Finance Stack's additions to the shared dev process, and where it differs
 - [Releases & Tagging](releases.md) — versioning, the `vX.Y.Z` tag convention, and how releases map to `CHANGELOG.md`

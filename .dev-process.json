@@ -1,0 +1,22 @@
+{
+  "source": "github:aellington89/dev_process",
+  "version": "0.2.0",
+  "commit": "78a90367a2c962c70d896dea3c7fb7fef8b82d82",
+  "files": {
+    ".github/labels.json": "c705b2d26fdbd493a506c06e724ff100c428406c4c9831d992ad8a64532cf087",
+    ".github/workflows/claude-review.yml": "e8cee540516293b7d6fe706d30a55cc17bf7074bfbb991f334310877ebae0f33",
+    ".github/workflows/claude.yml": "09153ba62180fe18855f2265c1fc2cfbf8774e5a9e8a23f116199beecb078b7f",
+    ".github/workflows/labels.yml": "3cb9a84332d06592f292efaa404a9dc4048c15e18642443fa0cbc1381beb5183",
+    "scripts/dev-process/check-process.mjs": "e3285787dca77ba057a376081e2981728dc830b81dba54a7b115aca068087f6a"
+  },
+  "skipped": {
+    ".github/ISSUE_TEMPLATE/bug.yml": "not synced: see docs/PROCESS.md",
+    ".github/ISSUE_TEMPLATE/feature.yml": "not synced: see docs/PROCESS.md",
+    ".github/ISSUE_TEMPLATE/spike.yml": "not synced: see docs/PROCESS.md",
+    ".github/ISSUE_TEMPLATE/upgrade.yml": "not synced: see docs/PROCESS.md",
+    ".github/pull_request_template.md": "not synced: see docs/PROCESS.md",
+    ".github/workflows/pr-standards.yml": "not synced: see docs/PROCESS.md",
+    "scripts/dev-process/check-pr.mjs": "not synced: see docs/PROCESS.md",
+    "scripts/dev-process/release.mjs": "not synced: see docs/PROCESS.md"
+  }
+}

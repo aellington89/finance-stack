@@ -42,6 +42,12 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      # The shared dev process's contract (docs/PROCESS.md): the files synced from dev_process
+      # are unchanged, and CLAUDE.md and docs/PROCESS.md are complete.
+      - name: Dev process check
+        working-directory: .
+        run: node scripts/dev-process/check-process.mjs
+
       - name: Install dependencies
         run: npm ci
 

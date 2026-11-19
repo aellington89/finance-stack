@@ -1,0 +1,34 @@
+name: Sync labels
+
+# Creates or updates the process labels in .github/labels.json and the project's own labels in
+# .github/labels.project.json. Labels in neither file are left alone. Runs when either file
+# changes on the default branch, or manually.
+
+on:
+  push:
+    paths: [.github/labels.json, .github/labels.project.json]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    name: Sync labels
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create or update labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for file in .github/labels.json .github/labels.project.json; do
+            [ -f "$file" ] || continue
+            jq -c '.[]' "$file" | while read -r label; do
+              gh label create "$(jq -r '.name' <<< "$label")" \
+                --color "$(jq -r '.color' <<< "$label")" \
+                --description "$(jq -r '.description' <<< "$label")" \
+                --force
+            done
+          done

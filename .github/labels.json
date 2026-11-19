@@ -1,0 +1,52 @@
+[
+  {
+    "name": "stage: research",
+    "color": "d4c5f9",
+    "description": "Open questions; needs a research spike (/research)"
+  },
+  {
+    "name": "stage: design",
+    "color": "c5def5",
+    "description": "Needs a spec (/design), then a design review (/review-design)"
+  },
+  {
+    "name": "stage: ready",
+    "color": "0e8a16",
+    "description": "Spec approved: meets the Definition of Ready"
+  },
+  {
+    "name": "stage: in progress",
+    "color": "fbca04",
+    "description": "Being implemented on an issue branch (/implement)"
+  },
+  {
+    "name": "stage: review",
+    "color": "e99695",
+    "description": "PR open: code review, verification, and retro"
+  },
+  {
+    "name": "type: spike",
+    "color": "5319e7",
+    "description": "Research question; the output is a decision, not code"
+  },
+  {
+    "name": "type: upgrade",
+    "color": "006b75",
+    "description": "Dependency, runtime, or toolchain upgrade"
+  },
+  {
+    "name": "type: chore",
+    "color": "ededed",
+    "description": "Maintenance with no user-facing change"
+  },
+  {
+    "name": "dependencies",
+    "color": "0366d6",
+    "description": "Dependency update opened by Dependabot"
+  },
+  {
+    "name": "release: blocker",
+    "color": "b60205",
+    "description": "Must be fixed before the next release"
+  }
+]
