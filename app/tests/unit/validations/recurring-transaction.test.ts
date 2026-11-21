@@ -62,7 +62,7 @@ describe("recurringTransactionFormSchema", () => {
   });
 
   it("authors a message for null fields, as formData.get() yields them", () => {
-    const keys = [...Object.keys(validForm), "relatedAccountId", "endDate", "isActive"];
+    const keys = [...Object.keys(validForm), "relatedAccountId", "endDate", "isActive", "loadedNextRunDate"];
     const fields = fieldsOf(Object.fromEntries(keys.map((k) => [k, null])));
     expect(Object.keys(fields).sort()).toEqual([...keys].sort());
     expect(Object.values(fields).every((m) => !/expected|received/i.test(m))).toBe(true);
@@ -92,6 +92,12 @@ describe("recurringTransactionFormSchema", () => {
 
   it("rejects an active flag other than true/false", () => {
     expect(fieldsOf({ ...validForm, isActive: "on" }).isActive).toBe("Invalid active setting");
+  });
+
+  it("accepts the next date the edit form loaded, and rejects one that isn't a date", () => {
+    expect(recurringTransactionFormSchema.safeParse({ ...validForm, loadedNextRunDate: "2026-12-01" }).success).toBe(true);
+    expect(recurringTransactionFormSchema.safeParse({ ...validForm, loadedNextRunDate: "" }).success).toBe(true);
+    expect(fieldsOf({ ...validForm, loadedNextRunDate: "2026-02-30" }).loadedNextRunDate).toBe("Invalid loaded next date");
   });
 
   it("shares the transaction fields' rules", () => {
@@ -213,6 +219,43 @@ describe("checkRecurringSchedule", () => {
       expect(
         checkRecurringSchedule(facts({ submitted: submitted({ nextRunDate: "2024-01-01" }), stored: stored() }))
       ).toEqual([{ field: "nextRunDate", message: "Next date can't be more than a year in the past." }]);
+    });
+
+    // Ended long ago: the next date (2025-02-01) is past the end (2025-01-15),
+    // and more than a year before today (2026-11-14).
+    const longEnded = stored({ anchorDate: "2024-01-01", nextRunDate: "2025-02-01", endDate: "2025-01-15" });
+    const sameNext = { nextRunDate: "2025-02-01" };
+
+    it("applies when an update extends an Ended template, which would backfill from its next date", () => {
+      for (const endDate of [null, "2027-01-01"]) {
+        expect(
+          checkRecurringSchedule(facts({ submitted: submitted({ ...sameNext, endDate }), stored: longEnded }))
+        ).toEqual([{ field: "nextRunDate", message: "Next date can't be more than a year in the past." }]);
+      }
+    });
+
+    it("doesn't apply to an Ended template the update leaves ended", () => {
+      for (const endDate of ["2025-01-15", "2025-01-31"]) {
+        expect(
+          checkRecurringSchedule(facts({ submitted: submitted({ ...sameNext, endDate }), stored: longEnded }))
+        ).toEqual([]);
+      }
+    });
+
+    it("doesn't apply to a paused Ended template, which skips the missed dates when resumed", () => {
+      const paused = { ...longEnded, isActive: false };
+      for (const isActive of [false, true]) {
+        expect(
+          checkRecurringSchedule(facts({ submitted: submitted({ ...sameNext, endDate: null, isActive }), stored: paused }))
+        ).toEqual([]);
+      }
+    });
+
+    it("doesn't apply to an Ended template extended within the year", () => {
+      const recent = stored({ nextRunDate: "2026-02-01", endDate: "2026-01-15" });
+      expect(
+        checkRecurringSchedule(facts({ submitted: submitted({ nextRunDate: "2026-02-01", endDate: null }), stored: recent }))
+      ).toEqual([]);
     });
   });
 

@@ -57,6 +57,7 @@ function readRecurringFields(formData: FormData) {
     nextRunDate: formData.get("nextRunDate") as string,
     endDate: (formData.get("endDate") as string) || undefined,
     isActive: (formData.get("isActive") as string) || undefined,
+    loadedNextRunDate: (formData.get("loadedNextRunDate") as string) || undefined,
   };
 }
 
@@ -89,11 +90,15 @@ async function readAccountWindow(tx: Tx, accountId: number) {
   return row ? { openedDate: row.opened_date, closedDate: row.closed_date } : null;
 }
 
-function submittedSchedule(data: RecurringTransactionFormData, isActive: boolean): SubmittedSchedule {
+function submittedSchedule(
+  data: RecurringTransactionFormData,
+  isActive: boolean,
+  nextRunDate: string = data.nextRunDate
+): SubmittedSchedule {
   return {
     cadence: data.cadence,
     every: Number(data.intervalCount),
-    nextRunDate: data.nextRunDate,
+    nextRunDate,
     endDate: data.endDate ?? null,
     isActive,
     accountId: Number(data.accountId),
@@ -233,7 +238,12 @@ export async function updateRecurringTransaction(
       const today = await currentDate(tx);
       // An update without the flag keeps whatever is stored.
       const isActive = data.isActive === undefined ? stored.isActive : data.isActive === "true";
-      const submitted = submittedSchedule(data, isActive);
+      // A next date the user left as the form loaded it is the stored one, even
+      // if the scheduler has moved it on since (a tab left open past an hourly
+      // run). Otherwise the stale date would read as a new schedule and move
+      // the anchor, and a monthly 31st would drift to the 28th.
+      const untouched = data.loadedNextRunDate !== undefined && data.nextRunDate === data.loadedNextRunDate;
+      const submitted = submittedSchedule(data, isActive, untouched ? stored.nextRunDate : data.nextRunDate);
       const problems = checkRecurringSchedule({
         submitted,
         stored,

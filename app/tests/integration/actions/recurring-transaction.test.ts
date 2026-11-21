@@ -279,6 +279,66 @@ describe("updateRecurringTransaction", () => {
     expect(row).toMatchObject({ intervalCount: 3, anchorDate: "2030-03-15", nextRunDate: "2030-03-15" });
   });
 
+  it("keeps the stored schedule when the scheduler has moved the next date on since the form loaded (AC23)", async () => {
+    const accountId = await createAccount("Recurring action: stale form");
+    // The form opened at next = Feb 28; the scheduler has since created it and moved on to Mar 31.
+    const id = await insertTemplate({ accountId, cadence: "monthly", anchorDate: "2030-01-31", nextRunDate: "2030-03-31" });
+
+    const result = await updateRecurringTransaction(
+      emptyState,
+      makeFormData({
+        ...form(accountId, { cadence: "monthly", nextRunDate: "2030-02-28", transactionDescription: "Rent (renamed)" }),
+        loadedNextRunDate: "2030-02-28",
+        recurringTransactionId: String(id),
+      })
+    );
+
+    expect(result).toEqual({ success: true, errors: {}, message: "Recurring transaction updated" });
+    expect((await templatesOn(accountId))[0]).toMatchObject({
+      transactionDescription: "Rent (renamed)",
+      anchorDate: "2030-01-31",
+      nextRunDate: "2030-03-31",
+    });
+  });
+
+  it("starts a new schedule when the next date differs from the one the form loaded (AC23)", async () => {
+    const accountId = await createAccount("Recurring action: changed from loaded");
+    const id = await insertTemplate({ accountId, cadence: "monthly", anchorDate: "2030-01-31", nextRunDate: "2030-03-31" });
+
+    await updateRecurringTransaction(
+      emptyState,
+      makeFormData({
+        ...form(accountId, { cadence: "monthly", nextRunDate: "2030-04-15" }),
+        loadedNextRunDate: "2030-02-28",
+        recurringTransactionId: String(id),
+      })
+    );
+
+    expect((await templatesOn(accountId))[0]).toMatchObject({ anchorDate: "2030-04-15", nextRunDate: "2030-04-15" });
+  });
+
+  it("refuses to extend an Ended template more than a year behind, and changes nothing (AC20)", async () => {
+    const accountId = await createAccount("Recurring action: ended long ago");
+    const anchor = shiftDays(today, -800);
+    const end = shiftDays(today, -500);
+    const next = shiftDays(end, 1); // daily: the first occurrence past the end
+    const id = await insertTemplate({ accountId, anchorDate: anchor, nextRunDate: next, endDate: end });
+    const [before] = await templatesOn(accountId);
+
+    const result = await updateRecurringTransaction(
+      emptyState,
+      makeFormData({ ...form(accountId, { nextRunDate: next }), recurringTransactionId: String(id) })
+    );
+
+    expect(result).toEqual({
+      success: false,
+      errors: { nextRunDate: ["Next date can't be more than a year in the past."] },
+      message: "Validation failed",
+    });
+    expect(await templatesOn(accountId)).toEqual([before]);
+    expect(await rowsOf(id)).toHaveLength(0);
+  });
+
   it("keeps the stored active flag when the form doesn't send one", async () => {
     const accountId = await createAccount("Recurring action: keep paused");
     const id = await insertTemplate({ accountId, anchorDate: "2030-01-01", isActive: false });
