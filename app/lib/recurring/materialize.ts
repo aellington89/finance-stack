@@ -12,10 +12,10 @@ import { reportError } from "@/lib/report";
  * Turns due recurring-transaction templates into transactions rows (Issue
  * #135). Two entry points, one per caller the issue plans:
  *
- *   - **runDueTemplates()** is the hourly check's. Each template runs in its
- *     own systemTransaction, so the rows are audited as `recurring-schedule`,
- *     and one bad template is reported and skipped without holding up the
- *     rest.
+ *   - **runDueTemplates()** is the scheduler's (lib/recurring/scheduler.ts),
+ *     hourly. Each template runs in its own systemTransaction, so the rows are
+ *     audited as `recurring-schedule`, and one bad template is reported and
+ *     skipped without holding up the rest.
  *   - **materializeTemplate()** runs inside a caller's transaction. A template
  *     save will call it inside its own auditedTransaction, so a template that
  *     is already due fills in at once, attributed to the person saving.
@@ -212,11 +212,10 @@ export async function materializeTemplate(
 }
 
 /**
- * The hourly check's entry point: every template due as of `today`, each in
- * its own transaction. A template that fails is reported with its id and
- * counted, and the run carries on. A throw from here means the run itself
- * couldn't start (the due list couldn't be read), and the hourly check will
- * report that.
+ * The scheduler's entry point: every template due as of `today`, each in its
+ * own transaction. A template that fails is reported with its id and counted,
+ * and the run carries on. A throw from here means the run itself couldn't
+ * start (the due list couldn't be read), and the scheduler reports that.
  */
 export async function runDueTemplates(
   options: { today?: string; cap?: number; lockTimeout?: string } = {}

@@ -476,8 +476,9 @@ against a dev server would pass while testing the opposite of what ships.
 | Auth | One real sign-in in [`e2e/auth.setup.ts`](../app/e2e/auth.setup.ts), saved as `storageState` and reused |
 | Isolation | One worker, no parallelism |
 | Cleanup | Global teardown deletes the run's accounts, transactions, balance rows and user |
+| Scheduler | Off: `webServer.env` sets `RECURRING_SCHEDULER=off` |
 
-Four of those are decisions rather than defaults:
+Five of those are decisions rather than defaults:
 
 - **`Finances_Test`, not a database of its own.** It is already "a fixture DB
   seeded from `init-db/`", and a second provisioning path would be a second
@@ -498,6 +499,21 @@ Four of those are decisions rather than defaults:
   twelve months relative to `CURRENT_DATE`, so Net Worth has no fixed value; the
   spec reads the headline before and after and asserts the difference. A broken
   rebuild therefore fails as *"the KPI did not move"*.
+- **The recurring-transaction scheduler is off** (Issue #135). The app runs it
+  30 seconds after boot and then hourly ([Database → Recurring
+  Transactions](database.md#recurring-transactions)). A template falling due
+  during the run would move the very Net Worth delta the spec asserts on.
+  `register()` in `instrumentation.ts` logs that it is disabled. Nothing seeds a
+  template, so this guards a template left behind by a local experiment.
+  Locally, Playwright reuses a server already listening on its port, and
+  `webServer.env` never reaches it, so start such a server with
+  `RECURRING_SCHEDULER=off` too. CI always starts its own.
+
+  A dev server (`next dev`) against `Finances_Test` *does* run the scheduler.
+  Start it with `RECURRING_SCHEDULER=off` when that matters. Its timer also
+  keeps running the code it booted with until the server restarts. Integration
+  tests never load `instrumentation.ts`; they call the materializer directly
+  with an injected `today`.
 
 The account type the spec picks (`Checking Account`) matters more than it looks:
 it is in `account_type_category` 1, and `getCurrentNetWorth()` excludes category

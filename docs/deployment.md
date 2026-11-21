@@ -45,7 +45,7 @@ to it.
 |---|---|---|---|---|
 | `postgres` | by default | long-running | The database | — |
 | `migrate` | by default | once per `up`, then exits | Creates the databases and roles, applies migrations, seeds the lookup tables. `finance-app`, `importer`, `pg-backup` and `glitchtip` wait for it to exit 0 | — |
-| `finance-app` | by default | long-running | The app | — |
+| `finance-app` | by default | long-running | The app, and the hourly recurring-transaction scheduler inside it ([Recurring Transactions](database.md#recurring-transactions)) | — |
 | `importer` | by default | long-running | Imports the files dropped in `./imports` | — |
 | `pg-backup` | by default | long-running | Dumps the databases to `./backups`, daily by default ([Backups](backups.md)) | — |
 | `metabase` | `bi` | long-running | BI dashboards, on `127.0.0.1:3000` | `COMPOSE_PROFILES=bi` |

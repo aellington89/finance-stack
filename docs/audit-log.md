@@ -61,7 +61,7 @@ Two consequences worth knowing:
 |---|---|---|---|
 | `app` | the user's uuid | their username | a signed-in user through the UI |
 | `database` | `NULL` | `finance_importer` | the importer |
-| `database` | `NULL` | `recurring-schedule` | the recurring-transaction check (Issue #135). It sets only the label, through `systemTransaction()` in [`lib/db/system-transaction.ts`](../app/lib/db/system-transaction.ts), because `auditedTransaction()` needs a request to read the session from |
+| `database` | `NULL` | `recurring-schedule` | the recurring-transaction scheduler (Issue #135). It sets only the label, through `systemTransaction()` in [`lib/db/system-transaction.ts`](../app/lib/db/system-transaction.ts), because `auditedTransaction()` needs a request to read the session from |
 | `database` | `NULL` | `postgres` | an operator in `psql`, a migration, a restore |
 
 `actor_user_id` has **no foreign key** to `users`: the log has to survive the
@@ -79,7 +79,7 @@ for it.
 `recurring_transactions` (Issue #135, migration 0011) is audited too. A row a
 template adds carries the template and its scheduled date in its INSERT
 `after_data` (`recurring_transaction_id`, `recurring_occurrence_date`). Rows
-the recurring-transaction check adds are attributed to `recurring-schedule`, as
+the hourly scheduler adds are attributed to `recurring-schedule`, as
 are the template's own `next_run_date` advance and an automatic pause on a
 closed account.
 

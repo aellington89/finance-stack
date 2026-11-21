@@ -109,7 +109,7 @@ The account edit page shows what's left on each active transfer, or "Paid off".
 
 ## Recurring transactions
 
-Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app doesn't create or run templates yet: the hourly check, and the Transactions → Recurring tab that manages them, are still being built under Issue #135.
+Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app runs due templates hourly, but nothing creates them yet: the Transactions → Recurring tab that manages them is still being built under Issue #135.
 
 **The schedule** is a cadence (`daily`, `weekly`, `monthly`, `yearly`) and an "every N" interval of 1–99: biweekly pay is every 2 weeks, a quarterly bill every 3 months. Complex cadences such as "last business day" are out of scope.
 
@@ -124,9 +124,11 @@ Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurri
 
 **When rows are created.** A template is due when `next_run_date <= CURRENT_DATE`, and its rows are created **on or after their date, never ahead of it**. `rebuildAccountBalance()` stops at `CURRENT_DATE`, so a future-dated row wouldn't reach balances when its day came. [`lib/recurring/materialize.ts`](../app/lib/recurring/materialize.ts) creates them, and rebuilds the balances they touch in the same transaction. `runDueTemplates()` takes every due template, each in its own transaction attributed to `recurring-schedule`, and `materializeTemplate()` takes one, inside a caller's transaction.
 
+**The scheduler** is a timer inside `finance-app` ([`lib/recurring/scheduler.ts`](../app/lib/recurring/scheduler.ts), started by `register()` in `instrumentation.ts`). It calls `runDueTemplates()` about 30 seconds after the app starts, then every hour, so a new day is picked up within the hour. There is no cron container, secret or URL. It runs while `finance-app` runs, and `restart: unless-stopped` keeps that true. Runs never overlap: an hour that comes round while the last run is still going is skipped, with a warning. `RECURRING_SCHEDULER=off` turns it off; only the E2E suite sets it ([Testing](testing.md)).
+
 **Each occurrence exactly once.** Each template is locked `FOR UPDATE` with the due test repeated, so a second runner finds it no longer due. Beneath that, `transactions` carries `recurring_transaction_id` and `recurring_occurrence_date`, the template and the date the row was scheduled for, under a `UNIQUE`. A duplicate insert of the same occurrence is a no-op whoever attempts it. Both are `NULL` on rows entered by hand, and NULLs never conflict. The occurrence date is kept apart from `transaction_date`, so editing a created row (rent that cleared on the 2nd) doesn't move its key. A run waits at most 15 seconds for any lock; a template still locked after that fails for this run, is reported, and is picked up by the next one.
 
-**Missed dates are backfilled.** If a template's next date is in the past, each missed occurrence is created once, on its own date. A run creates at most 400 per template, more than a year of a daily schedule; a template still behind stays due, and the next run carries on from there.
+**Missed dates are backfilled.** If the app was down, or a template's next date is in the past, each missed occurrence is created once, on its own date. A run creates at most 400 per template, more than a year of a daily schedule; a template still behind stays due, and the next run carries on from there.
 
 **Ends.** No occurrence is created after `end_date`. An ended template is no longer due, so a run neither creates nor locks it.
 
@@ -138,7 +140,9 @@ Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurri
 
 **"Today" is Postgres's `CURRENT_DATE`**, the same "today" every balance uses, so the two never disagree. Postgres runs in UTC (`Etc/UTC` in the stock image), so that date turns over at 6 or 7 pm Chicago time, and a bill dated the 1st appears on the evening of the 31st. This is app-wide, not particular to recurring transactions.
 
-**Finding a template's rows:** `SELECT * FROM transactions WHERE recurring_transaction_id = 4 ORDER BY recurring_occurrence_date;`. To see what the check did, read `v_audit_log WHERE actor_label = 'recurring-schedule'` (see [Audit Log](audit-log.md#how-the-actor-gets-recorded)). A template that fails is reported as `recurring-schedule failed`, with its `recurring_transaction_id`, and the others still run. One whose `next_run_date` was edited by hand to a date that isn't an occurrence of its anchor fails that way every run and stays due, until its next date is set back to an occurrence.
+**Finding a template's rows:** `SELECT * FROM transactions WHERE recurring_transaction_id = 4 ORDER BY recurring_occurrence_date;`. To see what the scheduler did, read `v_audit_log WHERE actor_label = 'recurring-schedule'` (see [Audit Log](audit-log.md#how-the-actor-gets-recorded)), or the `recurring schedule ran` log lines (see [Observability](observability.md#why-several-capture-points-rather-than-one)).
+
+**If rows stop appearing,** check that `finance-app` is running and that its log says `recurring scheduler started`, then a `recurring schedule ran` line every hour, then look for reported errors. A template that fails is reported as `recurring-schedule failed`, with its `recurring_transaction_id`, and the others still run. Then look for templates that are paused, ended, or on a closed account. One whose `next_run_date` was edited by hand to a date that isn't an occurrence of its anchor fails every run and stays due, until its next date is set back to an occurrence.
 
 ## First-Launch Database Initialization
 
@@ -222,7 +226,7 @@ The top-right cell is the one that matters. It is not a bucket you file things i
 | `transaction_categories` / `accounts` rows an importer parser names | Pure user data | The parser resolves them **by name** at import time and fails loudly when one is absent. Not shipped, not protected, not id-pinned — see [the importer's lookup names](#the-importers-lookup-names) |
 | `account_types` rows | Pure user data | `liquidity_class` gets a seeded *default* per known name, via `UPDATE … WHERE liquidity_class IS NULL`, but the rows are yours |
 | `balance_transfers` rows | Pure user data | Nothing depends on a specific row. "This card is promotional" is read from the table's dates, not from an account type the user named, which is where a "Balance Transfer Card" type would have put it: the defect cell (Issue #417) |
-| `recurring_transactions` rows | Pure user data | Not seeded, in `Finances_Test` either: the app adds a template's rows as its dates come due, so a seeded one would add rows on every dev and E2E server and move the fixture's totals (Issue #135) |
+| `recurring_transactions` rows | Pure user data | Not seeded, in `Finances_Test` either: the scheduler would run a seeded template on every dev server, and move the fixture's totals as its dates came due (Issue #135) |
 
 **The case that used to be unresolved.** The Liabilities drilldown filtered on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treated them as app-owned reference data, which put them squarely in the top-right cell. Shipping them was rejected: it would bake one person's loan portfolio into every install and still leave the set unextensible without a code change.
 

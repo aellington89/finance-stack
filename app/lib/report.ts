@@ -8,7 +8,7 @@ import { log, type LogFields } from "@/lib/log";
  * whatever error-tracking backend `ERROR_DSN` points at (Issue #232). Every
  * capture path in the app routes through here — instrumentation.ts,
  * lib/actions/failure.ts, the two client error boundaries, the seed-data
- * health route, and the recurring-transaction check (lib/recurring/) — so
+ * health route, and the recurring-transaction scheduler (lib/recurring/) — so
  * this is the only place either sink needs wiring.
  *
  * **`serializeError()` runs once and both sinks receive its output.** That is the
