@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -27,7 +27,8 @@ import type { ActionState } from "@/lib/actions/utils";
  *
  * Unlike the materializer's tests, these can't inject "today": the actions
  * read CURRENT_DATE inside their transaction, as production does. Every date
- * is therefore derived from the database's today, read once in beforeAll.
+ * is therefore derived from the database's today, read before each test so a
+ * run that crosses midnight UTC stays consistent.
  */
 
 const emptyState: ActionState = { success: false, errors: {}, message: "" };
@@ -106,7 +107,7 @@ async function rowsOf(templateId: number) {
     .orderBy(asc(transactions.recurringOccurrenceDate));
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
   today = await currentDate();
 });
 

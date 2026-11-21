@@ -72,10 +72,18 @@ function validationFailure(issues: Parameters<typeof buildFieldErrors>[0]): Acti
   return { success: false, errors: buildFieldErrors(issues), message: "Validation failed" };
 }
 
+/**
+ * The account's open/closed window, locked FOR SHARE for the rest of the save.
+ * A close in flight either commits first, and is refused here, or waits until
+ * the save is in. Without the lock it could land between this read and
+ * materializeTemplate(), which would pause the template while the save still
+ * reported it active.
+ */
 async function readAccountWindow(tx: Tx, accountId: number) {
   const result = await tx.execute<{ opened_date: string | null; closed_date: string | null }>(sql`
     SELECT opened_date::text AS opened_date, closed_date::text AS closed_date
     FROM accounts WHERE account_id = ${accountId}
+    FOR SHARE
   `);
   const row = result.rows[0];
   return row ? { openedDate: row.opened_date, closedDate: row.closed_date } : null;
@@ -248,7 +256,7 @@ export async function updateRecurringTransaction(
       } else if (!stored.isActive && submitted.isActive && stored.nextRunDate < today) {
         // Resuming skips the dates missed while paused rather than backfilling
         // them. A new next date in the same save takes the branch above and is
-        // honoured as a deliberate backfill.
+        // honored as a deliberate backfill.
         nextRunDate = nextOccurrenceOnOrAfter(
           { cadence: stored.cadence, every: stored.every, anchorDate, endDate: submitted.endDate },
           today
