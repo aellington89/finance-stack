@@ -8,6 +8,7 @@ import {
   accountBalanceHistory,
   auditLog,
   balanceTransfers,
+  recurringTransactions,
 } from "@/drizzle/schema";
 import {
   submitTransaction,
@@ -94,6 +95,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Recurring templates before accounts: their account keys are RESTRICT.
+  await db
+    .delete(recurringTransactions)
+    .where(inArray(recurringTransactions.accountId, createdAccountIds));
   // Balance transfers first: a linked posting's foreign key is RESTRICT.
   await db.execute(sql`
     DELETE FROM balance_transfers bt
@@ -459,5 +464,48 @@ describe("audit logging — balance transfers (Issue #417)", () => {
     expect(rows[2].changedColumns).toEqual(["fee_transaction_id"]);
     expect(rows[2].afterData).toMatchObject({ fee_transaction_id: null });
     expect(rows[3].beforeData).toMatchObject({ transfer_transaction_id: posting.id });
+  });
+});
+
+describe("audit logging — recurring transactions (Issue #135)", () => {
+  it("audits a template's insert, update and delete, attributed to the user", async () => {
+    const id = await auditedTransaction(async (tx) => {
+      const [row] = await tx
+        .insert(recurringTransactions)
+        .values({
+          transactionDescription: "Audit recurring",
+          amount: "-9.99",
+          accountId,
+          transactionTypeId: 1,
+          transactionCategoryId: 1,
+          cadence: "monthly",
+          anchorDate: "2030-01-31",
+          nextRunDate: "2030-01-31",
+        })
+        .returning({ id: recurringTransactions.recurringTransactionId });
+      return row.id;
+    });
+    await auditedTransaction(async (tx) => {
+      await tx
+        .update(recurringTransactions)
+        .set({ isActive: false })
+        .where(eq(recurringTransactions.recurringTransactionId, id));
+    });
+    await auditedTransaction(async (tx) => {
+      await tx
+        .delete(recurringTransactions)
+        .where(eq(recurringTransactions.recurringTransactionId, id));
+    });
+
+    const rows = await auditRowsFor("recurring_transactions", id);
+    expect(rows.map((r) => r.action)).toEqual(["INSERT", "UPDATE", "DELETE"]);
+    for (const row of rows) {
+      expect(row.actorSource).toBe("app");
+      expect(row.actorUserId).toBe(SESSION_USER_ID);
+    }
+    expect(rows[0].afterData).toMatchObject({ transaction_description: "Audit recurring", cadence: "monthly" });
+    expect(rows[1].beforeData).toMatchObject({ is_active: true });
+    expect(rows[1].afterData).toMatchObject({ is_active: false });
+    expect(rows[2].beforeData).toMatchObject({ recurring_transaction_id: id });
   });
 });

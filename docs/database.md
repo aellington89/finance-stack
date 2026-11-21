@@ -9,7 +9,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `accounts` | All financial accounts (checking, savings, credit cards, loans, etc.) |
 | `account_type_categories` | Top-level account categories (e.g. Current Asset, Current Liability) |
 | `account_types` | Specific account types (e.g. Checking, Mortgage, Credit Card) |
-| `transactions` | Individual financial transactions. `duplicated_from_transaction_id` names the row a copy was made from with **Duplicate**, and is `NULL` otherwise. It deliberately has no FK, so the link outlives the source; see [Audit Log](audit-log.md#reading-the-log) |
+| `transactions` | Individual financial transactions. `duplicated_from_transaction_id` names the row a copy was made from with **Duplicate**, and is `NULL` otherwise. It deliberately has no FK, so the link outlives the source; see [Audit Log](audit-log.md#reading-the-log). `recurring_transaction_id` and `recurring_occurrence_date` name the recurring template that added the row and the date it was scheduled for, and are both `NULL` on rows entered by hand. A `UNIQUE` on the pair lets a template add each date only once, and like the copy link it has no FK |
 | `transaction_categories` | Expense/income categories (e.g. Groceries, Salary, Rent) |
 | `transaction_types` | Transaction classifications (e.g. Debit, Credit, Transfer) |
 | `account_balance_history` | Daily cumulative balance snapshots per account |
@@ -17,6 +17,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `audit_log` | Who changed what, with before/after row state. Written **only** by a database trigger, never by the app — see [Audit Log](audit-log.md) |
 | `import_log` | One row per file the importer has attempted, with its sha256 and outcome. Append-only; drives import idempotency and quarantine — see [Importer](importer.md#idempotency) |
 | `balance_transfers` | One row per balance transfer on a liability card: the promo's end date and APR, a link to the transfer's posting, and an optional link to its fee. Everything else is read from the posting — see [Balance Transfers](#balance-transfers) |
+| `recurring_transactions` | One row per recurring transaction template (Issue #135) — rent, pay, a subscription: the six fields every transaction it adds will carry, a cadence with an "every N" interval, and the next date it's due. Deleting an account, category or type that a template uses is refused |
 
 ## Views
 
@@ -188,6 +189,7 @@ The top-right cell is the one that matters. It is not a bucket you file things i
 | `transaction_categories` / `accounts` rows an importer parser names | Pure user data | The parser resolves them **by name** at import time and fails loudly when one is absent. Not shipped, not protected, not id-pinned — see [the importer's lookup names](#the-importers-lookup-names) |
 | `account_types` rows | Pure user data | `liquidity_class` gets a seeded *default* per known name, via `UPDATE … WHERE liquidity_class IS NULL`, but the rows are yours |
 | `balance_transfers` rows | Pure user data | Nothing depends on a specific row. "This card is promotional" is read from the table's dates, not from an account type the user named, which is where a "Balance Transfer Card" type would have put it: the defect cell (Issue #417) |
+| `recurring_transactions` rows | Pure user data | Not seeded, in `Finances_Test` either: the app adds a template's rows as its dates come due, so a seeded one would add rows on every dev and E2E server and move the fixture's totals (Issue #135) |
 
 **The case that used to be unresolved.** The Liabilities drilldown filtered on specific `transaction_category_id` values to identify debt payments and accrued interest. Those rows are user data — whether you carry a HELOC is your business — but the queries treated them as app-owned reference data, which put them squarely in the top-right cell. Shipping them was rejected: it would bake one person's loan portfolio into every install and still leave the set unextensible without a code change.
 
@@ -338,7 +340,7 @@ The long-running services do **not** connect as the `postgres` superuser (Issue 
 |---|---|---|
 | `finance_app` | `finance-app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table **except `users` and `audit_log`, which are `SELECT`-only**; `SELECT` on the views; `USAGE` on the sequences |
 | `finance_importer` | `importer` | `SELECT` + `INSERT` on `transactions` and on `import_log`; `SELECT` on `accounts`, `transaction_categories`, `transaction_types`. No `UPDATE`, no `DELETE` |
-| `finance_bi` | Metabase's Finances connection | `SELECT` on the eight core base tables and the four views. **Nothing on `users` or `audit_log`**, and no write anywhere |
+| `finance_bi` | Metabase's Finances connection | `SELECT` on the nine core base tables and the four views. **Nothing on `users` or `audit_log`**, and no write anywhere |
 
 **What `finance_bi` deliberately does *not* get is `users` and `audit_log`.** Reusing `finance_app` would have served the same questions — it already holds `SELECT` on everything — but it can read `users.password_hash`, and Metabase permits native SQL, so hiding a table in its admin UI is a display setting rather than a privilege boundary (Issue #249).
 

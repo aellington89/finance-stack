@@ -111,7 +111,7 @@ BEGIN
     FOREACH t IN ARRAY ARRAY['accounts', 'account_types', 'account_type_categories',
                              'transactions', 'transaction_categories',
                              'transaction_types', 'account_balance_history',
-                             'balance_transfers']
+                             'balance_transfers', 'recurring_transactions']
     LOOP
         IF NOT has_table_privilege('finance_app', t, 'SELECT')
            OR NOT has_table_privilege('finance_app', t, 'INSERT')
@@ -199,6 +199,14 @@ BEGIN
             failures := failures || format('finance_importer can %s balance_transfers', t);
         END IF;
     END LOOP;
+    -- recurring_transactions is hand-entered templates (Issue #135), run by the
+    -- app's own scheduler. The importer holds nothing here either.
+    FOREACH t IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']
+    LOOP
+        IF has_table_privilege('finance_importer', 'recurring_transactions', t) THEN
+            failures := failures || format('finance_importer can %s recurring_transactions', t);
+        END IF;
+    END LOOP;
     IF NOT has_sequence_privilege('finance_importer', txn_seq, 'USAGE') THEN
         failures := failures || 'finance_importer lacks USAGE on the transactions sequence';
     END IF;
@@ -219,7 +227,7 @@ BEGIN
     FOREACH t IN ARRAY ARRAY['accounts', 'account_types', 'account_type_categories',
                              'transactions', 'transaction_categories',
                              'transaction_types', 'account_balance_history',
-                             'balance_transfers',
+                             'balance_transfers', 'recurring_transactions',
                              'v_transactions_full', 'v_account_balances_current',
                              'v_daily_totals', 'v_audit_log']
     LOOP

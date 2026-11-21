@@ -75,6 +75,10 @@ an `UPDATE` of `fee_transaction_id` to `NULL`, attributed to whoever deleted
 the fee transaction: `ON DELETE SET NULL` is a row update, so the trigger fires
 for it.
 
+`recurring_transactions` (Issue #135, migration 0011) is audited too. A row a
+template adds carries the template and its scheduled date in its INSERT
+`after_data` (`recurring_transaction_id`, `recurring_occurrence_date`).
+
 Two deliberate exclusions:
 
 - **`account_balance_history`** is derived, not entered. `rebuildAccountBalance()`
