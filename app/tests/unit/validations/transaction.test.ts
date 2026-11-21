@@ -92,6 +92,20 @@ describe("transactionFormSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a related account that is the primary account, on relatedAccountId", () => {
+    const result = transactionFormSchema.safeParse({
+      ...validBase,
+      relatedAccountId: validBase.accountId,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        message: "Related account must be different from the primary account",
+        path: ["relatedAccountId"],
+      }),
+    ]);
+  });
+
   it("rejects invalid transactionTypeId", () => {
     const result = transactionFormSchema.safeParse({
       ...validBase,
