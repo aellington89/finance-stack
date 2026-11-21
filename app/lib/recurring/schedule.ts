@@ -16,8 +16,9 @@
  *   `Date` is ever built. `new Date("2026-03-01")` parses as UTC midnight but
  *   date-fns' `addMonths` works in local time, and mixing the two is an
  *   off-by-one that appears in America/Chicago and never in a UTC CI runner
- *   (the trap lib/format/dates.ts describes). Only `Date.UTC` and the
- *   `getUTC*` accessors are used here, so the result cannot depend on `TZ`.
+ *   (the trap lib/format/dates.ts describes). Only `setUTCFullYear` (through
+ *   `utcDate()`) and the `getUTC*` accessors are used here, so the result
+ *   cannot depend on `TZ`.
  *
  * "Today" is never decided here. Callers pass it in, and the materializer
  * passes Postgres's CURRENT_DATE, the same "today" every balance uses.
@@ -247,6 +248,7 @@ export function countOccurrencesThrough(s: Schedule, next: string, through: stri
 export function nextOccurrences(s: Schedule, from: string, count: number): string[] {
   assertSchedule(s);
   parse(from);
+  if (!Number.isInteger(count) || count < 0) throw new RangeError(`Count must be a whole number ≥ 0: ${count}`);
   const dates: string[] = [];
   let k = indexOnOrAfter(s, from);
   while (dates.length < Math.min(count, WALK_LIMIT)) {

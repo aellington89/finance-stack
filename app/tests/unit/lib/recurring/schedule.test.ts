@@ -244,6 +244,13 @@ describe("nextOccurrences / occurrencesBetween", () => {
     expect(nextOccurrences(sched({ anchorDate: "2026-12-01", endDate: "2026-11-30" }), "2026-12-01", 3)).toEqual([]);
   });
 
+  it("refuses a count that isn't a whole number", () => {
+    expect(nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", 0)).toEqual([]);
+    expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", 2.5)).toThrow(/Count/);
+    expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", -1)).toThrow(/Count/);
+    expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", Number.NaN)).toThrow(/Count/);
+  });
+
   it("lists every occurrence in an inclusive window", () => {
     const s = sched({ cadence: "weekly", every: 2, anchorDate: "2026-11-06" });
     expect(occurrencesBetween(s, "2026-11-06", "2026-12-18")).toEqual([
