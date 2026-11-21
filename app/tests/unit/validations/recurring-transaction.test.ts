@@ -62,8 +62,10 @@ describe("recurringTransactionFormSchema", () => {
   });
 
   it("authors a message for null fields, as formData.get() yields them", () => {
-    const nulls = Object.fromEntries(Object.keys(validForm).map((k) => [k, null]));
-    expect(Object.values(fieldsOf(nulls)).every((m) => !/expected|received/i.test(m))).toBe(true);
+    const keys = [...Object.keys(validForm), "relatedAccountId", "endDate", "isActive"];
+    const messages = Object.values(fieldsOf(Object.fromEntries(keys.map((k) => [k, null]))));
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.every((m) => !/expected|received/i.test(m))).toBe(true);
   });
 
   it.each(["hourly", "Monthly", ""])("rejects a cadence of %j", (cadence) => {
