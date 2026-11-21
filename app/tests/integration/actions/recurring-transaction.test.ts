@@ -97,7 +97,11 @@ describe("delete guards", () => {
 
     const result = await deleteAccount(emptyState, makeFormData({ accountId: String(relatedId) }));
 
-    expect(result.message).toMatch(/used by a recurring transaction/);
+    expect(result).toEqual({
+      success: false,
+      errors: {},
+      message: "Cannot delete an account used by a recurring transaction. Delete the recurring transaction first.",
+    });
     expect(await db.select().from(accounts).where(eq(accounts.accountId, relatedId))).toHaveLength(1);
   });
 
