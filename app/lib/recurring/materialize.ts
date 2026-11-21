@@ -17,8 +17,8 @@ import { reportError } from "@/lib/report";
  *     and one bad template is reported and skipped without holding up the
  *     rest.
  *   - **materializeTemplate()** runs inside a caller's transaction. A template
- *     save calls it inside its own auditedTransaction, so a template that is
- *     already due fills in at once, attributed to the person saving.
+ *     save will call it inside its own auditedTransaction, so a template that
+ *     is already due fills in at once, attributed to the person saving.
  *
  * "Exactly once" holds on two levels. The template row is locked FOR UPDATE
  * with the due predicate in the WHERE, so a second runner either waits and
@@ -34,9 +34,9 @@ import { reportError } from "@/lib/report";
 
 /**
  * The most occurrences one template creates in one run. More than a year of a
- * daily schedule, which is as far back as a save may start one (a save refuses
- * a next date more than a year back), so any accepted backfill completes in a
- * single pass. A template still behind after a run stays due, and the next run
+ * daily schedule, which is as far back as a save will let one start (a save
+ * will refuse a next date more than a year back), so any accepted backfill
+ * completes in a single pass. A template still behind after a run stays due, and the next run
  * carries on from where this one stopped.
  */
 export const MATERIALIZE_CAP = 400;
@@ -212,10 +212,11 @@ export async function materializeTemplate(
 }
 
 /**
- * The scheduler's entry point: every template due as of `today`, each in its
- * own transaction. A template that fails is reported with its id and counted,
- * and the run carries on. A throw from here means the run itself couldn't
- * start (the due list couldn't be read), and the scheduler reports that.
+ * The hourly check's entry point: every template due as of `today`, each in
+ * its own transaction. A template that fails is reported with its id and
+ * counted, and the run carries on. A throw from here means the run itself
+ * couldn't start (the due list couldn't be read), and the hourly check will
+ * report that.
  */
 export async function runDueTemplates(
   options: { today?: string; cap?: number; lockTimeout?: string } = {}
