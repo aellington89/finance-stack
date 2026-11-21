@@ -24,6 +24,7 @@ import {
   deleteBalanceTransfer,
 } from "@/lib/actions/balance-transfer";
 import { auditedTransaction } from "@/lib/db/audited";
+import { runDueTemplates } from "@/lib/recurring/materialize";
 
 // The session vitest-setup.ts installs by default.
 const SESSION_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -507,5 +508,52 @@ describe("audit logging — recurring transactions (Issue #135)", () => {
     expect(rows[1].beforeData).toMatchObject({ is_active: true });
     expect(rows[1].afterData).toMatchObject({ is_active: false });
     expect(rows[2].beforeData).toMatchObject({ recurring_transaction_id: id });
+  });
+
+  it("attributes rows the scheduler creates to recurring-schedule, with the link in after_data (AC27)", async () => {
+    const [template] = await db
+      .insert(recurringTransactions)
+      .values({
+        transactionDescription: "Audit recurring",
+        amount: "-9.99",
+        accountId,
+        transactionTypeId: 1,
+        transactionCategoryId: 1,
+        cadence: "monthly",
+        anchorDate: "2020-03-31",
+        nextRunDate: "2020-03-31",
+      })
+      .returning({ id: recurringTransactions.recurringTransactionId });
+
+    await runDueTemplates({ today: "2020-04-30" });
+
+    const created = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(eq(transactions.recurringTransactionId, template.id))
+      .orderBy(transactions.recurringOccurrenceDate);
+    expect(created).toHaveLength(2);
+
+    const [insertRow] = await auditRowsFor("transactions", created[1].id);
+    expect(insertRow).toMatchObject({
+      action: "INSERT",
+      actorSource: "database",
+      actorUserId: null,
+      actorLabel: "recurring-schedule",
+    });
+    expect(insertRow.afterData).toMatchObject({
+      recurring_transaction_id: template.id,
+      recurring_occurrence_date: "2020-04-30",
+      transaction_date: "2020-04-30",
+    });
+
+    // The template's own advance is audited the same way. Its insert came
+    // straight from the test's connection, so it carries the role's name.
+    const templateRows = await auditRowsFor("recurring_transactions", template.id);
+    expect(templateRows.map((r) => r.action)).toEqual(["INSERT", "UPDATE"]);
+    expect(templateRows[0].actorLabel).not.toBe("recurring-schedule");
+    expect(templateRows[1]).toMatchObject({ actorSource: "database", actorLabel: "recurring-schedule" });
+    expect(templateRows[1].changedColumns).toEqual(["next_run_date"]);
+    expect(templateRows[1].afterData).toMatchObject({ next_run_date: "2020-05-31" });
   });
 });

@@ -260,6 +260,15 @@ describe("context", () => {
     expect(parsed().msg).toBe("deleteTransaction failed");
   });
 
+  it("derives msg from the job when there is no action (Issue #135)", () => {
+    reportError(new Error("x"), { job: "recurring-schedule", recurring_transaction_id: 4 });
+    expect(parsed()).toMatchObject({
+      msg: "recurring-schedule failed",
+      job: "recurring-schedule",
+      recurring_transaction_id: 4,
+    });
+  });
+
   it("derives msg from the route when there is no action", () => {
     reportError(new Error("x"), { route: "/api/health" });
     expect(parsed().msg).toBe("Unhandled error in /api/health");

@@ -155,6 +155,14 @@ describe("envelope format", () => {
     expect(event.transaction).toBe("/dashboard/accounts");
   });
 
+  it("indexes a background job as a tag (Issue #135)", () => {
+    captureEvent(SERIALIZED, { job: "recurring-schedule", recurring_transaction_id: 4 });
+
+    const event = sent().event as unknown as Record<string, Record<string, unknown>>;
+    expect(event.tags).toMatchObject({ job: "recurring-schedule" });
+    expect(event.extra).toMatchObject({ recurring_transaction_id: 4 });
+  });
+
   it("keeps any other context field queryable in extra", () => {
     captureEvent(SERIALIZED, { method: "POST", path: "/api/health", route_type: "render" });
 

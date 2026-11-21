@@ -10,7 +10,8 @@
  *   "Jan 31 plus k months, clamped to the month's last day", so the sequence is
  *   Jan 31 → Feb 28 → Mar 31. Stepping from the previous date would give
  *   Jan 31 → Feb 28 → Mar 28 and lose the 31st for good. Postgres's
- *   `anchor + make_interval(months => k)` clamps the same way.
+ *   `anchor + make_interval(months => k)` clamps the same way, and an
+ *   integration test holds the two equal.
  *
  *   **The arithmetic is integers in UTC, on `YYYY-MM-DD` strings.** No local
  *   `Date` is ever built. `new Date("2026-03-01")` parses as UTC midnight but
