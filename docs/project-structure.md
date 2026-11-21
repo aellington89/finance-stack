@@ -206,13 +206,14 @@ finance-stack/
 │   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
 │   │   ├── validations/categories.ts     # Zod schemas for category/type forms
 │   │   ├── validations/balance-transfer.ts # Zod schema + the pure link checker for balance transfers (#417)
+│   │   ├── validations/recurring-transaction.ts # Zod schema + the pure schedule checker for recurring transactions (#135)
 │   │   ├── validations/date-range.ts     # Canonical dateFrom/dateTo validator (format + ordering) + isValidIsoDate
 │   │   ├── validations/id.ts             # parseEntityId()/isEntityId() — the one positive-int4 check for every ID (#179)
 │   │   ├── validations/search-params.ts  # validateFilterParams() — ID lists, amount, descriptions from the URL (#179)
 │   │   └── utils.ts                      # Utility helpers (cn() class merge)
 │   ├── tests/                            # Vitest test suite
 │   │   ├── unit/                         # Unit tests (no DB required)
-│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range, id, search-params)
+│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range, id, search-params, recurring-transaction)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
 │   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
 │   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
