@@ -64,8 +64,8 @@ jobs:
             Read CLAUDE.md, then read ~/.claude/dev_process/skills/review-pr/SKILL.md and follow
             it for this PR. It points to the standard, the project's additions in
             docs/PROCESS.md, and the comment template. Read the PR with `gh pr view` and
-            `gh pr diff`, and the issue it closes with `gh issue view`. Post exactly one comment
-            with `gh pr comment`.
+            `gh pr diff`, and each issue it closes or is part of, with its delivery plan, with
+            `gh issue view`. Post exactly one comment with `gh pr comment`.
           claude_args: >-
             --model opus
             --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Read,Glob,Grep"

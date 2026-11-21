@@ -31,6 +31,7 @@ export const FACTS = [
   'Prepare a release',
   'User guide',
   'Roadmap',
+  'GitHub project',
 ]
 export const NOTES_HEADINGS = [
   'Differences from the shared process',

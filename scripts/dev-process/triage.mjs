@@ -2,11 +2,12 @@
 // Gives a new issue or pull request what https://github.com/aellington89/dev_process/blob/main/standards/labels.md
 // says it opens with, when whoever opened it didn't set it:
 //   - the repository's owner as its assignee;
-//   - labels from its title (for a pull request, its kind; an Issue PR copies its issue's labels,
-//     except the stage label);
+//   - labels from its title (for a pull request, its kind; an Issue PR copies the labels of every
+//     issue its title names, except the stage labels);
 //   - for a pull request someone else opened, such as Dependabot's, a review request for the
 //     owner, which puts it in the owner's pull requests Inbox.
-// Anything already set is left alone.
+// Anything already set is left alone. Putting a new issue on the repository's GitHub project is
+// the GitHub project's own Auto-add workflow's job: a workflow's GITHUB_TOKEN can't reach projects.
 //
 // In CI, it reads the issues or pull_request event ($GITHUB_EVENT_PATH) and calls the GitHub API
 // with $GITHUB_TOKEN:
@@ -28,19 +29,23 @@ const PR_LABELS = [
   [/^Docs: \S/, ['documentation']],
   [/^Chore: \S/, ['type: chore']],
 ]
-const ISSUE_PR = /^Issue #(\d+) - \S/
+const ISSUE_PR = /^Issue (#\d+(?:, #\d+)*) - \S/
 
-/** The issue an `Issue #<n> - <name>` pull request title names, or null. */
-export function linkedIssue(title) {
+/**
+ * The issues an Issue pull request's title names, in order: `Issue #12 - Tag Filter` (or one of
+ * its parts) names 12, and a bundle, `Issue #14, #15 - …`, names 14 and 15. Empty for any other
+ * title.
+ */
+export function linkedIssues(title) {
   const match = title.trim().match(ISSUE_PR)
-  return match ? Number(match[1]) : null
+  return match ? [...match[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1])) : []
 }
 
 /** The labels an issue or pull request opens with, from its title. */
 export function labelsFor({ pullRequest, title, issueLabels = [] }) {
   const text = title.trim()
   if (pullRequest && ISSUE_PR.test(text)) {
-    return issueLabels.filter((name) => !name.startsWith('stage: '))
+    return [...new Set(issueLabels)].filter((name) => !name.startsWith('stage: '))
   }
   const rules = pullRequest ? PR_LABELS : ISSUE_LABELS
   return rules.find(([pattern]) => pattern.test(text))?.[1] ?? []
@@ -50,6 +55,7 @@ export function labelsFor({ pullRequest, title, issueLabels = [] }) {
  * What to change on a new issue or pull request:
  * { assignee, labels, reviewer, notes }, where assignee and reviewer are a login or null.
  * `current` is its state now ({ assignees, labels }, as names), which may be newer than the event.
+ * `issueLabels` are the labels of the issues an Issue pull request names, together.
  */
 export function plan(event, current, issueLabels = []) {
   const pullRequest = Boolean(event.pull_request)
@@ -64,9 +70,7 @@ export function plan(event, current, issueLabels = []) {
     ? []
     : labelsFor({ pullRequest, title: item.title, issueLabels })
   if (!current.labels.length && !labels.length) {
-    notes.push(
-      `no labels from its title, so ${pullRequest ? 'add them' : 'weekly triage adds them'}`,
-    )
+    notes.push(`no labels from its title, so ${pullRequest ? 'add them' : '/triage adds them'}`)
   }
   const author = item.user?.login
   const reviewer = pullRequest && personal && author !== owner.login ? owner.login : null
@@ -117,7 +121,7 @@ async function main() {
   const kind = event.pull_request ? 'pull request' : 'issue'
   const dryRun = process.argv.includes('--dry-run')
   const repo = event.repository.full_name
-  const linked = event.pull_request ? linkedIssue(item.title) : null
+  const linked = event.pull_request ? linkedIssues(item.title) : []
 
   let current = { assignees: names(item.assignees), labels: names(item.labels) }
   let issueLabels = []
@@ -131,9 +135,9 @@ async function main() {
     api = github(token)
     const fresh = await api('GET', `/repos/${repo}/issues/${item.number}`)
     current = { assignees: names(fresh.assignees), labels: names(fresh.labels) }
-    if (linked) {
+    for (const number of linked) {
       try {
-        issueLabels = names((await api('GET', `/repos/${repo}/issues/${linked}`)).labels)
+        issueLabels.push(...names((await api('GET', `/repos/${repo}/issues/${number}`)).labels))
       } catch (error) {
         if (error.status !== 404) throw error
       }

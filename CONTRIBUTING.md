@@ -22,8 +22,14 @@ Branches and pull requests follow the shared dev process
 ([docs/PROCESS.md](docs/PROCESS.md)):
 
 - **`master`** is the only long-lived branch, and every PR targets it.
-- **One issue, one branch, one PR:** `issue/<n>-<slug>`, cut from `master`. The
-  other kinds are `release/vX.Y.Z`, `upgrade/<package>-<version>`, `docs/<slug>`,
+- **One branch per PR, and a PR a reviewer can read in one sitting** (about 400
+  changed lines): `issue/<n>-<slug>`, cut from `master`. Most issues take one PR.
+  A larger one is delivered in the parts its delivery plan lists, each on its own
+  `issue/<n>-<slug>` branch and titled `Issue #<n> - <name>: <part>` with
+  `Part of #<n>` (the last says `Closes #<n>`), and a few small related issues can
+  share one PR, `Issue #<n>, #<m> - <summary>`
+  ([how many pull requests](https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md#how-many-pull-requests)).
+  The other kinds are `release/vX.Y.Z`, `upgrade/<package>-<version>`, `docs/<slug>`,
   `chore/<slug>`, and `spike/<n>-<slug>` for a throwaway prototype that is never
   merged. Dependabot names its own.
 - **PR titles:** `Issue #<n> - <name>` (the issue title without its roadmap id),
