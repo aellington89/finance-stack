@@ -67,27 +67,48 @@ function requireSections(...names) {
   }
 }
 
+// An Issue PR names every issue it works on in its title: one (`Issue #12 - Tag Filter`, or a
+// part, `Issue #12 - Tag Filter: add the tags table`), or a bundle (`Issue #14, #15 - …`). The
+// description says, for each one, whether the PR completes it (`Closes #12`) or delivers one
+// part of its delivery plan (`Part of #12`).
+const CLOSES = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi
+const PART_OF = /\bpart of\s+#(\d+)/gi
+
 const kinds = [
   {
     name: 'Issue',
-    pattern: /^Issue #(\d+) - \S/,
-    check([, number]) {
-      const closes = [
-        ...visible.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi),
-      ].map((m) => m[1])
-      if (!closes.includes(number)) {
-        errors.push(
-          closes.length
-            ? `"Closes #${closes[0]}" doesn't match the issue in the title (#${number})`
-            : `the description must contain "Closes #${number}"`,
-        )
+    pattern: /^Issue #(\d+)((?:, #\d+)*) - \S/,
+    check() {
+      const named = [...title.match(/^Issue ([#\d, ]+) - /)[1].matchAll(/#(\d+)/g)].map((m) => m[1])
+      const closes = [...visible.matchAll(CLOSES)].map((m) => m[1])
+      const parts = [...visible.matchAll(PART_OF)].map((m) => m[1])
+      for (const number of named) {
+        if (closes.includes(number) && parts.includes(number)) {
+          errors.push(`say "Closes #${number}" or "Part of #${number}", not both`)
+        } else if (!closes.includes(number) && !parts.includes(number)) {
+          errors.push(`the description must say "Closes #${number}" or "Part of #${number}"`)
+        }
       }
-      if (/^Issue #\d+ - \d+(\.\d+)+\s*·/.test(title)) {
+      for (const [line, numbers] of [
+        ['Closes', closes],
+        ['Part of', parts],
+      ]) {
+        for (const number of new Set(numbers)) {
+          if (!named.includes(number)) {
+            errors.push(
+              `"${line} #${number}" names an issue the title doesn't (${named.map((n) => `#${n}`).join(', ')})`,
+            )
+          }
+        }
+      }
+      if (/^Issue #[\d, #]+ - \d+(\.\d+)+\s*·/.test(title)) {
         warnings.push('leave the roadmap id out of the title: "Issue #<n> - <name>"')
       }
       requireSections('Summary', 'Acceptance criteria', 'Test plan')
+      // A part may deliver no criterion of its own ("None in this part: …"); a PR that completes
+      // an issue lists every one.
       const criteria = section('Acceptance criteria')
-      if (criteria !== null && !/^\s*[-*]\s*\[[ xX]\]\s*\S/m.test(criteria)) {
+      if (closes.length && criteria !== null && !/^\s*[-*]\s*\[[ xX]\]\s*\S/m.test(criteria)) {
         errors.push('list each acceptance criterion as a "- [ ]" item')
       }
     },
@@ -111,7 +132,8 @@ if (kind) {
   kind.check(title.match(kind.pattern))
 } else {
   errors.push(
-    `the title "${title}" doesn't match a kind of PR. Use "Issue #<n> - <name>", ` +
+    `the title "${title}" doesn't match a kind of PR. Use "Issue #<n> - <name>" (a part adds ` +
+      '": <what this part does>", and a bundle names each issue: "Issue #<n>, #<m> - <summary>"), ' +
       '"Upgrade: <package> <from> → <to>", "Release: v<x.y.z>", "Docs: <summary>", or ' +
       '"Chore: <summary>"',
   )
@@ -128,6 +150,7 @@ for (const placeholder of new Set(leftovers)) {
   errors.push(`replace the template placeholder "<${placeholder}>"`)
 }
 if (/^\s*Closes #\s*$/im.test(visible)) errors.push('"Closes #" is missing its issue number')
+if (/^\s*Part of #\s*$/im.test(visible)) errors.push('"Part of #" is missing its issue number')
 
 const inActions = process.env.GITHUB_ACTIONS === 'true'
 for (const warning of warnings) {

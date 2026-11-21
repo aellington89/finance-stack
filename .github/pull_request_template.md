@@ -1,6 +1,6 @@
 <!--
 Template: Issue PR
-Used for: the body of an "Issue #<n> - <name>" PR; GitHub fills it in when the PR is opened
+Used for: the body of an "Issue #<n> - <name>" PR, including a part ("Issue #<n> - <name>: <part>") and a bundle ("Issue #<n>, #<m> - <summary>"); GitHub fills it in when the PR is opened
 Written by: /implement, or you
 Standard: https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md (check before pushing: node scripts/dev-process/check-pr.mjs --title "<title>" --body-file <file>)
 Replace each <placeholder>. Keep every heading; write "None." or "n/a: <reason>" under one that doesn't apply.
@@ -8,13 +8,18 @@ Replace each <placeholder>. Keep every heading; write "None." or "n/a: <reason>"
 
 Closes #<n>
 
+<!-- One line per issue in the title: "Closes #<n>" when this PR completes it, or "Part of #<n>" when it delivers one part of the issue's delivery plan.
+     How many PRs: https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md#how-many-pull-requests -->
+
 ## Summary
 
-<!-- What changed and why, in one to three sentences. Link the issue's decisions rather than repeating the spec. -->
+<!-- What changed and why, in one to three sentences, and for a part, which part of the delivery plan it is. Link the issue's decisions rather than repeating the spec. -->
 
 ## Acceptance criteria
 
-<!-- Every criterion from the issue, verbatim, ticked with its evidence (test name, screenshot, or manual check).
+<!-- Every criterion this PR delivers, verbatim from the issue, ticked with its evidence (test name, screenshot, or manual check).
+     A PR that closes an issue lists all of its criteria, with evidence from this PR or the issue's earlier parts; a bundle groups them by issue.
+     A part that delivers none writes "None in this part: <why>".
      /verify fills this in using https://github.com/aellington89/dev_process/blob/main/templates/verification-report.md. -->
 
 - [ ] <criterion>: <evidence>
@@ -32,7 +37,7 @@ Closes #<n>
 
 ## Checklist
 
-- [ ] CHANGELOG.md entry under **Unreleased**, in the section that describes it (Added, Changed, Fixed, …), starting **Breaking:** if users must act (skip for chores with no user impact)
+- [ ] CHANGELOG.md entry under **Unreleased** for each issue this PR makes visible to users, in the section that describes it (Added, Changed, Fixed, …), starting **Breaking:** if users must act (skip for a part users can't notice yet, or a chore with no user impact)
 - [ ] Docs that describe what changed are updated in this PR, such as the README
 - [ ] Changes to stored data use a new numbered migration with a way back; released migrations are untouched
 - [ ] New input from outside the trust boundary (user input, files, network, other processes) is validated

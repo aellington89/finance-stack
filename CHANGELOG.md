@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The shared dev process moves to 1.0.0.** ([PR #460](https://github.com/aellington89/finance-stack/pull/460)) A new Triage workflow gives every new issue and pull request an assignee, the repository's owner, and labels from its title when it opens without them. It also asks the owner to review pull requests that someone else opened, such as Dependabot's. The label set now includes GitHub's four defaults, with the process's descriptions, and `type: release`, which replaces the `release` label. The Claude review runs on Opus at high effort, the same as `/review-pr`.
 
+- **The shared dev process moves to 2.0.0.** ([PR #461](https://github.com/aellington89/finance-stack/pull/461)) Every issue is triaged onto the repository's GitHub project, where its milestone, Size and Priority are set together, and a new `/triage` skill finds and fills in the issues missing any of them. The project's URL is a new `GitHub project` fact in `CLAUDE.md`, which the process check requires, and [docs/PROCESS.md](docs/PROCESS.md) records that this project keeps its wider `P0`–`P3` and `XS`–`XL` scales. Pull requests are now sized for review rather than one per issue: a large issue is delivered in parts (`Part of #<n>`, the last saying `Closes #<n>`), and a few small related issues can share one PR. Every issue spec gains a delivery plan that lists them. The pull request template, `check-pr.mjs`, `triage.mjs`, the Claude review's prompt and the stage label descriptions follow suit, and [CONTRIBUTING.md](CONTRIBUTING.md) describes parts and bundles.
+
 ## [1.5.0] - 2026-11-14
 
 **Migration:** none

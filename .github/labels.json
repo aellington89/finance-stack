@@ -57,12 +57,12 @@
   {
     "name": "stage: in progress",
     "color": "fbca04",
-    "description": "Being implemented on an issue branch (/implement)"
+    "description": "Being implemented (/implement); earlier parts of its delivery plan may have merged"
   },
   {
     "name": "stage: review",
     "color": "e99695",
-    "description": "PR open: code review, verification, and retro"
+    "description": "The PR that closes it is open: code review, verification, and retro"
   },
   {
     "name": "dependencies",
