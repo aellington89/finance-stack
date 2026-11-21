@@ -378,7 +378,9 @@ the other three's findings in the same run rather than across four.
    npm's vendored dependencies were contributing 1 CRITICAL and 5 HIGH findings
    that no application-level bump could clear. (The `migrate` stage keeps npm
    deliberately — it runs `npx drizzle-kit` — so expect findings there that
-   `finance-app` does not have.)
+   `finance-app` does not have. It installs a pinned npm over the bundled one
+   instead, so a finding in npm's vendored tree is cleared by bumping that pin
+   in `app/Dockerfile` ([#441](https://github.com/aellington89/finance-stack/issues/441)).)
 3. **Rebuild on a patched base image** — the `node:<major>-alpine` base in
    `app/Dockerfile` (the file names the current major in all four stages; a
    *major* bump moves the CI toolchain with it, listed at the `docker` entry in
