@@ -187,6 +187,23 @@ describe("runDueTemplates", () => {
     expect(await createdRows(id)).toHaveLength(6);
   });
 
+  it("stops at the default cap of 400 when none is given, and carries on next run (AC6)", async () => {
+    const accountId = await createAccount("Recurring: default cap");
+    // 527 daily occurrences, 2019-01-01 through TODAY.
+    const id = await createTemplate({ accountId, anchorDate: "2019-01-01" });
+
+    await runDueTemplates({ today: TODAY });
+    const first = await createdRows(id);
+    expect(first).toHaveLength(400);
+    expect(first.at(-1)?.occurrence).toBe("2020-02-04");
+    expect((await template(id)).nextRunDate).toBe("2020-02-05");
+
+    await runDueTemplates({ today: TODAY });
+    const all = await createdRows(id);
+    expect(all).toHaveLength(527);
+    expect(all.at(-1)?.occurrence).toBe(TODAY);
+  });
+
   it("keeps a monthly 31st anchored across short months (AC7)", async () => {
     const accountId = await createAccount("Recurring: month end");
     const id = await createTemplate({ accountId, cadence: "monthly", anchorDate: "2020-01-31" });
@@ -293,6 +310,35 @@ describe("runDueTemplates", () => {
       job: "recurring-schedule",
       err: { name: "RangeError", message: expect.stringMatching(/not an occurrence/) },
     });
+  });
+
+  it("sends a failed template to GlitchTip, with its id and the job's tag, when ERROR_DSN is set (AC14)", async () => {
+    const accountId = await createAccount("Recurring: glitchtip");
+    const broken = await createTemplate({ accountId, cadence: "monthly", anchorDate: "2020-06-01", nextRunDate: "2020-06-05" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("ERROR_DSN", "http://publickey123@glitchtip:8000/1");
+
+    try {
+      await runDueTemplates({ today: TODAY });
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
+
+    const events = (fetchMock.mock.calls as unknown as [string, RequestInit][]).map(([url, init]) => ({
+      url,
+      event: JSON.parse((init.body as string).split("\n")[2]) as {
+        tags: Record<string, unknown>;
+        extra: Record<string, unknown>;
+        exception: { values: { type: string }[] };
+      },
+    }));
+    const sent = events.find((e) => e.event.extra.recurring_transaction_id === broken);
+    expect(sent?.url).toBe("http://glitchtip:8000/api/1/envelope/");
+    expect(sent?.event.tags).toMatchObject({ job: "recurring-schedule" });
+    expect(sent?.event.exception.values[0].type).toBe("RangeError");
   });
 
   it("fails a template loudly, not silently, when its row lock is held past the timeout (AC14)", async () => {
