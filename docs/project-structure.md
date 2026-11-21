@@ -154,6 +154,7 @@ finance-stack/
 │   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
 │   │       ├── transaction-discard-dialog.tsx # Discard-unsaved-changes confirmation when switching inline rows (#148, #241)
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
+│   │       ├── combobox-fields.tsx       # Account/type/category pickers, moved out of the transaction form to be shared (#135)
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
 │   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name): SEED_REFERENCES drives the /api/health/seed-data drift check, SHIPPED_ROWS drives row protection (#109)
