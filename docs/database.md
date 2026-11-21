@@ -40,7 +40,7 @@ Every balance the app shows reads this table: net worth, `v_account_balances_cur
 docker compose --profile init run --rm init-script
 ```
 
-Run it after an import, or any time balances look wrong. It rebuilds every account in one idempotent upsert, so it is safe to run while the app is up, and as often as you like. It stays behind the `init` profile and is not run automatically; don't add `init` to `COMPOSE_PROFILES`, or it reruns on every `up` (see [Services and profiles](deployment.md#services-and-profiles)).
+Run it after an import, or any time balances look wrong. It rebuilds every account in one idempotent upsert, so it is safe to run while the app is up, and as often as you like. It doesn't take the per-account lock the app's saves take (Issue #463), so a transaction saved in the app during the run can be left out of that account's balance until the account's next save, or until you run it again. It stays behind the `init` profile and is not run automatically; don't add `init` to `COMPOSE_PROFILES`, or it reruns on every `up` (see [Services and profiles](deployment.md#services-and-profiles)).
 
 The `Finances_Test` database has its balance history built automatically as part of the first-launch seed (see below).
 
