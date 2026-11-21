@@ -162,6 +162,7 @@ finance-stack/
 │   │   ├── constants/protected-rows.ts   # protectionFor() — which lookup rows /settings/categories refuses to rename or delete, and why (#109)
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
+│   │   ├── recurring/schedule.ts         # Pure recurring-date math, always from the anchor, UTC integers; unit-tested (#135)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
 │   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
@@ -219,6 +220,7 @@ finance-stack/
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
 │   │   │       ├── db/                   #     auditedTransaction() actor plumbing
+│   │   │       ├── recurring/            #     Recurring-date math: anchor clamping, due walks, labels, time-zone independence (#135)
 │   │   │       ├── log.test.ts           #     Structured logger (single-line output, LOG_LEVEL gate, hostile payloads)
 │   │   │       ├── report.test.ts        #     reportError() serialization + drizzle/pg redaction
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
