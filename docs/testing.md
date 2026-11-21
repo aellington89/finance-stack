@@ -68,6 +68,8 @@ the one teardown rule that will bite you.
 
 **Integration tests** run server actions against `Finances_Test`. Ensure `DATABASE_URL` in `app/.env.local` points to `Finances_Test` before running them. The integration test global setup will throw if it detects a non-test URL.
 
+**Without the stack running**, stand up a throwaway `Finances_Test` the way `ci.yml` does, on a port of its own so it can't collide with the stack's 5433, and pass its URL to the run: `docker run -d --name fs-test -e POSTGRES_PASSWORD=changeme -p 55432:5432 postgres:18.6`; then `init-db/roles/00-create-databases.sql`, `npm run db:migrate`, the three `init-db/seeds/` files, `01-create-roles.sql` and `02-grants.sql`, with the variables `ci.yml` sets; then `DATABASE_URL=postgresql://postgres:changeme@localhost:55432/Finances_Test npm test`. Remove it with `docker rm -f fs-test`. It never touches the stack's `finances` volume.
+
 ```bash
 cd app
 
