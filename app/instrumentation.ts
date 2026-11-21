@@ -1,5 +1,30 @@
 import type { Instrumentation } from "next";
+import { log } from "@/lib/log";
 import { reportError } from "@/lib/report";
+
+/**
+ * Starts the recurring-transaction scheduler (Issue #135). Next calls this once
+ * per server process at start-up (and never during `next build`).
+ *
+ * Node only. The positive `NEXT_RUNTIME === "nodejs"` test around a dynamic
+ * import is Next's documented shape for this: the scheduler pulls in `pg`, and
+ * this form lets the bundler drop the import from any edge build.
+ *
+ * `RECURRING_SCHEDULER=off` turns it off, and says so in the log. The E2E
+ * suite sets it, because it measures Net Worth before and after a change and a
+ * run 30 seconds after boot could move it. Production never sets it, so
+ * neither the compose files nor .env.example carry it.
+ */
+export async function register(): Promise<void> {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    if (process.env.RECURRING_SCHEDULER === "off") {
+      log.info("recurring scheduler disabled by RECURRING_SCHEDULER=off");
+      return;
+    }
+    const { startRecurringScheduler } = await import("@/lib/recurring/scheduler");
+    startRecurringScheduler();
+  }
+}
 
 /**
  * Server-side capture for errors that escape (Issue #129).

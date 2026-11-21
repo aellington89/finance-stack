@@ -83,6 +83,13 @@ export default defineConfig({
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? "",
       AUTH_SECRET: process.env.AUTH_SECRET ?? "",
+      // The recurring-transaction scheduler (Issue #135) runs 30s after boot.
+      // money-path.spec.ts measures Net Worth before and after one change, so
+      // a template falling due mid-suite would move the figure it asserts on.
+      // Off here only; see instrumentation.ts register(). Like the two above,
+      // it reaches only a server Playwright starts: a local server already on
+      // the port is reused as it is, so start that one with it set too.
+      RECURRING_SCHEDULER: "off",
     },
   },
 });
