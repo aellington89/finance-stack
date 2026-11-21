@@ -718,7 +718,9 @@ jobs:
           # Same node:<major>-alpine base as finance-app, but this stage
           # deliberately keeps npm (it runs `npx drizzle-kit`), so it carries
           # npm's vendored dependencies that the runner stage deletes — expect
-          # findings here that finance-app does not have.
+          # findings here that finance-app does not have. app/Dockerfile pins a
+          # fixed npm in this stage (#441); a finding under
+          # usr/local/lib/node_modules/npm/ means that pin needs a bump.
           ignore-unfixed: true
           exit-code: 1
           trivyignores: .trivyignore
