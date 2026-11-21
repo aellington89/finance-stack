@@ -9,7 +9,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `accounts` | All financial accounts (checking, savings, credit cards, loans, etc.) |
 | `account_type_categories` | Top-level account categories (e.g. Current Asset, Current Liability) |
 | `account_types` | Specific account types (e.g. Checking, Mortgage, Credit Card) |
-| `transactions` | Individual financial transactions. `duplicated_from_transaction_id` names the row a copy was made from with **Duplicate**, and is `NULL` otherwise. It deliberately has no FK, so the link outlives the source; see [Audit Log](audit-log.md#reading-the-log). `recurring_transaction_id` and `recurring_occurrence_date` name the recurring template that added the row and the date it was scheduled for, and are both `NULL` on rows entered by hand. A `UNIQUE` on the pair lets a template add each date only once, and like the copy link it has no FK |
+| `transactions` | Individual financial transactions. `duplicated_from_transaction_id` names the row a copy was made from with **Duplicate**, and is `NULL` otherwise. It deliberately has no FK, so the link outlives the source; see [Audit Log](audit-log.md#reading-the-log). `recurring_transaction_id` and `recurring_occurrence_date` name the recurring template that added the row and the date it was scheduled for, and are both `NULL` on rows entered by hand. A `UNIQUE` on the pair lets a template add each date only once, and like the copy link it has no FK; see [Recurring Transactions](#recurring-transactions) |
 | `transaction_categories` | Expense/income categories (e.g. Groceries, Salary, Rent) |
 | `transaction_types` | Transaction classifications (e.g. Debit, Credit, Transfer) |
 | `account_balance_history` | Daily cumulative balance snapshots per account |
@@ -17,7 +17,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 | `audit_log` | Who changed what, with before/after row state. Written **only** by a database trigger, never by the app — see [Audit Log](audit-log.md) |
 | `import_log` | One row per file the importer has attempted, with its sha256 and outcome. Append-only; drives import idempotency and quarantine — see [Importer](importer.md#idempotency) |
 | `balance_transfers` | One row per balance transfer on a liability card: the promo's end date and APR, a link to the transfer's posting, and an optional link to its fee. Everything else is read from the posting — see [Balance Transfers](#balance-transfers) |
-| `recurring_transactions` | One row per recurring transaction template (Issue #135) — rent, pay, a subscription: the six fields every transaction it adds will carry, a cadence with an "every N" interval, and the next date it's due. Deleting an account, category or type that a template uses is refused |
+| `recurring_transactions` | One row per recurring transaction template (Issue #135) — rent, pay, a subscription: the six fields every transaction it adds will carry, a cadence with an "every N" interval, and the next date it's due. Deleting an account, category or type that a template uses is refused — see [Recurring Transactions](#recurring-transactions) |
 
 ## Views
 
@@ -106,6 +106,39 @@ The account edit page shows what's left on each active transfer, or "Paid off".
 - The split models how an issuer allocates payments. It isn't the issuer's own figures. Issuers send the minimum payment to the lowest-APR balance, and they may split payments between equal-APR promos differently. Where a statement shows per-promo balances, those are authoritative.
 - Non-promo debt is projected at the promo APR, because the card's standard APR isn't recorded yet (#110).
 - Above 0%, interest is approximated at the nominal monthly rate (APR ÷ 12). It is not daily compounding, and not the interest postings in the ledger.
+
+## Recurring Transactions
+
+Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app doesn't create or run templates yet: the hourly check, and the Transactions → Recurring tab that manages them, are still being built under Issue #135.
+
+**The schedule** is a cadence (`daily`, `weekly`, `monthly`, `yearly`) and an "every N" interval of 1–99: biweekly pay is every 2 weeks, a quarterly bill every 3 months. Complex cadences such as "last business day" are out of scope.
+
+| Column | Holds |
+|---|---|
+| `anchor_date` | Occurrence 0 of the current schedule |
+| `next_run_date` | The next occurrence not yet created. Always an occurrence of the anchor |
+| `end_date` | The last date an occurrence may fall on, inclusive. `NULL` for no end |
+| `is_active` | `false` while paused |
+
+**Every date is computed from the anchor, never from the previous one.** A monthly template anchored on Jan 31 goes Jan 31 → Feb 28 → **Mar 31**; a yearly Feb 29 is Feb 28 in common years. Stepping from the previous date would drift to the 28th for good. The math is [`lib/recurring/schedule.ts`](../app/lib/recurring/schedule.ts), pure and in UTC, and an integration test holds it equal to Postgres's `anchor + make_interval(months => k)`.
+
+**When rows are created.** A template is due when `next_run_date <= CURRENT_DATE`, and its rows are created **on or after their date, never ahead of it**. `rebuildAccountBalance()` stops at `CURRENT_DATE`, so a future-dated row wouldn't reach balances when its day came. [`lib/recurring/materialize.ts`](../app/lib/recurring/materialize.ts) creates them, and rebuilds the balances they touch in the same transaction. `runDueTemplates()` takes every due template, each in its own transaction attributed to `recurring-schedule`, and `materializeTemplate()` takes one, inside a caller's transaction.
+
+**Each occurrence exactly once.** Each template is locked `FOR UPDATE` with the due test repeated, so a second runner finds it no longer due. Beneath that, `transactions` carries `recurring_transaction_id` and `recurring_occurrence_date`, the template and the date the row was scheduled for, under a `UNIQUE`. A duplicate insert of the same occurrence is a no-op whoever attempts it. Both are `NULL` on rows entered by hand, and NULLs never conflict. The occurrence date is kept apart from `transaction_date`, so editing a created row (rent that cleared on the 2nd) doesn't move its key. A run waits at most 15 seconds for any lock; a template still locked after that fails the run, is reported, and is picked up by the next one.
+
+**Missed dates are backfilled.** If a template's next date is in the past, each missed occurrence is created once, on its own date. A run creates at most 400 per template, more than a year of a daily schedule; a template still behind stays due, and the next run carries on from there.
+
+**Ends.** No occurrence is created after `end_date`. An ended template is no longer due, so a run neither creates nor locks it.
+
+**Closed accounts.** A template creates nothing on or after its account's `closed_date`, since balance history stops there. When a run reaches that date it creates what came before and pauses the template: `is_active` becomes `false` and `next_run_date` the first date it didn't create. The pause is logged and audited as `recurring-schedule`.
+
+**Transfers are two templates**, one per account, exactly as a transfer is two transactions: a balance only sums its own account's rows.
+
+**Deleting.** Deleting a template removes only the template. The rows it created are ordinary transactions and stay, still carrying its id. The link has no foreign key, for the reason `duplicated_from_transaction_id` has none: "created by template #4" stays true after #4 is deleted. Deleting one of those rows doesn't bring it back, because `next_run_date` has already moved past it; that is how to skip one occurrence. Deleting an account, category or type that a template uses is refused with a message, and the template's `RESTRICT` keys back that up (SQLSTATE 23001).
+
+**"Today" is Postgres's `CURRENT_DATE`**, the same "today" every balance uses, so the two never disagree. Postgres runs in UTC (`Etc/UTC` in the stock image), so that date turns over at 6 or 7 pm Chicago time, and a bill dated the 1st appears on the evening of the 31st. This is app-wide, not particular to recurring transactions.
+
+**Finding a template's rows:** `SELECT * FROM transactions WHERE recurring_transaction_id = 4 ORDER BY recurring_occurrence_date;`. To see what the check did, read `v_audit_log WHERE actor_label = 'recurring-schedule'` (see [Audit Log](audit-log.md#how-the-actor-gets-recorded)). A template that fails is reported as `recurring-schedule failed`, with its `recurring_transaction_id`, and the others still run. One whose `next_run_date` was edited by hand to a date that isn't an occurrence of its anchor fails that way every run and stays due, until its next date is set back to an occurrence.
 
 ## First-Launch Database Initialization
 

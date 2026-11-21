@@ -162,7 +162,9 @@ finance-stack/
 │   │   ├── constants/protected-rows.ts   # protectionFor() — which lookup rows /settings/categories refuses to rename or delete, and why (#109)
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
+│   │   ├── db/system-transaction.ts      # systemTransaction() — the same for a background job, by label, with bounded lock waits (#135)
 │   │   ├── recurring/schedule.ts         # Pure recurring-date math, always from the anchor, UTC integers; unit-tested (#135)
+│   │   ├── recurring/materialize.ts      # Creates due occurrences: one template, or every due one for the hourly check (#135)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
 │   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
@@ -232,7 +234,7 @@ finance-stack/
 │   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, rate limiting, audit trail, failure logging, validation contract)
 │   │       ├── auth/                     #   Credential verification and sign-in rate limiting against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
-│   │       ├── recurring/                #   Recurring transactions against Postgres: the link pair's constraints and the template CHECKs (#135)
+│   │       ├── recurring/                #   The recurring-transaction materializer against Postgres: exactly-once, backfill, ends, closed accounts, date parity, the link pair's constraints (#135)
 │   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance and its lock, drilldowns)
 │   ├── e2e/                              # Playwright end-to-end suite (#141)
 │   │   ├── money-path.spec.ts            #   The one spec: account → transaction → rebuild → dashboard KPI
