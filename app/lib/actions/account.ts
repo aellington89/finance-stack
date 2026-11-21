@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { auditedTransaction } from "@/lib/db/audited";
-import { accounts, accountBalanceHistory, transactions } from "@/drizzle/schema";
+import { accounts, accountBalanceHistory, recurringTransactions, transactions } from "@/drizzle/schema";
 import { accountFormSchema } from "@/lib/validations/account";
 import { parseEntityId } from "@/lib/validations/id";
 import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
@@ -197,6 +197,29 @@ export async function deleteAccount(
         errors: {},
         message:
           "Cannot delete an account that has transactions. Close the account instead by setting a closed date.",
+      };
+    }
+
+    // A recurring template on the account (Issue #135) would be left pointing
+    // at nothing. Its FK is RESTRICT, so the delete would fail anyway; this
+    // says why, and what to do.
+    const templateRows = await db
+      .select({ id: recurringTransactions.recurringTransactionId })
+      .from(recurringTransactions)
+      .where(
+        or(
+          eq(recurringTransactions.accountId, accountId),
+          eq(recurringTransactions.relatedAccountId, accountId)
+        )
+      )
+      .limit(1);
+
+    if (templateRows.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message:
+          "Cannot delete an account used by a recurring transaction. Delete the recurring transaction first.",
       };
     }
 

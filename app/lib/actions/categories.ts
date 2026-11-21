@@ -10,6 +10,7 @@ import {
   accountTypes,
   transactions,
   accounts,
+  recurringTransactions,
 } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import {
@@ -171,6 +172,22 @@ export async function deleteTransactionCategory(
       };
     }
 
+    // Recurring templates (Issue #135) copy their category onto every row they
+    // create. The FK is RESTRICT; this refuses first, with the reason.
+    const usedByTemplate = await db
+      .select({ id: recurringTransactions.recurringTransactionId })
+      .from(recurringTransactions)
+      .where(eq(recurringTransactions.transactionCategoryId, id))
+      .limit(1);
+
+    if (usedByTemplate.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message: "Cannot delete: this category is used by a recurring transaction.",
+      };
+    }
+
     await auditedTransaction(async (tx) => {
       await tx.delete(transactionCategories).where(eq(transactionCategories.transactionCategoryId, id));
     });
@@ -295,6 +312,20 @@ export async function deleteTransactionType(
         success: false,
         errors: {},
         message: "Cannot delete: this type is used by existing transactions.",
+      };
+    }
+
+    const usedByTemplate = await db
+      .select({ id: recurringTransactions.recurringTransactionId })
+      .from(recurringTransactions)
+      .where(eq(recurringTransactions.transactionTypeId, id))
+      .limit(1);
+
+    if (usedByTemplate.length > 0) {
+      return {
+        success: false,
+        errors: {},
+        message: "Cannot delete: this type is used by a recurring transaction.",
       };
     }
 
