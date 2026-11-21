@@ -20,9 +20,24 @@ different places:
 | Any unhandled server throw — page render, route handler, proxy, or an action throwing outside its `try` | [`instrumentation.ts`](../app/instrumentation.ts) | `route`, `route_type`, `method`, `path` |
 | A client-side render error | [`(app)/error.tsx`](<../app/app/(app)/error.tsx>), [`global-error.tsx`](../app/app/global-error.tsx) | `route`, `digest` |
 | The seed-reference drift check failing to run | [`api/health/seed-data/route.ts`](../app/app/api/health/seed-data/route.ts) | `route` |
+| A recurring transaction the scheduler couldn't create, or a scheduler run that couldn't start ([Issue #135](https://github.com/aellington89/finance-stack/issues/135)) | [`lib/recurring/materialize.ts`](../app/lib/recurring/materialize.ts), [`lib/recurring/scheduler.ts`](../app/lib/recurring/scheduler.ts) | `job` (`recurring-schedule`), `recurring_transaction_id` |
 
 All of them call `reportError()`, which is the only thing that matters when
-adding a sink: there is one place to change, not five.
+adding a sink: there is one place to change, not six.
+
+The scheduler is the one capture point with no request behind it, so it names
+a `job` rather than a route or an action. `job` is indexed as a tag in the
+error tracker, alongside `route` and `action`. Its routine output is ordinary
+log lines rather than reports:
+
+- `recurring schedule ran` at info when it created or paused anything, with
+  the counts;
+- the same message at debug when there was nothing to do;
+- `recurring schedule ran with failures` at warn, after each failing template
+  has been reported on its own;
+- `recurring schedule run skipped: the previous run is still going` at warn,
+  which means a run has been going for over an hour;
+- `recurring transaction paused: its account is closed` at warn.
 
 The first two are **not** redundant. Every action in `lib/actions/` catches its
 own errors and returns an `ActionState` for the form to render — none of them

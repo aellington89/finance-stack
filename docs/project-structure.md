@@ -25,7 +25,7 @@ finance-stack/
 │   ├── next.config.ts                    # Next.js config — standalone output for Docker, security headers + CSP (#182)
 │   ├── auth.ts                           # Auth.js (NextAuth v5) config — Credentials provider, JWT sessions (#120)
 │   ├── proxy.ts                          # Next 16 proxy (renamed middleware) — redirects unauthenticated requests to /login
-│   ├── instrumentation.ts                # onRequestError — captures unhandled server throws as structured logs (#129)
+│   ├── instrumentation.ts                # onRequestError — captures unhandled server throws as structured logs (#129); register() starts the recurring scheduler (#135)
 │   ├── drizzle.config.ts                 # Drizzle ORM config (schema path + migrations output dir)
 │   ├── eslint.config.mjs                 # ESLint flat-config (Next.js + TypeScript rules, no-console over app code)
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
@@ -164,7 +164,8 @@ finance-stack/
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
 │   │   ├── db/system-transaction.ts      # systemTransaction() — the same for a background job, by label, with bounded lock waits (#135)
 │   │   ├── recurring/schedule.ts         # Pure recurring-date math, always from the anchor, UTC integers; unit-tested (#135)
-│   │   ├── recurring/materialize.ts      # Creates due occurrences: one template, or every due one for the hourly check (#135)
+│   │   ├── recurring/materialize.ts      # Creates due occurrences: one template, or every due one for the scheduler (#135)
+│   │   ├── recurring/scheduler.ts        # The in-process hourly timer, started by instrumentation.ts register() (#135)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
 │   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
@@ -222,7 +223,7 @@ finance-stack/
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
 │   │   │       ├── db/                   #     auditedTransaction() actor plumbing
-│   │   │       ├── recurring/            #     Recurring-date math: anchor clamping, due walks, labels, time-zone independence (#135)
+│   │   │       ├── recurring/            #     Recurring-date math (anchor clamping, due walks, labels, time-zone independence) and the scheduler's timer (#135)
 │   │   │       ├── log.test.ts           #     Structured logger (single-line output, LOG_LEVEL gate, hostile payloads)
 │   │   │       ├── report.test.ts        #     reportError() serialization + drizzle/pg redaction
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
@@ -242,7 +243,7 @@ finance-stack/
 │   │   ├── global-setup.ts               #   Test-DB guard + creates the user the suite signs in as
 │   │   ├── global-teardown.ts            #   Deletes every row and the user the run created
 │   │   └── fixtures/                     #   Names, amounts and the psql-level helpers the three share
-│   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100)
+│   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100, recurring scheduler off)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
 │   ├── Dockerfile                         # finance-importer image — bakes poll.py, lookups.py, heartbeat.py + pinned deps, non-root (#224)
