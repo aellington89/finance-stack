@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Migration:** backward-compatible
+
 ### Changed
 
 - **Caddy moves to 2.11.8-alpine and Metabase to v0.58.40** (from 2.11.7-alpine and v0.58.39). ([PR #413](https://github.com/aellington89/finance-stack/pull/413), [PR #445](https://github.com/aellington89/finance-stack/pull/445)) Both are patch releases on their current lines. Metabase stays on the 0.58 LTS line, so it runs no one-way metadata migration. Caddy 2.11.8 lists breaking changes, but they are in directives the shipped `caddy/Caddyfile` does not use. That file is one `reverse_proxy` with a JSON access log, and it validates and proxies unchanged on 2.11.8. The one change it does see is a `400` for a request whose host is invalid, such as `..`. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.
