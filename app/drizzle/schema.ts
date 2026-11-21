@@ -294,8 +294,9 @@ export const balanceTransfers = pgTable("balance_transfers", {
 // next_run_date past end_date. The due index leaves both paused and ended rows
 // out, so the scheduler never locks them.
 //
-// The four foreign keys are RESTRICT (Postgres's NO ACTION is the default; this
-// says it outright): a template must not outlive its account, category or type.
+// The four foreign keys are RESTRICT, not the default NO ACTION. RESTRICT is
+// checked at once and can't be deferred, so a blocked delete fails with 23001
+// (restrict_violation). A template must not outlive its account, category or type.
 // deleteAccount() and the two category/type deletes refuse first with a
 // message, and the key is the backstop for any other writer.
 export const recurringTransactions = pgTable("recurring_transactions", {

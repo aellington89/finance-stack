@@ -75,7 +75,7 @@ afterEach(async () => {
   createdTypeIds.length = 0;
 });
 
-describe("delete guards (P8)", () => {
+describe("delete guards", () => {
   it("refuses to delete an account a template uses, and keeps it", async () => {
     const accountId = await createAccount("Recurring guard: account");
     await insertTemplate({ accountId, anchorDate: "2030-01-01" });

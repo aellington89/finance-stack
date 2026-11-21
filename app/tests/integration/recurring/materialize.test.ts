@@ -159,7 +159,7 @@ describe("the link pair's constraints", () => {
     const accountId = await createAccount("Recurring: restrict");
     await createTemplate({ accountId, anchorDate: "2030-01-01" });
     await expect(db.delete(accounts).where(eq(accounts.accountId, accountId))).rejects.toMatchObject({
-      cause: { code: "23001" },
+      cause: { code: "23001", constraint: "recurring_transactions_account_id_fkey" },
     });
   });
 });
