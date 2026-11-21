@@ -63,9 +63,9 @@ describe("recurringTransactionFormSchema", () => {
 
   it("authors a message for null fields, as formData.get() yields them", () => {
     const keys = [...Object.keys(validForm), "relatedAccountId", "endDate", "isActive"];
-    const messages = Object.values(fieldsOf(Object.fromEntries(keys.map((k) => [k, null]))));
-    expect(messages.length).toBeGreaterThan(0);
-    expect(messages.every((m) => !/expected|received/i.test(m))).toBe(true);
+    const fields = fieldsOf(Object.fromEntries(keys.map((k) => [k, null])));
+    expect(Object.keys(fields).sort()).toEqual([...keys].sort());
+    expect(Object.values(fields).every((m) => !/expected|received/i.test(m))).toBe(true);
   });
 
   it.each(["hourly", "Monthly", ""])("rejects a cadence of %j", (cadence) => {
@@ -193,7 +193,9 @@ describe("checkRecurringSchedule", () => {
     it("clamps a leap-day today", () => {
       const leap = facts({ today: "2028-02-29" });
       expect(checkRecurringSchedule({ ...leap, submitted: submitted({ nextRunDate: "2027-02-28" }) })).toEqual([]);
-      expect(checkRecurringSchedule({ ...leap, submitted: submitted({ nextRunDate: "2027-02-27" }) })).toHaveLength(1);
+      expect(checkRecurringSchedule({ ...leap, submitted: submitted({ nextRunDate: "2027-02-27" }) })).toEqual([
+        { field: "nextRunDate", message: "Next date can't be more than a year in the past." },
+      ]);
     });
 
     it("doesn't apply to an untouched next date on update", () => {
@@ -232,7 +234,7 @@ describe("checkRecurringSchedule", () => {
     it("applies on update when the account changes", () => {
       expect(
         checkRecurringSchedule(facts({ account: lateOpen, submitted: submitted({ accountId: 2 }), stored: stored() }))
-      ).toHaveLength(1);
+      ).toEqual([{ field: "nextRunDate", message: "Next date is before this account was opened." }]);
     });
 
     it("doesn't apply to an unchanged schedule on the same account", () => {

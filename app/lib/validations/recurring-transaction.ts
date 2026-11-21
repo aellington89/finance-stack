@@ -164,10 +164,10 @@ export function checkRecurringSchedule(facts: RecurringScheduleFacts): Recurring
       if (submitted.endDate < submitted.nextRunDate) {
         problems.push({ field: "endDate", message: "Ends must be on or after Next date." });
       }
-    } else if (submitted.endDate < stored!.anchorDate) {
+    } else if (stored !== null && submitted.endDate < stored.anchorDate) {
       problems.push({
         field: "endDate",
-        message: `Ends must be on or after ${stored!.anchorDate}, when this schedule started.`,
+        message: `Ends must be on or after ${stored.anchorDate}, when this schedule started.`,
       });
     }
   }
