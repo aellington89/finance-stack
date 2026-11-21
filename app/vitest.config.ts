@@ -186,8 +186,7 @@ export default defineConfig({
 
         // argv-parsing and stdout shells. The logic each one wraps lives in a
         // sibling module (audit-allowlist-core.ts, check-changelog-core.ts,
-        // docs-index-check.ts, release-notes-core.ts, seed-reference-check.ts)
-        // which stays in the
+        // docs-index-check.ts, seed-reference-check.ts) which stays in the
         // denominator and sits near 100%. Counting the wrappers adds ~250
         // statements at 0% and gates nothing that the cores do not already.
         "scripts/check-audit.ts",
@@ -195,7 +194,6 @@ export default defineConfig({
         "scripts/check-docs.ts",
         "scripts/check-seed-references.ts",
         "scripts/create-user.ts",
-        "scripts/release-notes.ts",
       ],
 
       // text-summary rather than the default `text`: the full table is ~50 rows

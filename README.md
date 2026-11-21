@@ -175,6 +175,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 ## Documentation
 
 - [Contributing](CONTRIBUTING.md) — dev workflow, conventions, and the release process
+- [Architecture](docs/ARCHITECTURE.md) — the services and their profiles, the database roles, and how data flows: an app request and the audit log, imports, backups, releases, and the data model
 - [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
 - [Deployment & Exposure](docs/deployment.md) — installing and upgrading a release, rollback and database restore, and the trusted-network vs public-internet posture
@@ -187,6 +188,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Testing](docs/testing.md) — running tests and the static lookup-table fixtures
 - [Importer](docs/importer.md) — the importer service and adding new import types
 - [Project Structure](docs/project-structure.md) — repository layout and directory tree
+- [Development Process](docs/PROCESS.md) — how work moves from an issue to a release: Finance Stack's additions to the shared dev process, and where it differs
 - [Releases & Tagging](docs/releases.md) — versioning, the `vX.Y.Z` tag convention, and how releases map to `CHANGELOG.md`
-- [Projects](https://github.com/aellington89/finance-stack/projects) — the roadmaps: what is planned and what is in flight
+- [Milestones](https://github.com/aellington89/finance-stack/milestones) and [Projects](https://github.com/aellington89/finance-stack/projects) — the roadmap: one milestone per phase, and what is planned and in flight
 - [Changelog](CHANGELOG.md) — release history and version notes

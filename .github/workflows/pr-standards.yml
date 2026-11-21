@@ -1,0 +1,21 @@
+name: PR standards
+
+# Checks pull request titles and descriptions against
+# https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md, and re-runs whenever the title or description is
+# edited. Required to merge once the branch ruleset in
+# https://github.com/aellington89/dev_process/blob/main/PROCESS.md#one-time-setup is enabled.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Title and description
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: node scripts/dev-process/check-pr.mjs

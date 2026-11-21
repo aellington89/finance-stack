@@ -252,6 +252,8 @@ finance-stack/
 ├── .github/workflows/release.yml        # CI: tag-triggered stamped build, health + security-header smoke test, GitHub Release
 ├── .github/workflows/backup-smoke.yml   # CI: weekly backup + restore round-trip smoke test (#122); also the repo's shellcheck step
 ├── .github/workflows/deploy-smoke.yml   # CI: deploy.sh from a packed bundle — install, refresh, failed upgrade → rollback, refusals (#228, #347)
+├── .github/workflows/pr-standards.yml   # CI: PR title and description check, synced from the shared dev process with the issue forms and PR template
+├── .dev-process.json                   # Which shared dev process files are synced here, and their version (docs/PROCESS.md)
 ├── .vscode/extensions.json              # Recommended VS Code extensions for this project
 ├── caddy/
 │   └── Caddyfile                         # Reverse proxy / automatic TLS for exposed deployments (--profile edge, #182)
@@ -276,5 +278,6 @@ finance-stack/
     ├── check-deploy-parity.sh               # CI gate: deploy/compose.yml still matches docker-compose.yml (#227)
     ├── pack-bundle.sh                       # Packs + stamps finance-stack-X.Y.Z.tar.gz — release.yml and deploy-smoke.yml (#347)
     ├── check-trivy-suppressions.sh          # CI report: .trivyignore entries that no longer match a finding (#291) — never fails the build
-    └── verify-db-roles.sh                   # Grant matrix + behavioural privilege check per role (#130) — baked into finance-migrate
+    ├── verify-db-roles.sh                   # Grant matrix + behavioural privilege check per role (#130) — baked into finance-migrate
+    └── dev-process/                         # Synced from the shared dev process: check-pr.mjs, check-process.mjs, and release.mjs, the version calculator
 ```

@@ -1,51 +1,60 @@
-name: Feature request
-description: Propose an enhancement or new capability.
-labels: ["enhancement"]
+name: Feature
+description: A roadmap item, or an enhancement to one
+title: 'X.Y · '
+labels: [enhancement, 'stage: design']
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for proposing a change. See [CONTRIBUTING.md](https://github.com/aellington89/finance-stack/blob/master/CONTRIBUTING.md)
-        for the dev workflow, the `Issue #N -` commit convention, and CI gates.
-
+        - **Title:** `<roadmap id> · <name>`, for example `1.4 · Tag Filter`. Follow-ups to 1.4 are `1.4.1`, `1.4.2`.
+        - **Next step:** `/design <issue#>` writes the full spec. If questions are open, swap the label to `stage: research` and run `/research <issue#>` first.
+        - **Standard:** [standards/issues.md](https://github.com/aellington89/dev_process/blob/main/standards/issues.md)
   - type: textarea
     id: summary
     attributes:
       label: Summary
-      description: What should change, and why?
+      description: What this adds and why it matters to someone using the product, in two to four sentences.
     validations:
       required: true
-
   - type: textarea
-    id: acceptance-criteria
+    id: scope
+    attributes:
+      label: Scope and requirements
+      description: The behavior, UI, data, and interfaces. Bullets and sub-headings are welcome.
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this deliberately leaves out, and the issue that covers it, if any.
+  - type: textarea
+    id: technical
+    attributes:
+      label: Technical details
+      description: The approach, data changes and migrations, interfaces, security, and patterns to mirror.
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open questions
+      description: Anything that needs research before this can be specified.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      value: |
+        - **Depends on:**
+        - **Blocks:**
+        - **Related:**
+  - type: textarea
+    id: acceptance
     attributes:
       label: Acceptance criteria
-      description: Observable, checkable conditions that mean this is done.
+      description: Observable, testable outcomes, one per line. Each becomes a test or a manual check.
       value: |
-        - [ ] ...
+        - [ ]
     validations:
       required: true
-
   - type: textarea
-    id: key-files
+    id: reference
     attributes:
-      label: Key files
-      description: Files or modules you expect this to touch, if known.
-    validations:
-      required: false
-
-  - type: dropdown
-    id: area
-    attributes:
-      label: Area
-      description: Which part of the app does this touch? (Informational — doesn't auto-apply a label.)
-      multiple: true
-      options:
-        - frontend
-        - backend
-        - database
-        - infrastructure
-        - developer-experience
-        - documentation
-    validations:
-      required: false
+      label: Reference
+      description: Files (`path:line`), earlier issues, and sections of the phase design doc.

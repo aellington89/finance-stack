@@ -86,6 +86,14 @@ function formatProblem(p: ChangelogProblem): string {
         `new schema — correct it to none or backward-compatible instead. Pre-1.0 releases are ` +
         `exempt. See docs/releases.md.`
       );
+    case "breaking-migration-unmarked":
+      return (
+        `::error::Breaking release: [${p.version}] declares "**Migration:** breaking" but ` +
+        `no entry starts **Breaking:**. The version is computed from the entries, never ` +
+        `from the marker (node scripts/dev-process/release.mjs next), so this would be ` +
+        `offered as a minor: start the migration's entry with **Breaking:** and say what ` +
+        `operators must do before they upgrade. See docs/releases.md.`
+      );
   }
 }
 

@@ -1,5 +1,5 @@
 // Pure parse helpers for CHANGELOG.md (Keep-a-Changelog 1.1.0 format).
-// Mirrors release-notes-core.ts: side-effect-free so the unit suite can
+// Mirrors check-changelog-core.ts: side-effect-free so the unit suite can
 // exercise all logic against inline fixtures without touching the filesystem.
 // readChangelog() is the only I/O-bearing export.
 

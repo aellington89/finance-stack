@@ -43,6 +43,13 @@ jobs:
       - name: Version & tag consistency gate
         run: npm run check:changelog
 
+      # Gate: the version is at least the bump its CHANGELOG section needs from the
+      # previous release, by the shared dev process's calculator (docs/releases.md,
+      # "Choosing the bump"). A bigger step passes with a warning; a smaller one fails.
+      - name: Version bump gate
+        working-directory: .
+        run: node scripts/dev-process/release.mjs verify "$GITHUB_REF_NAME"
+
       # Compute stamp variables used by the Docker build and the Release body.
       # GIT_SHA uses the full 40-char SHA so it matches github.sha exactly — the same
       # value that ends up in finance-app:$GIT_SHA and in /api/health .build.gitSha.

@@ -8,6 +8,7 @@ Planning lives outside the repository: the roadmaps are GitHub [Projects](https:
 
 ## Guides
 
+- [Architecture](ARCHITECTURE.md) — the services and their profiles, the database roles, and how data flows: an app request and the audit log, imports, backups, releases, and the data model
 - [Authentication](auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
 - [Database](database.md) — schema, views, balance history, first-launch init, and the test database
 - [Deployment & Exposure](deployment.md) — installing and upgrading a release, rollback and database restore, and the trusted-network vs public-internet posture
@@ -20,4 +21,5 @@ Planning lives outside the repository: the roadmaps are GitHub [Projects](https:
 - [Testing](testing.md) — running tests and the static lookup-table fixtures
 - [Importer](importer.md) — the importer service and adding new import types
 - [Project Structure](project-structure.md) — repository layout and directory tree
+- [Development Process](PROCESS.md) — how work moves from an issue to a release: Finance Stack's additions to the shared dev process, and where it differs
 - [Releases & Tagging](releases.md) — versioning, the `vX.Y.Z` tag convention, and how releases map to `CHANGELOG.md`

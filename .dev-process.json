@@ -1,0 +1,20 @@
+{
+  "source": "github:aellington89/dev_process",
+  "version": "0.4.0",
+  "commit": "14009c1b3501ccac62206519ba89eb7bcd494dab",
+  "files": {
+    ".github/ISSUE_TEMPLATE/bug.yml": "ed83f46059eefd624a377d6dfbef00b6aaeaf52b6bd75710efe94b133e580059",
+    ".github/ISSUE_TEMPLATE/feature.yml": "943ea2002ac5dac751ad434f3132c5c743b66525c149b48d0c45cad57cd3c6c7",
+    ".github/ISSUE_TEMPLATE/spike.yml": "8f725f8658b69072687f88f9d355ac7f49027bfea6a6cc02f632078cf0c5d18e",
+    ".github/ISSUE_TEMPLATE/upgrade.yml": "6018c53483ec12f188f91eabb06b8b90192bbe9a1d8b4c1ee4cd13baa66762f5",
+    ".github/labels.json": "c705b2d26fdbd493a506c06e724ff100c428406c4c9831d992ad8a64532cf087",
+    ".github/pull_request_template.md": "b47ee5fdbea52e8ed1ed0c7a5d6d17de9215d8e05793ec9991dc3002d54bf5dc",
+    ".github/workflows/claude-review.yml": "e8cee540516293b7d6fe706d30a55cc17bf7074bfbb991f334310877ebae0f33",
+    ".github/workflows/claude.yml": "09153ba62180fe18855f2265c1fc2cfbf8774e5a9e8a23f116199beecb078b7f",
+    ".github/workflows/labels.yml": "3cb9a84332d06592f292efaa404a9dc4048c15e18642443fa0cbc1381beb5183",
+    ".github/workflows/pr-standards.yml": "b38d815e419e102e5f3fcee70c0f3d36e4bc4e94e54cae190fac6a174cc64ffb",
+    "scripts/dev-process/check-pr.mjs": "d7726f6d76221c55bb1685e59bfa0cd8a437ce53dceb020f7e58a44195cfdda3",
+    "scripts/dev-process/check-process.mjs": "e3285787dca77ba057a376081e2981728dc830b81dba54a7b115aca068087f6a",
+    "scripts/dev-process/release.mjs": "c0de116e9b07ab023b27fbf3c53161748d46bd7f8a12e35c96f526e8c425b29d"
+  }
+}

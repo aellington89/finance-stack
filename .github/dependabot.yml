@@ -5,25 +5,15 @@
 # `docker` and `docker-compose` are distinct ecosystems: `docker` reads
 # Dockerfiles, `docker-compose` reads compose files, and we need both.
 #
-# Dependabot cannot follow this repo's `Issue #N - <imperative>` commit
-# convention, so its PRs are an accepted exception (see CONTRIBUTING.md).
-#
-# Deliberately not configured: auto-merge (out of scope per Issue #131).
-# Every bump gets reviewed and must pass the full gate suite.
-#
-# Every entry below sets `target-branch: patch`: version-update PRs open against
-# the long-lived `patch` integration branch instead of the default branch, so a
-# week's bumps collect there to be reviewed and gated together, then merged to
-# the default branch as one change. Dependabot still reads this config from the
-# default branch — `target-branch` only redirects where PRs are opened — so the
-# `patch` branch must exist (cut from the default branch) or Dependabot errors,
-# and this file must be on the default branch for the setting to take effect.
-# Note that Dependabot *security* updates ignore `target-branch` and still open
-# against the default branch.
+# Updates follow the shared dev process (docs/PROCESS.md, Upgrades): each PR
+# opens against master, titled `Upgrade: bump …` by the commit-message
+# prefix, and must pass the full gate suite. None is merged automatically:
+# every bump is reviewed (Issue #131). Security updates arrive the same way.
 #
 # Every entry also sets `assignees`, so each PR opens already assigned to the
-# maintainer rather than being assigned by hand. Labels need no setting:
-# Dependabot adds `dependencies` and the ecosystem's label on its own.
+# maintainer rather than being assigned by hand, and `labels`, which replace
+# Dependabot's own: the process's `dependencies` and `type: upgrade`, and
+# the ecosystem's label that Dependabot would have added.
 
 version: 2
 
@@ -32,9 +22,14 @@ updates:
   # package.json, no workspaces).
   - package-ecosystem: npm
     directory: /app
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - javascript
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -139,9 +134,14 @@ updates:
   # CONTRIBUTING.md#dependabot-prs.
   - package-ecosystem: pip
     directory: /importer
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - python
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -169,9 +169,14 @@ updates:
   # would.
   - package-ecosystem: docker
     directory: /app
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - docker
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -182,9 +187,14 @@ updates:
   # tracked.
   - package-ecosystem: docker
     directory: /importer
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - docker
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -196,9 +206,14 @@ updates:
   # backup-smoke.yml. Do not merge it on its own — see scripts/Dockerfile.
   - package-ecosystem: docker
     directory: /scripts
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - docker
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -218,9 +233,14 @@ updates:
   # separate ecosystem and will not group with this PR.
   - package-ecosystem: docker-compose
     directory: /
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - docker
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -246,9 +266,14 @@ updates:
   # maintainable rather than a one-off snapshot.
   - package-ecosystem: github-actions
     directory: /
-    target-branch: patch
     assignees:
       - aellington89
+    labels:
+      - dependencies
+      - 'type: upgrade'
+      - github_actions
+    commit-message:
+      prefix: Upgrade
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

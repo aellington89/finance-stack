@@ -1,0 +1,66 @@
+name: Claude review
+
+# Automated code review on every pull request: the /review-pr skill from the shared dev process,
+# the same one you run locally, installed on the runner from aellington89/dev_process. After
+# pushing fixes, comment "@claude review again" for another pass (handled by claude.yml).
+#
+# Needs two secrets (https://github.com/aellington89/dev_process/blob/main/standards/repositories.md#secrets):
+# CLAUDE_CODE_OAUTH_TOKEN, from /install-github-app, and DEV_PROCESS_SSH_KEY, a read-only deploy
+# key for dev_process. The review is skipped, with a notice, while either is missing.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude review
+    if: github.event.pull_request.draft == false && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    env:
+      READY: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && secrets.DEV_PROCESS_SSH_KEY != '' }}
+    steps:
+      - name: Skip without the secrets
+        if: env.READY != 'true'
+        run: echo "::notice::The Claude review needs the CLAUDE_CODE_OAUTH_TOKEN and DEV_PROCESS_SSH_KEY secrets, so it was skipped. See https://github.com/aellington89/dev_process/blob/main/standards/repositories.md#secrets."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.READY == 'true'
+        with:
+          fetch-depth: 1
+      - name: Check out the dev process
+        if: env.READY == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: aellington89/dev_process
+          ssh-key: ${{ secrets.DEV_PROCESS_SSH_KEY }}
+          path: .dev-process
+      - name: Install the dev process
+        if: env.READY == 'true'
+        run: node .dev-process/bin/dev-process.mjs install
+      - uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1.0.283
+        if: env.READY == 'true'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are the reviewer on a solo-developer project; your review stands in for a teammate's.
+
+            Read CLAUDE.md, then read ~/.claude/dev_process/skills/review-pr/SKILL.md and follow
+            it for this PR. It points to the standard, the project's additions in
+            docs/PROCESS.md, and the comment template. Read the PR with `gh pr view` and
+            `gh pr diff`, and the issue it closes with `gh issue view`. Post exactly one comment
+            with `gh pr comment`.
+          claude_args: >-
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Read,Glob,Grep"
+            --add-dir ${{ github.workspace }}/.dev-process
