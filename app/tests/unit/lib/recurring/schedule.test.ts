@@ -249,6 +249,7 @@ describe("nextOccurrences / occurrencesBetween", () => {
     expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", 2.5)).toThrow(/Count/);
     expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", -1)).toThrow(/Count/);
     expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", Number.NaN)).toThrow(/Count/);
+    expect(() => nextOccurrences(sched({ anchorDate: "2026-12-01" }), "2026-12-01", Infinity)).toThrow(/Count/);
   });
 
   it("lists every occurrence in an inclusive window", () => {
