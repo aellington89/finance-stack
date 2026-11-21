@@ -633,6 +633,15 @@ To test a **role**, create the `users` row you want to be and point the mock at 
 
 To move past a window instead of resetting it, spy on `Date.now()` rather than reaching for `vi.useFakeTimers()` — the sign-in path does real database I/O and a `scrypt` verification, and faking the whole timer set takes `setImmediate` out from under the `pg` driver. [`tests/integration/auth/login-rate-limit.test.ts`](../app/tests/integration/auth/login-rate-limit.test.ts) shows both.
 
+## Concurrency in Integration Tests
+
+A race has to be made to happen, not hoped for. [`tests/integration/queries/rebuild-balance-lock.test.ts`](../app/tests/integration/queries/rebuild-balance-lock.test.ts) (Issue [#463](https://github.com/aellington89/finance-stack/issues/463)) runs two `db.transaction()`s at once and orders them with promise gates rather than sleeps:
+
+- one gate says the first transaction has reached the point that matters (it holds the lock, or has rebuilt), and another holds it open;
+- `waitForBlockedSessions()` polls `pg_stat_activity` until the second is actually waiting on a lock, and only then is the first released.
+
+Nothing depends on a timer being long enough, so the test is as reliable on a slow CI runner as locally. With the rebuild lock removed, its first test reads a balance of 50.00 instead of 150.00, which is the bug it guards. Waits that must time out pass a short `lockTimeout` (200–300 ms) rather than waiting out the 15-second default.
+
 ## The Server Action Validation Contract
 
 [`tests/integration/actions/validation-contract.test.ts`](../app/tests/integration/actions/validation-contract.test.ts) is the executable form of the [Issue #179](https://github.com/aellington89/finance-stack/issues/179) checklist. For every mutating server action it asserts that an empty payload, and a payload carrying `1.5` / `Infinity` / `2147483648` in each ID field, is rejected with an authored message that contains no driver text.

@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two changes saved to one account at the same moment can no longer leave its balance missing one of them.** ([Issue #463](https://github.com/aellington89/finance-stack/issues/463)) Each save rebuilds the account's balance history from its transactions. When two overlapped, each summed what it could see, and the one that finished last could overwrite the other's totals with figures that left the other's transaction out. Nothing failed, and the balance stayed wrong until something else touched that account. It needed two writes in the same instant, so it was rare with one person.
+
+  Rebuilds of one account now take turns, through a per-account lock taken in a fixed order so two saves can't wait on each other. A rebuild that can't get its turn within 15 seconds fails with an error that is reported, and nothing it wrote is kept, rather than waiting forever. No migration is involved.
+
 - **Screen readers now find one main area, a named sidebar, a named time-grouping filter, and the reason a Settings row is locked. Four low-contrast labels now pass.** ([Issue #358](https://github.com/aellington89/finance-stack/issues/358)) axe-core, run on the logged-in pages during [#144](https://github.com/aellington89/finance-stack/issues/144)'s check, found these on top of what #144 fixed:
   - **Every page had two `main` landmarks.** The sidebar layout already provides one, and the page sat in a second one nested inside it. The inner one is now a plain container.
   - **The sidebar was outside any landmark**, so a screen reader had no way to jump to it or past it. It is now a navigation landmark named "Main", holding the app name, the links, Sign out and the version.
