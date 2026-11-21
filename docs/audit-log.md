@@ -81,7 +81,9 @@ template adds carries the template and its scheduled date in its INSERT
 `after_data` (`recurring_transaction_id`, `recurring_occurrence_date`). Rows
 the hourly scheduler adds are attributed to `recurring-schedule`, as
 are the template's own `next_run_date` advance and an automatic pause on a
-closed account.
+closed account. Saving a template adds whatever is already due in the same
+transaction, so those rows, like the template's own insert, update and delete,
+are attributed to the person saving.
 
 Two deliberate exclusions:
 
@@ -178,7 +180,8 @@ its `row_pk`.
 
 Every row one recurring template added
 ([Issue #135](https://github.com/aellington89/finance-stack/issues/135)), and
-who added it:
+who added it: `recurring-schedule` for the scheduler, or the person who saved
+the template:
 
 ```sql
 SELECT occurred_at, actor_label, row_pk AS transaction_id,

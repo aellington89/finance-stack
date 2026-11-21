@@ -164,7 +164,7 @@ finance-stack/
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
 │   │   ├── db/system-transaction.ts      # systemTransaction() — the same for a background job, by label, with bounded lock waits (#135)
 │   │   ├── recurring/schedule.ts         # Pure recurring-date math, always from the anchor, UTC integers; unit-tested (#135)
-│   │   ├── recurring/materialize.ts      # Creates due occurrences: one template, or every due one for the scheduler (#135)
+│   │   ├── recurring/materialize.ts      # Creates due occurrences: one template (a save) or every due one (the scheduler) (#135)
 │   │   ├── recurring/scheduler.ts        # The in-process hourly timer, started by instrumentation.ts register() (#135)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
 │   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
@@ -181,6 +181,7 @@ finance-stack/
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
 │   │   ├── actions/balance-transfer.ts   # Server actions for balance transfer create, update, delete (#417)
+│   │   ├── actions/recurring-transaction.ts # Server actions for recurring transaction create, update, delete; a save adds what is already due (#135)
 │   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list, promo-active interval)
 │   │   ├── queries/_percent.ts           # Shared percent math (round2, pct, pctOrNull) for the drilldown queries
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
