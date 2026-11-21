@@ -142,7 +142,7 @@ Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurri
 
 **Finding a template's rows:** `SELECT * FROM transactions WHERE recurring_transaction_id = 4 ORDER BY recurring_occurrence_date;`. To see what the scheduler did, read `v_audit_log WHERE actor_label = 'recurring-schedule'` (see [Audit Log](audit-log.md#how-the-actor-gets-recorded)), or the `recurring schedule ran` log lines (see [Observability](observability.md#why-several-capture-points-rather-than-one)).
 
-**If rows stop appearing,** check that `finance-app` is running and that its log says `recurring scheduler started`, then look for reported errors. A template that fails is reported as `recurring-schedule failed`, with its `recurring_transaction_id`, and the others still run. Then look for templates that are paused, ended, or on a closed account. One whose `next_run_date` was edited by hand to a date that isn't an occurrence of its anchor fails every run and stays due, until its next date is set back to an occurrence.
+**If rows stop appearing,** check that `finance-app` is running and that its log says `recurring scheduler started`, then a `recurring schedule ran` line every hour, then look for reported errors. A template that fails is reported as `recurring-schedule failed`, with its `recurring_transaction_id`, and the others still run. Then look for templates that are paused, ended, or on a closed account. One whose `next_run_date` was edited by hand to a date that isn't an occurrence of its anchor fails every run and stays due, until its next date is set back to an occurrence.
 
 ## First-Launch Database Initialization
 

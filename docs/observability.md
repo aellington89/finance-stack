@@ -30,9 +30,8 @@ a `job` rather than a route or an action. `job` is indexed as a tag in the
 error tracker, alongside `route` and `action`. Its routine output is ordinary
 log lines rather than reports:
 
-- `recurring schedule ran` at info when it created or paused anything, with
-  the counts;
-- the same message at debug when there was nothing to do;
+- `recurring schedule ran` at info, with the counts, every hour, even when
+  there was nothing to do, so a quiet scheduler can be told from a stopped one;
 - `recurring schedule ran with failures` at warn, after each failing template
   has been reported on its own;
 - `recurring schedule run skipped: the previous run is still going` at warn,

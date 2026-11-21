@@ -113,6 +113,14 @@ describe("startRecurringScheduler", () => {
     );
   });
 
+  it("logs a run with nothing to do at info too, so a quiet hour still shows", async () => {
+    stop = startRecurringScheduler({ run: async () => summary(), initialDelayMs: 1 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(records(consoleLog)).toContainEqual(
+      expect.objectContaining({ level: "info", msg: "recurring schedule ran", due: 0, created: 0 })
+    );
+  });
+
   it("logs a run with failures as a warning", async () => {
     stop = startRecurringScheduler({ run: async () => summary({ due: 2, failed: 1 }), initialDelayMs: 1 });
     await vi.advanceTimersByTimeAsync(1);

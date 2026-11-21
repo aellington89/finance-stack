@@ -22,8 +22,9 @@ import {
  *   - each template that fails is reported by runDueTemplates() (reportError,
  *     and so GlitchTip when ERROR_DSN is set) with its id;
  *   - a run that can't start at all is reported here;
- *   - a run with failures logs a warning with the counts, and a productive one
- *     logs at info;
+ *   - a run with failures logs a warning with the counts, and every other run
+ *     logs at info, even one with nothing to do: an hourly line at the default
+ *     LOG_LEVEL is how to tell a quiet scheduler from a stopped one;
  *   - a tick that finds the previous run still going logs a warning and skips,
  *     rather than overlapping it. Lock waits inside a run are bounded
  *     (SCHEDULER_LOCK_TIMEOUT), so this means something is genuinely wrong.
@@ -72,8 +73,7 @@ export function startRecurringScheduler(options: SchedulerOptions = {}): Stop {
       const summary = await run();
       const fields = { job: RECURRING_SCHEDULE_ACTOR, ...summary, duration_ms: Date.now() - startedAt };
       if (summary.failed > 0) log.warn("recurring schedule ran with failures", fields);
-      else if (summary.created > 0 || summary.paused > 0) log.info("recurring schedule ran", fields);
-      else log.debug("recurring schedule ran", fields);
+      else log.info("recurring schedule ran", fields);
     } catch (error) {
       reportError(error, { job: RECURRING_SCHEDULE_ACTOR });
     } finally {
