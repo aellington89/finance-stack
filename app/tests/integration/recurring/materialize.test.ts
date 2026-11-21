@@ -48,18 +48,21 @@ interface TemplateInput {
   endDate?: string | null;
   isActive?: boolean;
   amount?: string;
+  description?: string;
+  typeId?: number;
+  categoryId?: number;
 }
 
 async function createTemplate(input: TemplateInput): Promise<number> {
   const [row] = await db
     .insert(recurringTransactions)
     .values({
-      transactionDescription: "Recurring test",
+      transactionDescription: input.description ?? "Recurring test",
       amount: input.amount ?? "-25.00",
       accountId: input.accountId,
       relatedAccountId: input.relatedAccountId ?? null,
-      transactionTypeId: 1,
-      transactionCategoryId: 1,
+      transactionTypeId: input.typeId ?? 1,
+      transactionCategoryId: input.categoryId ?? 1,
       cadence: input.cadence ?? "daily",
       intervalCount: input.every ?? 1,
       anchorDate: input.anchorDate,
@@ -79,6 +82,10 @@ async function createdRows(templateId: number) {
       occurrence: transactions.recurringOccurrenceDate,
       amount: transactions.amount,
       accountId: transactions.accountId,
+      description: transactions.transactionDescription,
+      relatedAccountId: transactions.relatedAccountId,
+      typeId: transactions.transactionTypeId,
+      categoryId: transactions.transactionCategoryId,
     })
     .from(transactions)
     .where(eq(transactions.recurringTransactionId, templateId))
@@ -107,14 +114,32 @@ afterEach(async () => {
 describe("runDueTemplates", () => {
   it("creates exactly one transaction for a template due today, and advances it (AC1, AC2)", async () => {
     const accountId = await createAccount("Recurring: due today");
-    const id = await createTemplate({ accountId, anchorDate: TODAY, amount: "-12.34" });
+    const relatedAccountId = await createAccount("Recurring: due today (related)");
+    const id = await createTemplate({
+      accountId,
+      relatedAccountId,
+      anchorDate: TODAY,
+      amount: "-12.34",
+      description: "Rent",
+      typeId: 2,
+      categoryId: 3,
+    });
 
     const summary = await runDueTemplates({ today: TODAY });
 
     expect(summary.failed).toBe(0);
     const rows = await createdRows(id);
     expect(rows).toEqual([
-      expect.objectContaining({ transactionDate: TODAY, occurrence: TODAY, amount: "-12.34", accountId }),
+      expect.objectContaining({
+        transactionDate: TODAY,
+        occurrence: TODAY,
+        description: "Rent",
+        amount: "-12.34",
+        accountId,
+        relatedAccountId,
+        typeId: 2,
+        categoryId: 3,
+      }),
     ]);
     expect((await template(id)).nextRunDate).toBe("2020-06-11");
   });
@@ -297,6 +322,44 @@ describe("runDueTemplates", () => {
     // Released, the next run picks it up.
     await runDueTemplates({ today: TODAY });
     expect(await createdRows(id)).toHaveLength(1);
+  });
+
+  it("sees an account closed while the run waits for it, and pauses (AC12)", async () => {
+    const accountId = await createAccount("Recurring: closing");
+    const id = await createTemplate({ accountId, anchorDate: "2020-06-08" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // The account is being closed in a transaction that hasn't committed yet.
+    let release!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    let markUpdated!: () => void;
+    const updated = new Promise<void>((r) => (markUpdated = r));
+    const closer = db.transaction(async (tx) => {
+      await tx.update(accounts).set({ closedDate: TODAY }).where(eq(accounts.accountId, accountId));
+      markUpdated();
+      await released;
+    });
+    await updated;
+
+    const run = runDueTemplates({ today: TODAY });
+    // Commit the close once the run is waiting on the account row. A run that
+    // doesn't wait never shows up here, and is let through after 2 s.
+    for (let i = 0; i < 40; i++) {
+      const waiting = await db.execute<{ n: number }>(sql`
+        SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'
+      `);
+      if (waiting.rows[0].n > 0) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    release();
+    await closer;
+    await run;
+
+    expect((await createdRows(id)).map((r) => r.occurrence)).toEqual(["2020-06-08", "2020-06-09"]);
+    const paused = await template(id);
+    expect(paused.isActive).toBe(false);
+    expect(paused.nextRunDate).toBe(TODAY);
   });
 });
 

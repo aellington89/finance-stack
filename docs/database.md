@@ -107,7 +107,7 @@ The account edit page shows what's left on each active transfer, or "Paid off".
 - Non-promo debt is projected at the promo APR, because the card's standard APR isn't recorded yet (#110).
 - Above 0%, interest is approximated at the nominal monthly rate (APR ÷ 12). It is not daily compounding, and not the interest postings in the ledger.
 
-## Recurring Transactions
+## Recurring transactions
 
 Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app doesn't create or run templates yet: the hourly check, and the Transactions → Recurring tab that manages them, are still being built under Issue #135.
 
@@ -124,7 +124,7 @@ Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurri
 
 **When rows are created.** A template is due when `next_run_date <= CURRENT_DATE`, and its rows are created **on or after their date, never ahead of it**. `rebuildAccountBalance()` stops at `CURRENT_DATE`, so a future-dated row wouldn't reach balances when its day came. [`lib/recurring/materialize.ts`](../app/lib/recurring/materialize.ts) creates them, and rebuilds the balances they touch in the same transaction. `runDueTemplates()` takes every due template, each in its own transaction attributed to `recurring-schedule`, and `materializeTemplate()` takes one, inside a caller's transaction.
 
-**Each occurrence exactly once.** Each template is locked `FOR UPDATE` with the due test repeated, so a second runner finds it no longer due. Beneath that, `transactions` carries `recurring_transaction_id` and `recurring_occurrence_date`, the template and the date the row was scheduled for, under a `UNIQUE`. A duplicate insert of the same occurrence is a no-op whoever attempts it. Both are `NULL` on rows entered by hand, and NULLs never conflict. The occurrence date is kept apart from `transaction_date`, so editing a created row (rent that cleared on the 2nd) doesn't move its key. A run waits at most 15 seconds for any lock; a template still locked after that fails the run, is reported, and is picked up by the next one.
+**Each occurrence exactly once.** Each template is locked `FOR UPDATE` with the due test repeated, so a second runner finds it no longer due. Beneath that, `transactions` carries `recurring_transaction_id` and `recurring_occurrence_date`, the template and the date the row was scheduled for, under a `UNIQUE`. A duplicate insert of the same occurrence is a no-op whoever attempts it. Both are `NULL` on rows entered by hand, and NULLs never conflict. The occurrence date is kept apart from `transaction_date`, so editing a created row (rent that cleared on the 2nd) doesn't move its key. A run waits at most 15 seconds for any lock; a template still locked after that fails for this run, is reported, and is picked up by the next one.
 
 **Missed dates are backfilled.** If a template's next date is in the past, each missed occurrence is created once, on its own date. A run creates at most 400 per template, more than a year of a daily schedule; a template still behind stays due, and the next run carries on from there.
 

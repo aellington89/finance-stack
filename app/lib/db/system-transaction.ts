@@ -20,10 +20,11 @@ import type { Tx } from "@/lib/db/audited";
  * Both settings are transaction-local (`set_config(…, true)`), for the
  * pooled-connection reason auditedTransaction() documents.
  *
- * `lockTimeout` bounds every lock wait in the transaction. A job has no user
- * waiting on it, so without a bound a stuck holder would stall it silently and
+ * `lockTimeout` bounds the transaction's lock waits. A job has no user waiting
+ * on it, so without a bound a stuck holder would stall it silently and
  * indefinitely. With one, the wait fails as SQLSTATE 55P03 and the job reports
- * it.
+ * it. A statement that sets its own bound keeps it: a balance rebuild waits up
+ * to REBUILD_LOCK_TIMEOUT for its advisory lock (lib/queries/rebuild-balance.ts).
  *
  * See docs/audit-log.md.
  */

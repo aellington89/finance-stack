@@ -99,7 +99,9 @@ export async function currentDate(executor: Pick<Tx, "execute"> = db): Promise<s
  * A template whose account is closed creates only the occurrences before the
  * close date (rebuildAccountBalance ignores dates from it on) and then pauses
  * itself. Leaving it due would retry every hour, and backfill everything if the
- * account were ever reopened.
+ * account were ever reopened. The account row is locked FOR SHARE, so a close
+ * that is in flight either commits first, and its closed_date is read here, or
+ * waits until these rows are in.
  */
 export async function materializeTemplate(
   tx: Tx,
@@ -128,7 +130,7 @@ export async function materializeTemplate(
       AND r.is_active
       AND r.next_run_date <= ${options.today}::date
       AND (r.end_date IS NULL OR r.next_run_date <= r.end_date)
-    FOR UPDATE OF r
+    FOR UPDATE OF r FOR SHARE OF a
   `);
 
   const template = locked.rows[0];
