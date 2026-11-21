@@ -23,8 +23,9 @@ import {
  * (docs/input-validation.md).
  *
  * `checkRecurringSchedule` checks what needs the database: today's date, the
- * account's open/closed window, and the row being edited. Its caller reads
- * those facts inside its transaction and hands them over; the rules are a pure
+ * account's open/closed window, and the row being edited. The action
+ * (lib/actions/recurring-transaction.ts) reads those facts inside its
+ * transaction and hands them over; the rules are a pure
  * function, so every message is unit-tested without a database.
  */
 
