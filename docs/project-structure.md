@@ -228,7 +228,7 @@ finance-stack/
 │   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, rate limiting, audit trail, failure logging, validation contract)
 │   │       ├── auth/                     #   Credential verification and sign-in rate limiting against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
-│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance, drilldowns)
+│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance and its lock, drilldowns)
 │   ├── e2e/                              # Playwright end-to-end suite (#141)
 │   │   ├── money-path.spec.ts            #   The one spec: account → transaction → rebuild → dashboard KPI
 │   │   ├── auth.setup.ts                 #   Signs in once, saves the session as storageState

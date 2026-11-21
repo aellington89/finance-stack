@@ -68,6 +68,8 @@ the one teardown rule that will bite you.
 
 **Integration tests** run server actions against `Finances_Test`. Ensure `DATABASE_URL` in `app/.env.local` points to `Finances_Test` before running them. The integration test global setup will throw if it detects a non-test URL.
 
+**Without the stack running**, stand up a throwaway `Finances_Test` the way `ci.yml` does, on a port of its own so it can't collide with the stack's 5433, and pass its URL to the run: `docker run -d --name fs-test -e POSTGRES_PASSWORD=changeme -p 55432:5432 postgres:18.6`; then `init-db/roles/00-create-databases.sql`, `npm run db:migrate`, the three `init-db/seeds/` files, `01-create-roles.sql` and `02-grants.sql`, with the variables `ci.yml` sets; then `DATABASE_URL=postgresql://postgres:changeme@localhost:55432/Finances_Test npm test`. Remove it with `docker rm -f fs-test`. It never touches the stack's `finances` volume.
+
 ```bash
 cd app
 
@@ -632,6 +634,15 @@ To test a **role**, create the `users` row you want to be and point the mock at 
 - **A single test may not exceed the budget** — 120 guarded actions, or 5 failed sign-ins for one username. A test that needs to cross the line should spend the budget by calling the guard directly rather than by running real mutations; see [`tests/integration/actions/account-rate-limit.test.ts`](../app/tests/integration/actions/account-rate-limit.test.ts).
 
 To move past a window instead of resetting it, spy on `Date.now()` rather than reaching for `vi.useFakeTimers()` — the sign-in path does real database I/O and a `scrypt` verification, and faking the whole timer set takes `setImmediate` out from under the `pg` driver. [`tests/integration/auth/login-rate-limit.test.ts`](../app/tests/integration/auth/login-rate-limit.test.ts) shows both.
+
+## Concurrency in Integration Tests
+
+A race has to be made to happen, not hoped for. [`tests/integration/queries/rebuild-balance-lock.test.ts`](../app/tests/integration/queries/rebuild-balance-lock.test.ts) (Issue [#463](https://github.com/aellington89/finance-stack/issues/463)) runs two `db.transaction()`s at once and orders them with promise gates rather than sleeps:
+
+- one gate says the first transaction has reached the point that matters (it holds the lock, or has rebuilt), and another holds it open;
+- `waitForBlockedSessions()` polls `pg_stat_activity` until the second is actually waiting on a lock, and only then is the first released.
+
+Nothing depends on a timer being long enough, so the test is as reliable on a slow CI runner as locally. With the rebuild lock removed, its first test reads a balance of 50.00 instead of 150.00, which is the bug it guards. Waits that must time out pass a short `lockTimeout` (200–300 ms) rather than waiting out the 15-second default.
 
 ## The Server Action Validation Contract
 

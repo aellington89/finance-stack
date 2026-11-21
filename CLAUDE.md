@@ -22,6 +22,12 @@ with the shared dev process (Dev process, below).
   bundle. `caddy/` and `scripts/`: the edge proxy and the operations scripts.
 - docs/README.md indexes the guides. CONTRIBUTING.md has the workflow and every CI gate.
 
+## Conventions
+
+- A write that changes several accounts rebuilds them with `rebuildAccountBalances`, which
+  locks them in ascending id order; a hand-rolled loop over `rebuildAccountBalance` can
+  deadlock (`app/lib/queries/rebuild-balance.ts`, Issue #463).
+
 ## Dev process
 
 @~/.claude/dev_process/CONVENTIONS.md

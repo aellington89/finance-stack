@@ -33,14 +33,14 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 
 Every balance the app shows reads this table: net worth, `v_account_balances_current`, and each drilldown. What keeps it current depends on how a transaction arrived:
 
-- **Through the app**, it is kept current as you go. Each create, edit or delete rebuilds the history of the accounts it touched (`rebuildAccountBalance`, in [`rebuild-balance.ts`](../app/lib/queries/rebuild-balance.ts)). Loading any dashboard page carries every open account forward to today (`ensureTodayBalances`), and so does each page that reads today's balances, before it reads them. A page can't rely on the dashboard layout for that: Next renders a layout in parallel with its page, and switching tabs doesn't render the layout at all (Issue #408).
+- **Through the app**, it is kept current as you go. Each create, edit or delete rebuilds the history of the accounts it touched (`rebuildAccountBalance`, in [`rebuild-balance.ts`](../app/lib/queries/rebuild-balance.ts)). Rebuilds of one account take turns: each takes a per-account advisory lock first, and a write that touches several accounts takes them in ascending id order (`rebuildAccountBalances`), so two saves can't deadlock. Without it, two saves to one account at the same moment could each sum from their own snapshot, and the later one would overwrite the other's totals (Issue #463). A rebuild that waits more than 15 seconds for the lock fails with SQLSTATE 55P03, is reported, and keeps nothing. Loading any dashboard page carries every open account forward to today (`ensureTodayBalances`), and so does each page that reads today's balances, before it reads them. A page can't rely on the dashboard layout for that: Next renders a layout in parallel with its page, and switching tabs doesn't render the layout at all (Issue #408).
 - **Through the importer**, it is not. The importer's role can append to `transactions` and nothing else (see the [grant matrix](#roles--privileges)), so **imported transactions do not appear in any balance until the full rebuild has run**:
 
 ```bash
 docker compose --profile init run --rm init-script
 ```
 
-Run it after an import, or any time balances look wrong. It rebuilds every account in one idempotent upsert, so it is safe to run while the app is up, and as often as you like. It stays behind the `init` profile and is not run automatically; don't add `init` to `COMPOSE_PROFILES`, or it reruns on every `up` (see [Services and profiles](deployment.md#services-and-profiles)).
+Run it after an import, or any time balances look wrong. It rebuilds every account in one idempotent upsert, so it is safe to run while the app is up, and as often as you like. It doesn't take the per-account lock the app's saves take (Issue #463), so a transaction saved in the app during the run can be left out of that account's balance until the account's next save, or until you run it again. It stays behind the `init` profile and is not run automatically; don't add `init` to `COMPOSE_PROFILES`, or it reruns on every `up` (see [Services and profiles](deployment.md#services-and-profiles)).
 
 The `Finances_Test` database has its balance history built automatically as part of the first-launch seed (see below).
 
