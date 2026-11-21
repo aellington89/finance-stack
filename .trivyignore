@@ -51,10 +51,9 @@
 # never reported them — and it was concrete again, harmlessly, in the OpenSSL
 # entry that sat below until 2026-10-03: that one was reported by all four. The
 # three debian entries that replaced it have since gone the same way (see the
-# section that held them, below). Every entry left is npm's vendored tooling,
-# which only finance-migrate reports, so each one widens to three images that
-# never reported it — harmless for exactly as long as those three keep not
-# reporting it.
+# section that held them, below). No entry is left at all now: the last six,
+# npm's vendored tooling in finance-migrate, were cleared by pinning a fixed npm
+# in that stage rather than renewed (#441, recorded in their section below).
 #
 # NOTHING REMOVES AN ENTRY WHEN THE BASE IS REBUILT. The CVE simply stops being
 # reported and the line stays here, inert, until someone deletes it — `exp:` stops
@@ -124,94 +123,38 @@
 # from a freshly pulled base — not from a workstation.
 
 # --- npm's own vendored dependencies (finance-migrate) ----------------------
-# The migrate stage deliberately keeps npm — it runs `npx drizzle-kit` — where
-# the runner stage deletes it precisely because of findings like these. They live
-# in /usr/local/lib/node_modules/npm/node_modules/ and are fixed only when the
-# node:<major>-alpine base in app/Dockerfile ships a newer bundled npm; no
-# application-level bump reaches them, and `npm update` inside the image would
-# defeat the pinned build.
+# EMPTY, CLEARED BY A PINNED NPM RATHER THAN A RENEWAL (#441). Six entries sat
+# here, all expiring 2026-11-17 and never extended: CVE-2026-102276 and
+# CVE-2026-102278 (brace-expansion 5.0.9, fixed in 5.0.10 and 5.0.11), and
+# CVE-2026-19534, CVE-2026-109383, CVE-2026-109869 and CVE-2026-87018 (undici
+# 6.28.0, fixed in 6.28.1 and 6.29.1). They were copies vendored inside the npm
+# that node:26-alpine bundles, which the migrate stage keeps to run
+# `npx drizzle-kit` and `npm run auth:create-user`, so no application-level bump
+# could reach them. Once they expired, the finance-migrate scan reported exactly
+# those six and nothing else.
 #
-# A Node major bump is not that fix by itself. #211 moved the base from 24 to
-# 26: Node 24.22 bundles npm 11.19.1 and Node 26.13 bundles npm 11.20.0, and npm's
-# own package-lock.json at those two tags pins the same vendored undici (6.28.0)
-# and brace-expansion (5.0.9). So every entry below kept matching across the
-# move. What reaches them is a release of npm that bumps those two, shipped in
-# the node image. Before assuming a base bump will clear anything, read the
-# vendored versions from npm's package-lock.json at the bundled npm's tag
-# (github.com/npm/cli, `packages["node_modules/undici"].version`) and compare
-# them with the fix versions below. All six expire 2026-11-17 and have never
-# been extended; whether to renew them or drop npm from the migrate stage is
-# tracked in #441.
-CVE-2026-102276 exp:2026-11-17
-# brace-expansion 5.0.9, fixed in 5.0.10. npm-vendored, as above.
-CVE-2026-102278 exp:2026-11-17
-# brace-expansion 5.0.9, fixed in 5.0.11. npm-vendored, as above.
-CVE-2026-19534 exp:2026-11-17
-# undici 6.27.0, fixed in 6.28.1. npm-vendored, as above.
-CVE-2026-109383 exp:2026-11-17
-# undici 6.28.0, fixed in 6.29.1 (GHSA-2m5v-pch6-74hx, TLS certificate
-# validation bypass via dropped tls options). npm-vendored, as above.
-CVE-2026-109869 exp:2026-11-17
-# undici 6.28.0, fixed in 6.29.1 (GHSA-xjj6-f33q-929c, denial of service via
-# an unhandled error on excessive content-encodings). npm-vendored, as above.
-CVE-2026-87018 exp:2026-11-17
-# undici 6.28.0, fixed in 6.29.1 (GHSA-qrxm-fqhp-jwvm, denial of service via
-# TLS 1.2 renegotiation with a mismatched certificate). npm-vendored, as above.
+# npm 11.21.2 is the first release whose own package-lock.json vendors fixed
+# copies (undici 6.29.1, brace-expansion 5.0.12; 11.21.1 still had undici
+# 6.29.0), so app/Dockerfile's migrate stage installs a pinned npm 11.21.3 over
+# the bundled one. That pin is what to bump when a finding appears under
+# usr/local/lib/node_modules/npm/ again, and what to delete once node:26-alpine
+# bundles npm 11.21.2 or later. Read the vendored versions from npm's lockfile
+# at the release tag (github.com/npm/cli, `packages["node_modules/undici"]`)
+# before choosing one.
 #
-# Trivy now reads the vendored copy as 6.28.0 rather than 6.27.0. That still
-# sits below CVE-2026-19534's 6.28.1, so that entry keeps matching. The first
-# two IDs were also reported against the application tree's undici 7.30.0 and
-# jsdom's 8.11.2. Those are lockfile copies, so they were bumped (7.30.1,
-# 8.12.2) and are not what these lines cover. Because an ID entry widens, these
-# would also hide a lockfile regression from this scan. The npm audit gate
-# still catches that on the GHSAs.
+# THREE THINGS WORTH KEEPING from this block's two months of entries:
 #
-# All three arrived together, and the first attempt listed only one. Trivy
-# prints several CVEs against one installed version as a single row, with the
-# version cell merged, so reading only the rows that name a version undercounts.
-# Count the IDs under the scan's "Total:" line, not the version cells.
-#
-# THE 2026-10-03 THREE (CVE-2026-102276, CVE-2026-102278 AND CVE-2026-19534)
-# ARRIVED WITH A CLEAN DEMONSTRATION OF WHY THIS BLOCK IS SCOPED
-# TO VENDORED COPIES, which is worth recording because it is the distinction the
-# block is easiest to get wrong about. finance-migrate reported 15 HIGH in
-# node-pkg on 2026-10-03: this image carries app/node_modules so that the
-# migrate stage can run `npx drizzle-kit`, so the scan sees the application's
-# dependency tree AND npm's vendored one, with the same package names appearing
-# at different versions in each. An `npm update` of undici and brace-expansion
-# in app/package-lock.json cleared twelve of the fifteen and needed no entry
-# here. The three left are the vendored copies at the versions this block's
-# note already named as npm 11.19.0's bundle — brace-expansion 5.0.7 and undici
-# 6.27.0 — which no application-level bump can reach. If a finding here names a
-# version that matches app/package-lock.json, it belongs in the lockfile, not in
-# this file.
-#
-# The installed versions above are the point of this block after #303, and they
-# are why partial clears are the normal case rather than a curiosity. This
-# section held eight entries; node:24-alpine shipped npm 11.19.0, which moved
-# tar 7.5.16 → 7.5.19, brace-expansion 5.0.6 → 5.0.7 and undici 6.26.0 → 6.27.0,
-# and exactly the four entries whose fix version that reached went dead. Those
-# four survived because their fix was still ahead of what npm bundles, and the
-# three added above bring the block to seven. A vendored bump therefore clears
-# *some* of a package's entries and leaves others, so re-read the installed
-# version here before assuming a comment is still true — brace-expansion and
-# undici now carry two generations of advisory each, against one installed
-# version apiece.
-#
-# IT HAPPENED AGAIN BY 2026-11-05, in both directions at once. node:24-alpine
-# has been rebuilt since this block was last pruned (Docker Hub's latest is
-# 2026-10-28), and its bundled npm moved the vendored copies far enough to kill
-# four entries. PR #382's run named them as matching nothing in any image, and
-# they are deleted here with their comments on that verdict:
-#   CVE-2026-14257  brace-expansion, fixed in 5.0.8
-#   CVE-2026-69152  brace-expansion, fixed in 5.0.9
-#   CVE-2026-69192  ip-address, fixed in 10.3.1
-#   CVE-2026-73566  tar, fixed in 7.5.21 (#291)
-# Over the same stretch undici moved only 6.27.0 -> 6.28.0, which cleared
-# nothing and left it exposed to the three 6.29.1 advisories above. brace-expansion's version
-# is inferred rather than read: 5.0.9's fix went dead while 5.0.10's still
-# matches, so the vendored copy is 5.0.9, and the two comments say so. The
-# block is now six entries, against two installed versions.
+#   1. Trivy prints several CVEs against one installed version as a single row,
+#      with the version cell merged. Count the IDs under the scan's "Total:"
+#      line, not the version cells; the first attempt here undercounted.
+#   2. This image also carries app/node_modules, so the same package can appear
+#      twice at different versions. A finding whose version matches
+#      app/package-lock.json belongs in the lockfile (an `npm update`), not here:
+#      on 2026-10-03 that cleared twelve of fifteen findings.
+#   3. A newer npm, or a Node major, clears only the advisories whose fix
+#      version it actually ships. Node 24.22 (npm 11.19.1) and Node 26.13 (npm
+#      11.20.0) vendored the same undici 6.28.0, so #211's move to Node 26 cleared
+#      nothing here.
 
 # Not listed here, and excluded at the scanner instead: the Go stdlib CVEs
 # reported against drizzle-kit's vendored `esbuild` and the postgres image's

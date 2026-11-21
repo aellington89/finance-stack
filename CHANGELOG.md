@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - filter and picker controls that have no name, or lose it once a value is chosen ([#449](https://github.com/aellington89/finance-stack/issues/449));
   - tables that scroll inside their card at narrow widths ([#450](https://github.com/aellington89/finance-stack/issues/450)).
 
+
+### Security
+
+- **The `finance-migrate` image no longer ships six HIGH vulnerabilities in npm's own bundled copies of undici and brace-expansion.** ([Issue #441](https://github.com/aellington89/finance-stack/issues/441)) The migrate stage keeps npm to run `npx drizzle-kit` and the first-user CLI, and the npm that `node:26-alpine` bundles vendors undici 6.28.0 and brace-expansion 5.0.9. In undici that meant a TLS certificate-validation bypass and three denial-of-service bugs (CVE-2026-109383, CVE-2026-19534, CVE-2026-109869, CVE-2026-87018); in brace-expansion, two denial-of-service bugs (CVE-2026-102276, CVE-2026-102278). Their `.trivyignore` suppressions expired on 2026-11-17, which turned the image scan red on every branch. The stage now installs npm 11.21.3 over the bundled one, pinned, whose vendored copies are fixed (undici 6.29.1, brace-expansion 5.0.12), so the six suppressions are deleted rather than renewed. Operators see no change: `docker compose run --rm --entrypoint npm migrate run auth:create-user -- <username>` works as before. The pin goes once the base image bundles npm 11.21.2 or later.
+
 ## [1.5.0] - 2026-11-14
 
 **Migration:** none

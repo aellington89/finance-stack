@@ -25,6 +25,16 @@ RUN mkdir -p public && npm run build
 FROM node:26-alpine AS migrate
 WORKDIR /app
 RUN apk add --no-cache postgresql-client bash
+
+# This stage keeps npm (`npx drizzle-kit`, `npm run auth:create-user`), and the
+# npm that node:26-alpine bundles vendors undici 6.28.0 and brace-expansion
+# 5.0.9, which carry six HIGH CVEs that the image scan blocks on (#441). npm
+# 11.21.2 is the first release whose own lockfile vendors fixed copies (undici
+# 6.29.1, brace-expansion 5.0.12), so a pinned npm replaces the bundled one.
+# Pinned rather than @latest, so the build stays reproducible and a bump is a
+# reviewed change. Delete this once `docker run --rm node:26-alpine npm -v`
+# prints 11.21.2 or later; .trivyignore's npm section has the history.
+RUN npm install -g npm@11.21.3 && npm cache clean --force
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json drizzle.config.ts tsconfig.json ./
 COPY drizzle ./drizzle
