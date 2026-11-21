@@ -7,11 +7,11 @@ import { isEntityId } from "@/lib/validations/id";
  * expected string, received null" through `buildFieldErrors()` (Issue #179).
  * See docs/input-validation.md.
  *
- * The six fields other than the date are exported for the recurring-transaction
+ * The six fields other than the date are shared with the recurring-transaction
  * template (Issue #135), which carries the same fields and copies them onto
  * every row it creates. They are exported as a shape plus a refinement, rather
- * than the template `.omit()`ting a refined schema, so that its schema and
- * this one read the same rules and messages from one place.
+ * than the template `.omit()`ting a refined schema, so both schemas read the
+ * same rules and messages from one place.
  */
 export const transactionFieldShapes = {
   transactionDescription: z
@@ -45,7 +45,7 @@ export const transactionFieldShapes = {
     .refine(isEntityId, { message: "Invalid category" }),
 };
 
-/** The account/related-account rule, for this schema's `.refine()` and the template's. */
+/** The account/related-account rule, shared by both schemas' `.refine()`. */
 export function relatedAccountDiffers(data: { accountId: string; relatedAccountId?: string }): boolean {
   return !data.relatedAccountId || data.relatedAccountId !== data.accountId;
 }
