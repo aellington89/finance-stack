@@ -1,4 +1,4 @@
-import { pgTable, index, uniqueIndex, unique, foreignKey, char, serial, text, date, integer, bigint, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, index, uniqueIndex, unique, foreignKey, char, serial, text, date, integer, bigint, boolean, jsonb, numeric, check, primaryKey, pgView, uuid, timestamp } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -15,6 +15,15 @@ export const transactions = pgTable("transactions", {
 	// The row this one was copied from by duplicateTransaction() (Issue #241).
 	// Deliberately no foreign key — see the COMMENT ON COLUMN in migration 0008.
 	duplicatedFromTransactionId: integer("duplicated_from_transaction_id"),
+	// The recurring template that created this row, and the scheduled date it
+	// was created for (Issue #135). Both NULL on every row a person entered.
+	// The pair is the idempotency key: the UNIQUE below is what makes "each
+	// occurrence exactly once" true however many runners race. The occurrence
+	// date is kept apart from transaction_date so that editing a created row
+	// (rent that cleared on the 2nd) does not move its key. No foreign key, for
+	// the reason duplicated_from_transaction_id has none — see migration 0011.
+	recurringTransactionId: integer("recurring_transaction_id"),
+	recurringOccurrenceDate: date("recurring_occurrence_date"),
 }, (table) => [
 	index("idx_transactions_account_date").using("btree", table.accountId.asc().nullsLast().op("int4_ops"), table.transactionDate.asc().nullsLast().op("date_ops")),
 	index("idx_transactions_category").using("btree", table.transactionCategoryId.asc().nullsLast().op("int4_ops")),
@@ -42,6 +51,14 @@ export const transactions = pgTable("transactions", {
 			name: "transactions_transaction_type_id_fkey"
 		}),
 	check("transactions_transaction_description_not_blank", sql`transaction_description <> ''`),
+	// A plain UNIQUE rather than a partial index: NULLs are distinct by default,
+	// so the hand-entered rows (both columns NULL) never conflict, and
+	// ON CONFLICT (recurring_transaction_id, recurring_occurrence_date) infers it
+	// with no WHERE clause to get wrong.
+	unique("transactions_recurring_occurrence_key").on(table.recurringTransactionId, table.recurringOccurrenceDate),
+	// Both or neither, written as an equality between two booleans like
+	// import_log_error_text_check.
+	check("transactions_recurring_link_pair", sql`(recurring_transaction_id IS NULL) = (recurring_occurrence_date IS NULL)`),
 ]);
 
 export const accountTypes = pgTable("account_types", {
@@ -169,7 +186,7 @@ export const auditLog = pgTable("audit_log", {
 //   it retries on the next poll with no manual un-quarantine step. This is why
 //   there is no `imports/.failed/` directory: see docs/importer.md.
 //
-// No audit_row_change trigger, unlike the seven business tables — this is itself
+// No audit_row_change trigger, unlike the eight business tables — this is itself
 // an append-only log, and a trigger would double-write on every poll.
 export const importLog = pgTable("import_log", {
 	importId: bigint("import_id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
@@ -255,6 +272,84 @@ export const balanceTransfers = pgTable("balance_transfers", {
 		}).onDelete("set null"),
 	check("balance_transfers_fee_not_transfer", sql`fee_transaction_id <> transfer_transaction_id`),
 	check("balance_transfers_promo_apr_range", sql`promo_apr >= 0 AND promo_apr <= 100`),
+]);
+
+// One row per recurring transaction template (Issue #135): rent, pay, a
+// subscription. The six transaction fields are copied onto each row it
+// creates; the schedule says when.
+//
+// The schedule is anchored, never stepped. anchor_date is occurrence 0 and
+// next_run_date is always occurrence k of it for some k ≥ 0, computed from the
+// anchor by lib/recurring/schedule.ts. That is what lets a monthly template on
+// the 31st go Jan 31 → Feb 28 → Mar 31 rather than drifting to the 28th. Editing
+// the cadence, the interval or the next date starts a new schedule
+// (anchor := next); editing anything else keeps it.
+//
+// Rows are created only once due (next_run_date <= CURRENT_DATE), by
+// lib/recurring/materialize.ts — from the hourly scheduler, or from the save
+// itself. Never ahead of time: rebuildAccountBalance() stops at CURRENT_DATE, so
+// a future-dated row would not reach balances when its day came.
+//
+// Status is derived rather than stored, apart from the pause: "Ended" is
+// next_run_date past end_date. The due index leaves both paused and ended rows
+// out, so the scheduler never locks them.
+//
+// The four foreign keys are RESTRICT (Postgres's NO ACTION is the default; this
+// says it outright): a template must not outlive its account, category or type.
+// deleteAccount() and the two category/type deletes refuse first with a
+// message, and the key is the backstop for any other writer.
+export const recurringTransactions = pgTable("recurring_transactions", {
+	recurringTransactionId: integer("recurring_transaction_id").primaryKey().generatedAlwaysAsIdentity(),
+	transactionDescription: text("transaction_description").notNull(),
+	// Signed from the account's point of view, exactly as in transactions.
+	amount: numeric({ precision: 15, scale: 2 }).notNull(),
+	accountId: integer("account_id").notNull(),
+	relatedAccountId: integer("related_account_id"),
+	transactionTypeId: integer("transaction_type_id").notNull(),
+	transactionCategoryId: integer("transaction_category_id").notNull(),
+	cadence: text().notNull(),
+	// "Every N" cadence units: 2 with weekly is biweekly pay, 3 with monthly is
+	// a quarterly bill.
+	intervalCount: integer("interval_count").default(1).notNull(),
+	anchorDate: date("anchor_date").notNull(),
+	nextRunDate: date("next_run_date").notNull(),
+	// The last date an occurrence may fall on, inclusive. NULL means no end.
+	endDate: date("end_date"),
+	isActive: boolean("is_active").default(true).notNull(),
+}, (table) => [
+	foreignKey({
+			columns: [table.accountId],
+			foreignColumns: [accounts.accountId],
+			name: "recurring_transactions_account_id_fkey"
+		}).onDelete("restrict"),
+	foreignKey({
+			columns: [table.relatedAccountId],
+			foreignColumns: [accounts.accountId],
+			name: "recurring_transactions_related_account_id_fkey"
+		}).onDelete("restrict"),
+	foreignKey({
+			columns: [table.transactionTypeId],
+			foreignColumns: [transactionTypes.transactionTypeId],
+			name: "recurring_transactions_transaction_type_id_fkey"
+		}).onDelete("restrict"),
+	foreignKey({
+			columns: [table.transactionCategoryId],
+			foreignColumns: [transactionCategories.transactionCategoryId],
+			name: "recurring_transactions_transaction_category_id_fkey"
+		}).onDelete("restrict"),
+	// The due scan: active, not ended, ordered by date. Partial, so the index
+	// holds only the templates the scheduler can act on.
+	index("idx_recurring_transactions_due").using("btree", table.nextRunDate.asc().nullsLast().op("date_ops")).where(sql`is_active AND (end_date IS NULL OR next_run_date <= end_date)`),
+	check("recurring_transactions_description_not_blank", sql`transaction_description <> ''`),
+	// Spelled out rather than built from lib/recurring/schedule.ts CADENCES, for
+	// the reason given on transaction_categories_reporting_role_check: sql.raw is
+	// banned repo-wide. tests/unit/lib/recurring/schedule.test.ts pins the two
+	// lists equal.
+	check("recurring_transactions_cadence_check", sql`cadence = ANY (ARRAY['daily'::text, 'weekly'::text, 'monthly'::text, 'yearly'::text])`),
+	check("recurring_transactions_interval_count_range", sql`interval_count >= 1 AND interval_count <= 99`),
+	check("recurring_transactions_next_not_before_anchor", sql`next_run_date >= anchor_date`),
+	check("recurring_transactions_end_not_before_anchor", sql`end_date IS NULL OR end_date >= anchor_date`),
+	check("recurring_transactions_related_differs", sql`related_account_id IS NULL OR related_account_id <> account_id`),
 ]);
 export const vTransactionsFull = pgView("v_transactions_full", {	transactionId: integer("transaction_id"),
 	transactionDescription: text("transaction_description"),
