@@ -231,6 +231,17 @@ describe("createRecurringTransaction", () => {
     expect((await templatesOn(accountId))[0].isActive).toBe(false);
   });
 
+  it.each([
+    ["relatedAccountId", "Related account not found"],
+    ["transactionTypeId", "Transaction type not found"],
+    ["transactionCategoryId", "Category not found"],
+  ])("refuses a %s that doesn't exist, and writes nothing", async (field, message) => {
+    const accountId = await createAccount("Recurring action: missing reference");
+    const result = await createRecurringTransaction(emptyState, makeFormData(form(accountId, { [field]: "2147483646" })));
+    expect(result).toEqual({ success: false, errors: { [field]: [message] }, message: "Validation failed" });
+    expect(await templatesOn(accountId)).toHaveLength(0);
+  });
+
   it("refuses an account that doesn't exist", async () => {
     const result = await createRecurringTransaction(emptyState, makeFormData(form(2147483646)));
     expect(result.errors.accountId).toEqual(["Account not found"]);
@@ -366,6 +377,21 @@ describe("updateRecurringTransaction", () => {
       anchorDate: pausedSince,
       nextRunDate: shiftDays(today, 1),
     });
+  });
+
+  it("resumes onto a newer account from the date it resumes, not the date it paused (AC24)", async () => {
+    const accountId = await createAccount("Recurring action: resume, old account");
+    const newerId = await createAccount("Recurring action: resume, newer account", { openedDate: shiftDays(today, -5) });
+    const pausedSince = shiftDays(today, -10);
+    const id = await insertTemplate({ accountId, anchorDate: pausedSince, isActive: false });
+
+    const result = await updateRecurringTransaction(
+      emptyState,
+      makeFormData({ ...form(newerId, { nextRunDate: pausedSince, isActive: "true" }), recurringTransactionId: String(id) })
+    );
+
+    expect(result).toEqual({ success: true, errors: {}, message: "Recurring transaction updated; 1 transaction added" });
+    expect((await rowsOf(id)).map((r) => r.date)).toEqual([today]);
   });
 
   it("backfills from an explicit next date set while resuming (AC24)", async () => {

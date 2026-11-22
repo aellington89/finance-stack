@@ -6,8 +6,8 @@ import { auditedTransaction, type Tx } from "@/lib/db/audited";
 import { recurringTransactions } from "@/drizzle/schema";
 import {
   checkRecurringSchedule,
-  isScheduleChange,
   recurringTransactionFormSchema,
+  resolveSchedule,
   type RecurringScheduleProblem,
   type RecurringTransactionFormData,
   type StoredSchedule,
@@ -18,7 +18,7 @@ import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
 import { currentDate, materializeTemplate } from "@/lib/recurring/materialize";
-import { nextOccurrenceOnOrAfter, type Cadence } from "@/lib/recurring/schedule";
+import type { Cadence } from "@/lib/recurring/schedule";
 
 // Recurring transactions (Issue #135). A template is the six transaction
 // fields plus a schedule. The hourly scheduler creates its due occurrences
@@ -28,8 +28,9 @@ import { nextOccurrenceOnOrAfter, type Cadence } from "@/lib/recurring/schedule"
 // waiting up to an hour and tempting them to enter it by hand.
 //
 // The rules that need the database (today's date, the account's open/closed
-// window, the row being edited) are read inside the transaction and checked by
-// checkRecurringSchedule() in lib/validations/recurring-transaction.ts.
+// window, the rows the template names, the row being edited) are read inside
+// the transaction and checked by checkRecurringSchedule() in
+// lib/validations/recurring-transaction.ts.
 //
 // Module-private helpers only: a "use server" module may export nothing but
 // async actions, and validation-contract.test.ts holds each export to a
@@ -90,6 +91,30 @@ async function readAccountWindow(tx: Tx, accountId: number) {
   return row ? { openedDate: row.opened_date, closedDate: row.closed_date } : null;
 }
 
+/** Whether the related account, type and category the form names exist. */
+async function readReferences(tx: Tx, data: RecurringTransactionFormData) {
+  const relatedId = data.relatedAccountId ? Number(data.relatedAccountId) : null;
+  const result = await tx.execute<{
+    related_account: boolean;
+    transaction_type: boolean;
+    transaction_category: boolean;
+  }>(sql`
+    SELECT
+      ${relatedId}::int IS NULL
+        OR EXISTS (SELECT 1 FROM accounts WHERE account_id = ${relatedId}::int) AS related_account,
+      EXISTS (SELECT 1 FROM transaction_types
+              WHERE transaction_type_id = ${Number(data.transactionTypeId)}) AS transaction_type,
+      EXISTS (SELECT 1 FROM transaction_categories
+              WHERE transaction_category_id = ${Number(data.transactionCategoryId)}) AS transaction_category
+  `);
+  const row = result.rows[0];
+  return {
+    relatedAccount: row.related_account,
+    transactionType: row.transaction_type,
+    transactionCategory: row.transaction_category,
+  };
+}
+
 function submittedSchedule(
   data: RecurringTransactionFormData,
   isActive: boolean,
@@ -146,6 +171,7 @@ export async function createRecurringTransaction(
         stored: null,
         today,
         account: await readAccountWindow(tx, submitted.accountId),
+        references: await readReferences(tx, data),
       });
       if (problems.length > 0) {
         refused = problemsToState(problems);
@@ -249,29 +275,15 @@ export async function updateRecurringTransaction(
         stored,
         today,
         account: await readAccountWindow(tx, submitted.accountId),
+        references: await readReferences(tx, data),
       });
       if (problems.length > 0) {
         refused = problemsToState(problems);
         return;
       }
 
-      // A new cadence, interval or next date starts a new schedule from the
-      // next date. Otherwise the anchor stays, which is what brings a monthly
-      // 31st back to the 31st after a short month.
-      let anchorDate = stored.anchorDate;
-      let nextRunDate = stored.nextRunDate;
-      if (isScheduleChange(submitted, stored)) {
-        anchorDate = submitted.nextRunDate;
-        nextRunDate = submitted.nextRunDate;
-      } else if (!stored.isActive && submitted.isActive && stored.nextRunDate < today) {
-        // Resuming skips the dates missed while paused rather than backfilling
-        // them. A new next date in the same save takes the branch above and is
-        // honored as a deliberate backfill.
-        nextRunDate = nextOccurrenceOnOrAfter(
-          { cadence: stored.cadence, every: stored.every, anchorDate, endDate: submitted.endDate },
-          today
-        );
-      }
+      // A new schedule, the kept one, or a resume that skips the missed dates.
+      const { anchorDate, nextRunDate } = resolveSchedule(submitted, stored, today);
 
       await tx
         .update(recurringTransactions)

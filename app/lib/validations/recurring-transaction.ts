@@ -10,6 +10,7 @@ import {
   MAX_INTERVAL,
   MIN_INTERVAL,
   addMonthsToDate,
+  nextOccurrenceOnOrAfter,
   type Cadence,
 } from "@/lib/recurring/schedule";
 
@@ -23,7 +24,8 @@ import {
  * `z.string(...)` carries an authored message (docs/input-validation.md).
  *
  * `checkRecurringSchedule` checks what needs the database: today's date, the
- * account's open/closed window, and the row being edited. The action
+ * account's open/closed window, whether the other rows the template names
+ * exist, and the row being edited. The action
  * (lib/actions/recurring-transaction.ts) reads those facts inside its
  * transaction and hands them over; the rules are a pure
  * function, so every message is unit-tested without a database.
@@ -97,10 +99,15 @@ export interface RecurringScheduleFacts {
   today: string;
   /** The submitted account, or `null` when it doesn't exist. */
   account: { openedDate: string | null; closedDate: string | null } | null;
+  /**
+   * Whether the other rows the template names exist. `relatedAccount` is true
+   * when it names none.
+   */
+  references: { relatedAccount: boolean; transactionType: boolean; transactionCategory: boolean };
 }
 
 export interface RecurringScheduleProblem {
-  field: "accountId" | "nextRunDate" | "endDate";
+  field: "accountId" | "relatedAccountId" | "transactionTypeId" | "transactionCategoryId" | "nextRunDate" | "endDate";
   message: string;
 }
 
@@ -116,6 +123,34 @@ export function isScheduleChange(submitted: SubmittedSchedule, stored: StoredSch
     submitted.every !== stored.every ||
     submitted.nextRunDate !== stored.nextRunDate
   );
+}
+
+/** Whether an update resumes a paused template whose next date has passed. */
+function resumesLate(submitted: SubmittedSchedule, stored: StoredSchedule, today: string): boolean {
+  return !isScheduleChange(submitted, stored) && !stored.isActive && submitted.isActive && stored.nextRunDate < today;
+}
+
+/**
+ * The anchor and next date a save stores. A create, or a new cadence, interval
+ * or next date, starts a schedule from the submitted next date. Any other edit
+ * keeps the stored ones, which is what brings a monthly 31st back to the 31st
+ * after a short month. Resuming a paused template skips the dates it missed
+ * rather than backfilling them; a new next date in the same save is a schedule
+ * change instead, and is honored as a deliberate backfill.
+ */
+export function resolveSchedule(
+  submitted: SubmittedSchedule,
+  stored: StoredSchedule | null,
+  today: string
+): { anchorDate: string; nextRunDate: string } {
+  if (stored === null || isScheduleChange(submitted, stored)) {
+    return { anchorDate: submitted.nextRunDate, nextRunDate: submitted.nextRunDate };
+  }
+  if (resumesLate(submitted, stored, today)) {
+    const schedule = { cadence: stored.cadence, every: stored.every, anchorDate: stored.anchorDate, endDate: submitted.endDate };
+    return { anchorDate: stored.anchorDate, nextRunDate: nextOccurrenceOnOrAfter(schedule, today) };
+  }
+  return { anchorDate: stored.anchorDate, nextRunDate: stored.nextRunDate };
 }
 
 /**
@@ -135,6 +170,18 @@ export function checkRecurringSchedule(facts: RecurringScheduleFacts): Recurring
   }
 
   const problems: RecurringScheduleProblem[] = [];
+
+  // Checked here rather than left to the foreign keys, whose violation would
+  // reach the user as "Please try again", which a retry never fixes.
+  if (!facts.references.relatedAccount) {
+    problems.push({ field: "relatedAccountId", message: "Related account not found" });
+  }
+  if (!facts.references.transactionType) {
+    problems.push({ field: "transactionTypeId", message: "Transaction type not found" });
+  }
+  if (!facts.references.transactionCategory) {
+    problems.push({ field: "transactionCategoryId", message: "Category not found" });
+  }
 
   // A paused template may sit on a closed account (the scheduler pauses it
   // there itself), and can still be renamed or deleted. It can't run there.
@@ -169,11 +216,14 @@ export function checkRecurringSchedule(facts: RecurringScheduleFacts): Recurring
   }
 
   // Rows dated before the account opened never reach its balance history
-  // (rebuildAccountBalance clips to opened_date).
+  // (rebuildAccountBalance clips to opened_date). Checked against the next date
+  // the save will store: a resume skips ahead, so the date it paused on is moot.
+  const resumes = stored !== null && resumesLate(submitted, stored, today);
+  const nextToStore = resolveSchedule(submitted, stored, today).nextRunDate;
   if (
-    (newSchedule || accountChanged) &&
+    (newSchedule || accountChanged || resumes) &&
     account.openedDate !== null &&
-    submitted.nextRunDate < account.openedDate
+    nextToStore < account.openedDate
   ) {
     problems.push({
       field: "nextRunDate",

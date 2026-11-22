@@ -3,6 +3,7 @@ import {
   checkRecurringSchedule,
   isScheduleChange,
   recurringTransactionFormSchema,
+  resolveSchedule,
   type RecurringScheduleFacts,
   type StoredSchedule,
   type SubmittedSchedule,
@@ -137,6 +138,7 @@ const facts = (overrides: Partial<RecurringScheduleFacts> = {}): RecurringSchedu
   stored: null,
   today: "2026-11-14",
   account: { openedDate: "2020-01-01", closedDate: null },
+  references: { relatedAccount: true, transactionType: true, transactionCategory: true },
   ...overrides,
 });
 
@@ -153,6 +155,43 @@ describe("isScheduleChange", () => {
   );
 });
 
+describe("resolveSchedule", () => {
+  // Paused since Oct 1; today is Nov 14, so resuming lands on Dec 1.
+  const paused = stored({ nextRunDate: "2026-10-01", isActive: false });
+
+  it("starts a create's schedule on its next date", () => {
+    expect(resolveSchedule(submitted(), null, "2026-11-14")).toEqual({ anchorDate: "2026-12-01", nextRunDate: "2026-12-01" });
+  });
+
+  it("keeps the anchor and next date for an edit that isn't a schedule change", () => {
+    expect(resolveSchedule(submitted({ endDate: "2027-06-01" }), stored(), "2026-11-14")).toEqual({
+      anchorDate: "2026-06-01",
+      nextRunDate: "2026-12-01",
+    });
+  });
+
+  it("starts a new schedule from the next date when the schedule changes", () => {
+    expect(resolveSchedule(submitted({ every: 2 }), stored(), "2026-11-14")).toEqual({
+      anchorDate: "2026-12-01",
+      nextRunDate: "2026-12-01",
+    });
+  });
+
+  it("skips the dates missed while paused when resumed", () => {
+    expect(resolveSchedule(submitted({ nextRunDate: "2026-10-01" }), paused, "2026-11-14")).toEqual({
+      anchorDate: "2026-06-01",
+      nextRunDate: "2026-12-01",
+    });
+  });
+
+  it("keeps a paused template's dates while it stays paused", () => {
+    expect(resolveSchedule(submitted({ nextRunDate: "2026-10-01", isActive: false }), paused, "2026-11-14")).toEqual({
+      anchorDate: "2026-06-01",
+      nextRunDate: "2026-10-01",
+    });
+  });
+});
+
 describe("checkRecurringSchedule", () => {
   it("accepts a valid create", () => {
     expect(checkRecurringSchedule(facts())).toEqual([]);
@@ -161,6 +200,18 @@ describe("checkRecurringSchedule", () => {
   it("returns only the account problem when the account doesn't exist", () => {
     expect(checkRecurringSchedule(facts({ account: null }))).toEqual([
       { field: "accountId", message: "Account not found" },
+    ]);
+  });
+
+  it("refuses a related account, type or category that doesn't exist", () => {
+    expect(
+      checkRecurringSchedule(
+        facts({ references: { relatedAccount: false, transactionType: false, transactionCategory: false } })
+      )
+    ).toEqual([
+      { field: "relatedAccountId", message: "Related account not found" },
+      { field: "transactionTypeId", message: "Transaction type not found" },
+      { field: "transactionCategoryId", message: "Category not found" },
     ]);
   });
 
@@ -278,6 +329,18 @@ describe("checkRecurringSchedule", () => {
       expect(
         checkRecurringSchedule(facts({ account: lateOpen, submitted: submitted({ accountId: 2 }), stored: stored() }))
       ).toEqual([{ field: "nextRunDate", message: "Next date is before this account was opened." }]);
+    });
+
+    it("checks a resumed template against the date it resumes from, not the date it paused", () => {
+      const paused = stored({ nextRunDate: "2026-10-01", isActive: false });
+      const resume = submitted({ nextRunDate: "2026-10-01", accountId: 2 });
+      // Opened after the paused date but before Dec 1, where resuming lands.
+      expect(
+        checkRecurringSchedule(facts({ account: { openedDate: "2026-11-01", closedDate: null }, submitted: resume, stored: paused }))
+      ).toEqual([]);
+      expect(checkRecurringSchedule(facts({ account: lateOpen, submitted: resume, stored: paused }))).toEqual([
+        { field: "nextRunDate", message: "Next date is before this account was opened." },
+      ]);
     });
 
     it("doesn't apply to an unchanged schedule on the same account", () => {
