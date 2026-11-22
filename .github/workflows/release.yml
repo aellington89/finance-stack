@@ -196,10 +196,11 @@ jobs:
           FINANCE_IMPORTER_DB_PASSWORD: release-smoke-importer-pw
           FINANCE_BI_DB_PASSWORD: release-smoke-bi-pw
         run: |
-          # The role this step boots must be the one the bundle ships. Only the active
-          # assignment counts, and a missing line fails too; `|| true` keeps bash -e from
+          # The role this step boots must be the one the bundle ships. Only an active
+          # assignment counts, the last one wins (as in Compose and deploy.sh's
+          # env_file_get), and a missing line fails too; `|| true` keeps bash -e from
           # exiting on grep's no-match before the error below can print.
-          TEMPLATE_LINE="$(grep -m1 '^MB_DB_USER=' .env.example || true)"
+          TEMPLATE_LINE="$(grep '^MB_DB_USER=' .env.example | tail -n1 || true)"
           if [ -z "$TEMPLATE_LINE" ]; then
             echo "::error::deploy/.env.example has no MB_DB_USER= line; expected one naming '$MB_DB_USER'"
             exit 1

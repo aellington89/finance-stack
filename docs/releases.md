@@ -136,7 +136,14 @@ docker pull ghcr.io/aellington89/finance-app:8f3c1d2...   # same image, SHA-tagg
 **The publish happens after verification, never before.** The workflow builds all
 four images, boots the full stack from them, asserts `/api/health` reports the
 expected version and SHA, asserts the container healthchecks agree, and only then
-logs in to GHCR and pushes. The push steps carry no `if:` condition, so any
+logs in to GHCR and pushes. The same boot checks the Metabase metadata role too: its
+`MB_DB_USER` must equal `deploy/.env.example`'s before anything starts, and the
+role must be in `pg_roles` once the app answers, because a 200 proves neither
+([#260](https://github.com/aellington89/finance-stack/issues/260)). Nothing but a
+tag runs this step. To rehearse it on a machine with a stack already running,
+give the rehearsal its own project name, container names, and loopback ports
+(`ports: !override`): a project name alone shares the ports, so `/api/health`
+can answer from the live app. #260 has the full recipe. The push steps carry no `if:` condition, so any
 earlier failure skips them: an image that fails its own smoke test cannot reach
 the registry, and no GitHub Release is created either.
 
