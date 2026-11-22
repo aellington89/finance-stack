@@ -103,7 +103,7 @@ function buildWhereClause(filters: TransactionFilters, source: FilterSource): SQ
 }
 
 // The count and getUniqueDescriptions read `transactions`, not the view, to skip
-// its five joins (Issue #146). They return what the view would because every
+// its six joins (Issue #146). They return what the view would because every
 // inner join in v_transactions_full follows a NOT NULL foreign key, and its
 // only outer join (the related account) never drops a row.
 // tests/integration/queries/transactions.test.ts compares them with the view, on
