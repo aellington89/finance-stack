@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-21
+
 **Migration:** backward-compatible
 
 ### Added
@@ -22,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Today" is the database's date, as it is for balances. That date is in UTC, so it turns over in the early evening in US time zones. A template dated the 1st can appear on the evening of the 31st. [Database → Recurring transactions](docs/database.md#recurring-transactions) has the rules.
 
   The migration adds a `recurring_transactions` table, with an audit trigger. It also adds two nullable columns to `transactions`, `recurring_transaction_id` and `recurring_occurrence_date`, under a UNIQUE that makes "exactly once" a database guarantee. Metabase's `finance_bi` role can read the new table, and the importer's role can't. Rows the hourly check adds are audited as `recurring-schedule`; rows a save adds are attributed to the person saving. The previous app version never reads the table and never writes the new columns, so rolling back by re-pinning the previous image is safe: templates simply stop running.
+
+  **Upgrading migrates your data automatically**, and adds no rows: `./deploy.sh 1.6.0` dumps the databases into `backups/` before it applies the migration, and stops if that dump fails. If you upgrade some other way, take a dump first with `docker compose exec pg-backup /scripts/backup.sh` and note the file it writes. The migration briefly takes an exclusive lock on `transactions`. If it hangs, look for an idle-in-transaction session holding that table, such as an importer still running an old image.
 
 ### Changed
 
@@ -852,7 +856,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Unified, persistent sidebar navigation (shadcn Sidebar) connecting all application sections, with a Next.js route-group split for the landing page vs. the app shell ([Issue #77](https://github.com/aellington89/finance-stack/issues/77)).
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/aellington89/finance-stack/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aellington89/finance-stack/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/aellington89/finance-stack/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/aellington89/finance-stack/compare/v1.3.0...v1.4.0
