@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Metabase moves to v0.58.42, which mitigates CVE-2026-114938** (from v0.58.40). ([PR #457](https://github.com/aellington89/finance-stack/pull/457)) The image's start script now runs the JVM with `-XX:-UseBASE64Intrinsics`, which turns off the HotSpot Base64 intrinsics the CVE is in. Neither compose file sets `JAVA_OPTS`, and the script appends to it in any case, so nothing here needs to change. It's a patch on the 0.58 LTS line. It also brings 58.41, which runs one data-only change on Metabase's metadata database: table-level "view data" permission rows that only repeat their database-level row are folded into it. The permissions stay the same, and v0.58.40 starts on the result, so rolling back by re-pinning v0.58.40 is safe. 58.41 also requires write permission on the root collection to move or create items in it, which an admin always has, and it fixes linked dashboard filters that could time out or join on the wrong foreign key. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.
+
 ### Dependencies
 
 - **The chart and icon libraries took their minor bumps.** ([PR #459](https://github.com/aellington89/finance-stack/pull/459)) `recharts` 3.10.1 → 3.11.0 and `lucide-react` 1.72.0 → 1.74.0, both bundled into `finance-app`. recharts 3.11's headline feature, themes, is opt-in. Without a theme provider it keeps the defaults it has had since 2.x, and every chart here passes its own colors, so the dashboard looks the same. Every chart page was pixel-identical before and after on the test data. One fix users may notice: recharts no longer makes each of its internal drawing layers focusable. Tab now crosses a chart in one stop instead of a dozen, and clicking a chart no longer leaves a focus ring on it. lucide 1.74 renamed its `fold`, `unfold` and `centerline` icons to a new `axis` family, and the app uses none of them.
