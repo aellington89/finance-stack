@@ -112,7 +112,6 @@ in the process's "What's automated".
   branches.
 - The Claude review needs the `CLAUDE_CODE_OAUTH_TOKEN` and `DEV_PROCESS_SSH_KEY` secrets; it's
   skipped with a notice until both are set.
-- Once this lands: delete the `test` and `patch` branches.
 
 ## Terms
 
@@ -125,6 +124,5 @@ in the process's "What's automated".
 
 ## Known gaps
 
-- The Claude review waits for its two secrets.
 - Nothing checks that a Dependabot bump that ships has its `### Dependencies` entry before the
   release; `/release` asks for one.
