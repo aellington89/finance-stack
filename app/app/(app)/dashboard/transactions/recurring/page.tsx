@@ -1,9 +1,8 @@
 import { DashboardPageHeader } from "@/components/dashboard/page-header";
 import { DrilldownTabs } from "@/components/dashboard/drilldown-tabs";
 import { RecurringTransactionsCard } from "@/components/transactions/recurring-transactions-card";
-import { getRecurringTransactions } from "@/lib/queries/recurring-transactions";
+import { getRecurringToday, getRecurringTransactions } from "@/lib/queries/recurring-transactions";
 import { getTransactionFormOptions } from "@/lib/queries/transactions";
-import { currentDate } from "@/lib/recurring/materialize";
 import {
   createRecurringTransaction,
   deleteRecurringTransaction,
@@ -17,11 +16,11 @@ export const dynamic = "force-dynamic";
 
 export default async function TransactionsRecurringPage() {
   // Postgres's date, the "today" a save counts from, so the dialog's preview
-  // agrees with the save's "N transactions added".
-  const [templates, { accounts, types, categories }, today] = await Promise.all([
+  // agrees with the save's "N transactions added", and the instant it ends.
+  const [templates, { accounts, types, categories }, { today, endsAt }] = await Promise.all([
     getRecurringTransactions(),
     getTransactionFormOptions(),
-    currentDate(),
+    getRecurringToday(),
   ]);
 
   return (
@@ -36,6 +35,7 @@ export default async function TransactionsRecurringPage() {
         types={types}
         categories={categories}
         today={today}
+        todayEndsAt={endsAt}
         createAction={createRecurringTransaction}
         updateAction={updateRecurringTransaction}
         deleteAction={deleteRecurringTransaction}

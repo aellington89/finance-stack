@@ -9,6 +9,7 @@ import {
   type Cadence,
   type Schedule,
 } from "@/lib/recurring/schedule";
+import { formatLongDate } from "@/lib/format/dates";
 
 /**
  * What the Recurring tab shows about a template's schedule (Issue #135): its
@@ -85,9 +86,25 @@ export type Preview =
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function nextDay(date: string): string {
+const DAY_MS = 86_400_000;
+
+function addDays(date: string, days: number): string {
   const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * The database's "today" at `now`, from the date the page read and the instant
+ * that date ends in the database's time zone (`getRecurringToday()`). A tab
+ * left open past that instant moves on by whole days, so a dialog opened then
+ * previews from the date the save will use. Exact when Postgres runs in UTC, as
+ * the stock image does; in a zone with daylight saving, a tab open across a
+ * change can be an hour out at a later midnight. Call it from an event
+ * handler, since `now` defaults to the clock.
+ */
+export function todayAsOf(today: string, endsAt: number, now: number = Date.now()): string {
+  if (!(now >= endsAt)) return today;
+  return addDays(today, 1 + Math.floor((now - endsAt) / DAY_MS));
 }
 
 /**
@@ -133,11 +150,28 @@ export function previewSchedule(input: PreviewInput): Preview {
     if (!isOccurrence(schedule, next)) return { kind: "incomplete" };
 
     const dueNow = countOccurrencesThrough(schedule, next, input.today);
-    const from = next > input.today ? next : nextDay(input.today);
+    const from = next > input.today ? next : addDays(input.today, 1);
     return { kind: "scheduled", dueNow, upcoming: nextOccurrences(schedule, from, 3) };
   } catch {
     // A date that matches the pattern but isn't a calendar date (Feb 30), or a
     // backfill too long to count: the form's own validation says which.
     return { kind: "incomplete" };
   }
+}
+
+/** The dialog's line under the schedule: what saving will do, or nothing yet. */
+export function previewSentence(preview: Preview): string {
+  if (preview.kind === "incomplete") return "";
+  if (preview.kind === "paused") return "Paused: nothing is added until it is made active again.";
+  const due =
+    preview.dueNow === 0
+      ? ""
+      : preview.dueNow === 1
+        ? "1 date is on or before today, and is added when you save. "
+        : `${preview.dueNow} dates are on or before today, and are added when you save. `;
+  const next =
+    preview.upcoming.length > 0
+      ? `Next: ${preview.upcoming.map(formatLongDate).join(" · ")}`
+      : "No dates after today before it ends.";
+  return due + next;
 }

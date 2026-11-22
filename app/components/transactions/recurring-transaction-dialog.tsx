@@ -29,13 +29,15 @@ import {
   ComboboxField,
   type LookupOption,
 } from "@/components/transactions/combobox-fields";
-import { previewSchedule } from "@/components/transactions/recurring-schedule-view";
+import { previewSchedule, previewSentence } from "@/components/transactions/recurring-schedule-view";
 import { CADENCES, cadenceUnit, type Cadence } from "@/lib/recurring/schedule";
-import { formatLongDate } from "@/lib/format/dates";
 import type { ActionState } from "@/lib/actions/utils";
 import type { RecurringTransactionRow } from "@/lib/queries/recurring-transactions";
 
 const initialState: ActionState = { success: false, errors: {}, message: "" };
+
+/** How long typing must pause before the preview is announced. */
+const ANNOUNCE_DELAY_MS = 600;
 
 interface RecurringTransactionDialogProps {
   open: boolean;
@@ -147,6 +149,16 @@ export function RecurringTransactionDialog({
       : null,
     today,
   });
+
+  // The line under the schedule changes on every key typed into a date or the
+  // interval. A screen reader is told only once typing pauses, through its own
+  // status region, so it doesn't read out each half-typed schedule.
+  const sentence = previewSentence(preview);
+  const [announced, setAnnounced] = useState(sentence);
+  useEffect(() => {
+    const timer = setTimeout(() => setAnnounced(sentence), ANNOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [sentence]);
 
   useEffect(() => {
     if (!state.message) return;
@@ -326,17 +338,13 @@ export function RecurringTransactionDialog({
             </div>
           )}
 
-          <p className="text-sm text-muted-foreground" data-testid="rt-preview" aria-live="polite">
-            {preview.kind === "paused" && "Paused: nothing is added until it is made active again."}
-            {preview.kind === "scheduled" && (
-              <>
-                {preview.dueNow > 0 &&
-                  `${preview.dueNow} ${preview.dueNow === 1 ? "date is" : "dates are"} on or before today, and ${preview.dueNow === 1 ? "is" : "are"} added when you save. `}
-                {preview.upcoming.length > 0
-                  ? `Next: ${preview.upcoming.map(formatLongDate).join(" · ")}`
-                  : "No dates after today before it ends."}
-              </>
-            )}
+          {/* Hidden from screen readers, which read the status below instead:
+              the same sentence, once typing pauses. */}
+          <p className="text-sm text-muted-foreground" data-testid="rt-preview" aria-hidden="true">
+            {sentence}
+          </p>
+          <p role="status" className="sr-only">
+            {announced}
           </p>
 
           <DialogFooter>

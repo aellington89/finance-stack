@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from "vitest";
 import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { accounts, recurringTransactions } from "@/drizzle/schema";
-import { getRecurringTransactions } from "@/lib/queries/recurring-transactions";
+import { sql } from "drizzle-orm";
+import { getRecurringToday, getRecurringTransactions } from "@/lib/queries/recurring-transactions";
+import { currentDate } from "@/lib/recurring/materialize";
 
 // The Recurring tab's read (Issue #135).
 
@@ -112,5 +114,21 @@ describe("getRecurringTransactions (AC16)", () => {
       relatedAccountName: null,
     });
     expect(rows[3]).toMatchObject({ isActive: true, nextRunDate: "2031-02-01", endDate: "2031-01-15" });
+  });
+});
+
+describe("getRecurringToday", () => {
+  it("is the save's today, and the instant that day ends in the database's time zone", async () => {
+    const { today, endsAt } = await getRecurringToday();
+    expect(today).toBe(await currentDate());
+
+    const expected = await db.execute<{ ends_at: string }>(
+      sql`SELECT ((CURRENT_DATE + 1)::timestamptz)::text AS ends_at`
+    );
+    const now = Date.now();
+    expect(endsAt).toBe(new Date(expected.rows[0].ends_at.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")).getTime());
+    expect(endsAt).toBeGreaterThan(now);
+    // At most a day and a DST hour ahead.
+    expect(endsAt - now).toBeLessThanOrEqual(25 * 3_600_000);
   });
 });

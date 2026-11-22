@@ -27,6 +27,7 @@ import { RecurringTransactionDialog } from "@/components/transactions/recurring-
 import {
   STATUS_LABELS,
   recurringStatus,
+  todayAsOf,
 } from "@/components/transactions/recurring-schedule-view";
 import { describeSchedule } from "@/lib/recurring/schedule";
 import { formatCurrency } from "@/lib/format/financial";
@@ -42,11 +43,12 @@ interface RecurringTransactionsCardProps {
   types: LookupOption[];
   categories: LookupOption[];
   /**
-   * Postgres's CURRENT_DATE as the page read it (`currentDate()`), so the
-   * dialog's preview counts what the save will add. Each save revalidates the
-   * page, which reads it again.
+   * Postgres's CURRENT_DATE as the page read it (`getRecurringToday()`), so the
+   * dialog's preview counts what the save will add, and the instant that date
+   * ends, in epoch milliseconds.
    */
   today: string;
+  todayEndsAt: number;
   createAction: Action;
   updateAction: Action;
   deleteAction: Action;
@@ -67,6 +69,7 @@ export function RecurringTransactionsCard({
   types,
   categories,
   today,
+  todayEndsAt,
   createAction,
   updateAction,
   deleteAction,
@@ -74,6 +77,18 @@ export function RecurringTransactionsCard({
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<RecurringTransactionRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RecurringTransactionRow | null>(null);
+  // Read when a dialog opens, not at render, so a tab left open past the
+  // database's midnight previews from the date the save will use.
+  const [dialogToday, setDialogToday] = useState(today);
+  const refreshToday = () => setDialogToday(todayAsOf(today, todayEndsAt));
+  const openAdd = () => {
+    refreshToday();
+    setAddOpen(true);
+  };
+  const openEdit = (t: RecurringTransactionRow) => {
+    refreshToday();
+    setEditTarget(t);
+  };
   // Stable, because the dialog's toast effect depends on it: a new function
   // on each render would toast the same result again.
   const closeEdit = useCallback((open: boolean) => {
@@ -91,7 +106,7 @@ export function RecurringTransactionsCard({
             while the app was down is added when it is back.
           </CardDescription>
           <CardAction>
-            <Button variant="ghost" size="icon-xs" aria-label="Add recurring transaction" onClick={() => setAddOpen(true)}>
+            <Button variant="ghost" size="icon-xs" aria-label="Add recurring transaction" onClick={openAdd}>
               <Plus className="size-4" />
             </Button>
           </CardAction>
@@ -157,7 +172,7 @@ export function RecurringTransactionsCard({
                               variant="ghost"
                               size="icon-xs"
                               aria-label={`Edit recurring transaction ${t.transactionDescription}`}
-                              onClick={() => setEditTarget(t)}
+                              onClick={() => openEdit(t)}
                             >
                               <Pencil className="size-3.5" />
                             </Button>
@@ -191,7 +206,7 @@ export function RecurringTransactionsCard({
           accounts={accounts}
           types={types}
           categories={categories}
-          today={today}
+          today={dialogToday}
         />
       )}
 
@@ -205,7 +220,7 @@ export function RecurringTransactionsCard({
           types={types}
           categories={categories}
           template={editTarget}
-          today={today}
+          today={dialogToday}
         />
       )}
 

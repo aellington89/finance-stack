@@ -200,7 +200,7 @@ finance-stack/
 │   │   ├── queries/balance-transfer-payoff.ts # Pure payoff math: the balance split between transfers, months left, pace, required, projection, status; unit-tested (#417, #427)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
-│   │   ├── queries/recurring-transactions.ts # The Recurring tab's template list (#135)
+│   │   ├── queries/recurring-transactions.ts # The Recurring tab's template list, and the database's today with when it ends (#135)
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │   │   ├── queries/date-range.ts         # Shared dateFrom/dateTo URL-param parsing + 30-day default
 │   │   ├── queries/categories.ts         # Queries for all four reference-data tables

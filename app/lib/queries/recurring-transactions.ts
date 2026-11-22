@@ -105,3 +105,19 @@ export async function getRecurringTransactions(): Promise<RecurringTransactionRo
     isActive: r.is_active,
   }));
 }
+
+/**
+ * The "today" a save counts from (Postgres's CURRENT_DATE, as `currentDate()`
+ * in lib/recurring/materialize.ts reads it), and the instant it ends, in epoch
+ * milliseconds. `CURRENT_DATE + 1` cast to timestamptz is the next midnight in
+ * the session's time zone, the moment CURRENT_DATE changes. The tab uses it to
+ * move its date on when it's left open past that moment (`todayAsOf()`).
+ */
+export async function getRecurringToday(): Promise<{ today: string; endsAt: number }> {
+  const result = await db.execute<{ today: string; ends_at: string }>(sql`
+    SELECT CURRENT_DATE::text AS today,
+           (extract(epoch FROM (CURRENT_DATE + 1)::timestamptz) * 1000)::bigint::text AS ends_at
+  `);
+  const row = result.rows[0];
+  return { today: row.today, endsAt: Number(row.ends_at) };
+}

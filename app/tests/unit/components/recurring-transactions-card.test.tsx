@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecurringTransactionsCard } from "@/components/transactions/recurring-transactions-card";
@@ -43,6 +43,9 @@ const categories = [{ id: 3, name: "Housing" }];
 // Postgres's CURRENT_DATE as the page read it: the add dialog's default next
 // date and the preview's "today".
 const TODAY = "2026-11-14";
+// The instant the database's 2026-11-14 ends; the tests run before it unless
+// they move the clock.
+const TODAY_ENDS_AT = Date.UTC(2026, 10, 15);
 
 const renderCard = (
   templates: RecurringTransactionRow[],
@@ -55,6 +58,7 @@ const renderCard = (
       types={types}
       categories={categories}
       today={TODAY}
+      todayEndsAt={TODAY_ENDS_AT}
       createAction={actions.createAction ?? ok()}
       updateAction={actions.updateAction ?? ok()}
       deleteAction={actions.deleteAction ?? ok()}
@@ -65,6 +69,19 @@ const hiddenFields = (dialog: HTMLElement) =>
   Object.fromEntries(
     Array.from(dialog.querySelectorAll<HTMLInputElement>('form input[type="hidden"]')).map((i) => [i.name, i.value])
   );
+
+// The card reads Date.now() when a dialog opens, to move its date on past the
+// database's midnight. Shift the clock to an hour before TODAY ends, still
+// ticking, so user-event's and waitFor's timers run as usual.
+beforeEach(() => {
+  const realNow = Date.now.bind(Date);
+  const shift = realNow() - (TODAY_ENDS_AT - 3_600_000);
+  vi.spyOn(Date, "now").mockImplementation(() => realNow() - shift);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("RecurringTransactionsCard", () => {
   it("explains the feature when there are none (AC15)", () => {
@@ -123,6 +140,41 @@ describe("RecurringTransactionsCard", () => {
     expect(within(dialog).getByTestId("rt-preview")).toHaveTextContent(
       "1 date is on or before today, and is added when you save. Next: Dec 14, 2026 · Jan 14, 2027 · Feb 14, 2027"
     );
+  });
+
+  it("opens from the database's next day once the page's day has ended", async () => {
+    // The tab was left open: the page read 2026-11-14, and it's now a day and
+    // a bit past the end of that day.
+    vi.spyOn(Date, "now").mockReturnValue(TODAY_ENDS_AT + 86_400_000 + 60_000);
+    const user = userEvent.setup();
+    renderCard([]);
+    await user.click(screen.getByRole("button", { name: "Add recurring transaction" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add recurring transaction" });
+    expect(within(dialog).getByLabelText("Next date *")).toHaveValue("2026-11-16");
+    expect(within(dialog).getByTestId("rt-preview")).toHaveTextContent("1 date is on or before today");
+  });
+
+  it("announces the preview to screen readers once typing pauses, not on each key (AC18)", async () => {
+    const user = userEvent.setup();
+    renderCard([]);
+    await user.click(screen.getByRole("button", { name: "Add recurring transaction" }));
+    const dialog = await screen.findByRole("dialog");
+    const status = within(dialog).getByRole("status");
+    const opened = status.textContent;
+    expect(opened).toBe(within(dialog).getByTestId("rt-preview").textContent);
+    // The visible line is for sight only, so the status is the one copy a
+    // screen reader reads.
+    expect(within(dialog).getByTestId("rt-preview")).toHaveAttribute("aria-hidden", "true");
+
+    const every = within(dialog).getByLabelText("Number of units between dates");
+    await user.clear(every);
+    await user.type(every, "3");
+    // Straight after the keys, the visible preview has moved but the status hasn't.
+    expect(within(dialog).getByTestId("rt-preview")).toHaveTextContent("Next: Feb 14, 2027 · May 14, 2027 · Aug 14, 2027");
+    expect(status.textContent).toBe(opened);
+
+    await waitFor(() => expect(status).toHaveTextContent("Next: Feb 14, 2027 · May 14, 2027 · Aug 14, 2027"));
   });
 
   it("updates the preview as the schedule is typed (AC18)", async () => {
