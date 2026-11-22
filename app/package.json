@@ -57,9 +57,20 @@
     "postcss advisory because postcss is also how nanoid reaches the runtime tree:",
     "8.5.23 ranges on nanoid ^3.3.16, and 3.3.16 carries GHSA-2v37-7h3g-55p8 (HIGH).",
     "8.5.26 is the first release to require nanoid ^3.3.17. Keep the floor at or",
-    "above 8.5.26 so a fresh resolve cannot land back on a vulnerable nanoid."
+    "above 8.5.26 so a fresh resolve cannot land back on a vulnerable nanoid.",
+    "@esbuild-kit/core-utils: drizzle-kit 0.31 still declares the deprecated",
+    "@esbuild-kit/esm-loader, whose core-utils pins esbuild ~0.18.20, and every",
+    "esbuild <=0.24.2 carries GHSA-67mh-4wv8-2f99 (MODERATE: its dev server sends",
+    "Access-Control-Allow-Origin: *). Nothing loads it: drizzle-kit's code runs",
+    "its bundled tsx, and core-utils only calls transform/transformSync, never",
+    "serve. The override exists so the old copy stops shipping in the migrate",
+    "image and stops raising the alert; with it, core-utils shares the hoisted",
+    "esbuild. Drop it once drizzle-kit stops declaring @esbuild-kit (1.0 does)."
   ],
   "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": ">=0.25.0"
+    },
     "postcss": "^8.5.26",
     "sharp": "^0.35.3"
   },
