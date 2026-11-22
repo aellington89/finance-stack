@@ -112,7 +112,8 @@ describe("RecurringTransactionsCard", () => {
     const row = screen.getByTestId("recurring-4");
     expect(within(row).getByText(label)).toBeInTheDocument();
     expect(row).not.toHaveTextContent("Dec 1, 2026");
-    expect(row).toHaveTextContent("—");
+    // The Next cell itself: "Paused — account closed" has a dash of its own.
+    expect(within(row).getAllByRole("cell")[4]).toHaveTextContent(/^—$/);
   });
 
   it("shows an active template on a closed account as Account closed, with its next date (AC16)", () => {

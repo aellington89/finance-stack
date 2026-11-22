@@ -1,8 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { accounts, recurringTransactions } from "@/drizzle/schema";
-import { sql } from "drizzle-orm";
 import { getRecurringToday, getRecurringTransactions } from "@/lib/queries/recurring-transactions";
 import { currentDate } from "@/lib/recurring/materialize";
 
