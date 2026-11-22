@@ -156,6 +156,7 @@ finance-stack/
 │   │       ├── transaction-discard-dialog.tsx # Discard-unsaved-changes confirmation when switching inline rows (#148, #241)
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       ├── combobox-fields.tsx       # Account/type/category pickers, moved out of the transaction form to be shared (#135)
+│   │       ├── recurring-schedule-view.ts # Pure status + save preview for the Recurring tab, mirroring the save's rules; unit-tested (#135)
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
 │   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name): SEED_REFERENCES drives the /api/health/seed-data drift check, SHIPPED_ROWS drives row protection (#109)
@@ -197,6 +198,7 @@ finance-stack/
 │   │   ├── queries/balance-transfer-payoff.ts # Pure payoff math: the balance split between transfers, months left, pace, required, projection, status; unit-tested (#417, #427)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
+│   │   ├── queries/recurring-transactions.ts # The Recurring tab's template list (#135)
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │   │   ├── queries/date-range.ts         # Shared dateFrom/dateTo URL-param parsing + 30-day default
 │   │   ├── queries/categories.ts         # Queries for all four reference-data tables
@@ -216,7 +218,7 @@ finance-stack/
 │   │   ├── unit/                         # Unit tests (no DB required)
 │   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range, id, search-params, recurring-transaction)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
-│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
+│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros, recurring schedule view)
 │   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
 │   │   │   ├── next-config-headers.test.ts  #   Security-header + CSP contract — the CI gate for #182
 │   │   │   └── lib/                      #   Library utility tests
@@ -238,7 +240,7 @@ finance-stack/
 │   │       ├── auth/                     #   Credential verification and sign-in rate limiting against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
 │   │       ├── recurring/                #   The recurring-transaction materializer against Postgres: exactly-once, backfill, ends, closed accounts, date parity, the link pair's constraints (#135)
-│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance and its lock, drilldowns)
+│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance and its lock, drilldowns, the recurring-transactions list)
 │   ├── e2e/                              # Playwright end-to-end suite (#141)
 │   │   ├── money-path.spec.ts            #   The one spec: account → transaction → rebuild → dashboard KPI
 │   │   ├── auth.setup.ts                 #   Signs in once, saves the session as storageState
