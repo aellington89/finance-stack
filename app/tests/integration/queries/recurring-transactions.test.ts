@@ -1,9 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { accountBalanceHistory, accounts, recurringTransactions, transactions } from "@/drizzle/schema";
+import { accounts, recurringTransactions } from "@/drizzle/schema";
 import { getRecurringTransactions } from "@/lib/queries/recurring-transactions";
-import { runDueTemplates } from "@/lib/recurring/materialize";
 
 // The Recurring tab's read (Issue #135).
 
@@ -20,14 +19,12 @@ async function createAccount(name: string, closedDate: string | null = null): Pr
 
 afterEach(async () => {
   await db.delete(recurringTransactions).where(inArray(recurringTransactions.accountId, createdAccountIds));
-  await db.delete(transactions).where(inArray(transactions.accountId, createdAccountIds));
-  await db.delete(accountBalanceHistory).where(inArray(accountBalanceHistory.accountId, createdAccountIds));
   await db.delete(accounts).where(inArray(accounts.accountId, createdAccountIds));
   createdAccountIds.length = 0;
 });
 
 describe("getRecurringTransactions (AC16)", () => {
-  it("joins the names, carries the stored fields, and finds the last created date", async () => {
+  it("joins the names and carries the stored fields", async () => {
     const accountId = await createAccount("Recurring query: checking");
     const relatedId = await createAccount("Recurring query: savings", "2030-01-01");
     const [{ id }] = await db
@@ -41,12 +38,11 @@ describe("getRecurringTransactions (AC16)", () => {
         transactionCategoryId: 1,
         cadence: "weekly",
         intervalCount: 2,
-        anchorDate: "2020-05-29",
-        nextRunDate: "2020-05-29",
-        endDate: "2020-12-31",
+        anchorDate: "2030-05-29",
+        nextRunDate: "2030-06-12",
+        endDate: "2030-12-31",
       })
       .returning({ id: recurringTransactions.recurringTransactionId });
-    await runDueTemplates({ today: "2020-06-12" });
 
     const row = (await getRecurringTransactions()).find((r) => r.recurringTransactionId === id);
 
@@ -65,18 +61,23 @@ describe("getRecurringTransactions (AC16)", () => {
       transactionCategory: expect.any(String),
       cadence: "weekly",
       intervalCount: 2,
-      anchorDate: "2020-05-29",
-      nextRunDate: "2020-06-26",
-      endDate: "2020-12-31",
+      anchorDate: "2030-05-29",
+      nextRunDate: "2030-06-12",
+      endDate: "2030-12-31",
       isActive: true,
-      lastCreatedOn: "2020-06-12",
     });
   });
 
-  it("lists active templates first, then by next date, and reports a closed account", async () => {
+  it("lists the templates that still run first, then the Ended and paused ones, each by next date", async () => {
     const accountId = await createAccount("Recurring query: order");
     const closedId = await createAccount("Recurring query: closed", "2020-01-01");
-    const insert = (values: { nextRunDate: string; isActive?: boolean; accountId?: number }) =>
+    const insert = (values: {
+      nextRunDate: string;
+      anchorDate?: string;
+      endDate?: string;
+      isActive?: boolean;
+      accountId?: number;
+    }) =>
       db
         .insert(recurringTransactions)
         .values({
@@ -86,8 +87,9 @@ describe("getRecurringTransactions (AC16)", () => {
           transactionTypeId: 1,
           transactionCategoryId: 1,
           cadence: "monthly",
-          anchorDate: values.nextRunDate,
+          anchorDate: values.anchorDate ?? values.nextRunDate,
           nextRunDate: values.nextRunDate,
+          endDate: values.endDate ?? null,
           isActive: values.isActive ?? true,
         })
         .returning({ id: recurringTransactions.recurringTransactionId })
@@ -96,16 +98,19 @@ describe("getRecurringTransactions (AC16)", () => {
     const late = await insert({ nextRunDate: "2031-03-01" });
     const paused = await insert({ nextRunDate: "2031-01-01", isActive: false, accountId: closedId });
     const early = await insert({ nextRunDate: "2031-02-01" });
+    // Still active, but its next date is past its end: Ended.
+    const ended = await insert({ anchorDate: "2031-01-01", nextRunDate: "2031-02-01", endDate: "2031-01-15" });
 
-    const rows = (await getRecurringTransactions()).filter((r) => [late, paused, early].includes(r.recurringTransactionId));
+    const ids = [late, paused, early, ended];
+    const rows = (await getRecurringTransactions()).filter((r) => ids.includes(r.recurringTransactionId));
 
-    expect(rows.map((r) => r.recurringTransactionId)).toEqual([early, late, paused]);
+    expect(rows.map((r) => r.recurringTransactionId)).toEqual([early, late, paused, ended]);
     expect(rows[2]).toMatchObject({
       isActive: false,
       accountClosedDate: "2020-01-01",
       relatedAccountId: null,
       relatedAccountName: null,
-      lastCreatedOn: null,
     });
+    expect(rows[3]).toMatchObject({ isActive: true, nextRunDate: "2031-02-01", endDate: "2031-01-15" });
   });
 });

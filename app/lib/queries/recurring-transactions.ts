@@ -24,8 +24,6 @@ export interface RecurringTransactionRow {
   nextRunDate: string;
   endDate: string | null;
   isActive: boolean;
-  /** The latest scheduled date this template has created a row for, or null. */
-  lastCreatedOn: string | null;
 }
 
 interface Row {
@@ -48,13 +46,13 @@ interface Row {
   next_run_date: string;
   end_date: string | null;
   is_active: boolean;
-  last_created_on: string | null;
 }
 
 /**
- * Every template, active ones first and then by next date. `lastCreatedOn`
- * is a per-template probe of the (recurring_transaction_id,
- * recurring_occurrence_date) UNIQUE index, so it costs one index lookup each.
+ * Every template, each group by next date: first the ones that still run (active
+ * and not past their end date), then the Ended and paused ones. An Ended
+ * template keeps is_active = true, so the flag alone would list it among the
+ * running ones. "Ended" is the test recurringStatus() makes.
  */
 export async function getRecurringTransactions(): Promise<RecurringTransactionRow[]> {
   const result = await db.execute<Row>(sql`
@@ -75,16 +73,15 @@ export async function getRecurringTransactions(): Promise<RecurringTransactionRo
            r.anchor_date::text AS anchor_date,
            r.next_run_date::text AS next_run_date,
            r.end_date::text AS end_date,
-           r.is_active,
-           (SELECT max(t.recurring_occurrence_date)::text
-              FROM transactions t
-             WHERE t.recurring_transaction_id = r.recurring_transaction_id) AS last_created_on
+           r.is_active
     FROM recurring_transactions r
     JOIN accounts a ON a.account_id = r.account_id
     LEFT JOIN accounts ra ON ra.account_id = r.related_account_id
     JOIN transaction_types tt ON tt.transaction_type_id = r.transaction_type_id
     JOIN transaction_categories tc ON tc.transaction_category_id = r.transaction_category_id
-    ORDER BY r.is_active DESC, r.next_run_date, r.recurring_transaction_id
+    ORDER BY (r.is_active AND (r.end_date IS NULL OR r.next_run_date <= r.end_date)) DESC,
+             r.next_run_date,
+             r.recurring_transaction_id
   `);
 
   return result.rows.map((r) => ({
@@ -106,6 +103,5 @@ export async function getRecurringTransactions(): Promise<RecurringTransactionRo
     nextRunDate: r.next_run_date,
     endDate: r.end_date,
     isActive: r.is_active,
-    lastCreatedOn: r.last_created_on,
   }));
 }

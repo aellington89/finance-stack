@@ -33,8 +33,14 @@ export const STATUS_LABELS: Record<RecurringStatus, string> = {
 /**
  * Ended first, since a template past its end date does nothing whether it's
  * paused or not. Then a closed account, which explains a pause the scheduler
- * made itself. An active template on a closed account still reads "Account
- * closed": it stops at the close date.
+ * made itself.
+ *
+ * "Account closed" is a fifth status beside the spec's four. It's an active
+ * template on a closed account, which still creates the dates before the close
+ * date, then pauses at its first due date on or after it. Until then, which can
+ * be a whole cadence away, it neither runs freely nor has paused. A close date
+ * counts once it's set, even a future one, as it does when the save refuses to
+ * activate a template on that account.
  */
 export function recurringStatus(t: {
   isActive: boolean;
@@ -63,7 +69,12 @@ export interface PreviewInput {
     nextRunDate: string;
     isActive: boolean;
   } | null;
-  /** The viewer's local date. The server uses Postgres's, so this is a guide. */
+  /**
+   * Postgres's CURRENT_DATE as the page read it (`currentDate()` in
+   * lib/recurring/materialize.ts), the "today" the save uses. Then the count
+   * agrees with the save's "N transactions added" message, which the viewer's
+   * local date wouldn't in a US evening, when it's already tomorrow in UTC.
+   */
   today: string;
 }
 
