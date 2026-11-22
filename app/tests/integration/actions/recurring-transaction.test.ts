@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accountBalanceHistory,
@@ -99,6 +99,12 @@ async function templatesOn(accountId: number) {
   return db.select().from(recurringTransactions).where(eq(recurringTransactions.accountId, accountId));
 }
 
+/** The highest audit_id so far; int8 arrives from pg as a string. */
+async function maxAuditId(): Promise<number> {
+  const [{ max }] = await db.select({ max: sql<string>`coalesce(max(audit_id), 0)` }).from(auditLog);
+  return Number(max);
+}
+
 async function rowsOf(templateId: number) {
   return db
     .select({ id: transactions.transactionId, date: transactions.transactionDate, amount: transactions.amount })
@@ -151,6 +157,10 @@ describe("createRecurringTransaction", () => {
 
   it("creates what is already due in the same save, attributed to the user (AC5, AC19, AC27)", async () => {
     const accountId = await createAccount("Recurring action: backfill on save");
+    // Read only the audit rows this save writes. A transaction id isn't unique
+    // across audit history: a test database whose sequence was reset reuses
+    // ids that older rows still name (audit.test.ts uses the same watermark).
+    const auditWatermark = await maxAuditId();
     const result = await createRecurringTransaction(
       emptyState,
       makeFormData(form(accountId, { nextRunDate: shiftDays(today, -2), amount: "-30.00" }))
@@ -170,10 +180,18 @@ describe("createRecurringTransaction", () => {
     expect(balance.cumulative).toBe("-90.00");
 
     // Attributed to the person saving, not the scheduler, with the link.
-    const [audit] = await db
+    const audits = await db
       .select()
       .from(auditLog)
-      .where(and(eq(auditLog.tableName, "transactions"), eq(auditLog.rowPk, String(rows[0].id))));
+      .where(
+        and(
+          eq(auditLog.tableName, "transactions"),
+          eq(auditLog.rowPk, String(rows[0].id)),
+          gt(auditLog.auditId, auditWatermark)
+        )
+      );
+    expect(audits).toHaveLength(1);
+    const [audit] = audits;
     expect(audit).toMatchObject({ actorSource: "app", actorLabel: "integration-test-user", action: "INSERT" });
     expect(audit.afterData).toMatchObject({
       recurring_transaction_id: template.recurringTransactionId,
