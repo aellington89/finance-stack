@@ -136,7 +136,7 @@ function buildExtra(err: LogFields): LogFields {
  * or in the call site's context — never in the raw error.
  */
 function buildEvent(id: string, err: LogFields, context: ReportContext): unknown {
-  const { route, action, digest, user_id: userId, ...rest } = context;
+  const { route, action, job, digest, user_id: userId, ...rest } = context;
 
   return {
     event_id: id,
@@ -150,7 +150,7 @@ function buildEvent(id: string, err: LogFields, context: ReportContext): unknown
     exception: { values: [buildException(err)] },
     // Tags are the indexed, searchable dimensions. Everything else the call site
     // passed (method, path, route_type, render_source …) stays queryable in extra.
-    tags: { route, action, digest },
+    tags: { route, action, job, digest },
     user: userId ? { id: userId } : undefined,
     extra: { ...rest, ...buildExtra(err) },
   };

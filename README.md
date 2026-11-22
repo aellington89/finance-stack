@@ -177,7 +177,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Contributing](CONTRIBUTING.md) — dev workflow, conventions, and the release process
 - [Architecture](docs/ARCHITECTURE.md) — the services and their profiles, the database roles, and how data flows: an app request and the audit log, imports, backups, releases, and the data model
 - [Authentication](docs/auth.md) — the auth model, first-user CLI, `AUTH_SECRET`, and password resets
-- [Database](docs/database.md) — schema, views, balance history, first-launch init, and the test database
+- [Database](docs/database.md) — schema, views, balance history, recurring transactions, first-launch init, and the test database
 - [Deployment & Exposure](docs/deployment.md) — installing and upgrading a release, rollback and database restore, and the trusted-network vs public-internet posture
 - [Secrets](docs/secrets.md) — every credential, how production sources them, rotation, and what keeps them out of the repo and the images
 - [Audit Log](docs/audit-log.md) — how mutations are recorded, who gets attributed, reading the log, and retention

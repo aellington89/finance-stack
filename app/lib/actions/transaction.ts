@@ -13,7 +13,12 @@ import {
   type TransactionFormData,
 } from "@/lib/validations/transaction";
 import { parseEntityId } from "@/lib/validations/id";
-import { rebuildAccountBalance } from "@/lib/queries/rebuild-balance";
+import {
+  lockAccountBalance,
+  rebuildAccountBalance,
+  rebuildAccountBalances,
+  sortedAccountIds,
+} from "@/lib/queries/rebuild-balance";
 import { type ActionState, buildFieldErrors } from "@/lib/actions/utils";
 import { actionFailure } from "@/lib/actions/failure";
 import { requireActionUser } from "@/lib/auth/guard";
@@ -68,11 +73,9 @@ async function insertTransactionAndRebuild(
     duplicatedFromTransactionId,
   });
 
-  await rebuildAccountBalance(tx, accountId);
-
-  if (relatedAccountId) {
-    await rebuildAccountBalance(tx, relatedAccountId);
-  }
+  // Ascending, through the shared helper: the order is what keeps two writes
+  // touching the same pair of accounts from deadlocking on the rebuild locks.
+  await rebuildAccountBalances(tx, [accountId, relatedAccountId]);
 }
 
 export async function submitTransaction(
@@ -167,19 +170,12 @@ export async function updateTransaction(
         })
         .where(eq(transactions.transactionId, transactionId));
 
-      const affectedAccountIds = new Set<number>();
-      affectedAccountIds.add(existing.accountId);
-      if (existing.relatedAccountId !== null) {
-        affectedAccountIds.add(existing.relatedAccountId);
-      }
-      affectedAccountIds.add(newAccountId);
-      if (newRelatedAccountId !== null) {
-        affectedAccountIds.add(newRelatedAccountId);
-      }
-
-      for (const id of affectedAccountIds) {
-        await rebuildAccountBalance(tx, id);
-      }
+      await rebuildAccountBalances(tx, [
+        existing.accountId,
+        existing.relatedAccountId,
+        newAccountId,
+        newRelatedAccountId,
+      ]);
     });
   } catch (error) {
     return actionFailure(
@@ -329,13 +325,12 @@ export async function deleteTransaction(
         .delete(transactions)
         .where(eq(transactions.transactionId, transactionId));
 
-      const affectedAccountIds = new Set<number>();
-      affectedAccountIds.add(existing.accountId);
-      if (existing.relatedAccountId !== null) {
-        affectedAccountIds.add(existing.relatedAccountId);
-      }
+      // Ascending, like rebuildAccountBalances(), and locked before the count:
+      // a concurrent insert on this account must not land between the count
+      // and the history delete below.
+      for (const id of sortedAccountIds([existing.accountId, existing.relatedAccountId])) {
+        await lockAccountBalance(tx, id);
 
-      for (const id of affectedAccountIds) {
         // rebuildAccountBalance starts its date series at MIN(transaction_date)
         // for the account; with no transactions left, the series is empty and
         // existing balance rows would be stale. Clear them first.

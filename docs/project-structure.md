@@ -25,7 +25,7 @@ finance-stack/
 │   ├── next.config.ts                    # Next.js config — standalone output for Docker, security headers + CSP (#182)
 │   ├── auth.ts                           # Auth.js (NextAuth v5) config — Credentials provider, JWT sessions (#120)
 │   ├── proxy.ts                          # Next 16 proxy (renamed middleware) — redirects unauthenticated requests to /login
-│   ├── instrumentation.ts                # onRequestError — captures unhandled server throws as structured logs (#129)
+│   ├── instrumentation.ts                # onRequestError — captures unhandled server throws as structured logs (#129); register() starts the recurring scheduler (#135)
 │   ├── drizzle.config.ts                 # Drizzle ORM config (schema path + migrations output dir)
 │   ├── eslint.config.mjs                 # ESLint flat-config (Next.js + TypeScript rules, no-console over app code)
 │   ├── postcss.config.mjs                # PostCSS config (Tailwind CSS v4 plugin)
@@ -63,7 +63,7 @@ finance-stack/
 │   │       │   │   ├── page.tsx              #       Overview — filter bar + list + new-transaction form
 │   │       │   │   ├── categories/page.tsx   #       Categories drill-down (stub)
 │   │       │   │   ├── merchants/page.tsx    #       Merchants drill-down (stub)
-│   │       │   │   └── recurring/page.tsx    #       Recurring drill-down (stub)
+│   │       │   │   └── recurring/page.tsx    #       Recurring — recurring-transaction templates: list + add/edit/delete (#135)
 │   │       │   ├── accounts/             #     Accounts:
 │   │       │   │   ├── page.tsx              #       Overview — visual balance sheet
 │   │       │   │   ├── activity/page.tsx     #       Activity drill-down (stub)
@@ -83,6 +83,7 @@ finance-stack/
 │   │       ├── 0003_add_users_table.sql  # users table for authentication (#120)
 │   │       ├── 0004_add_audit_log.sql    # audit_log + the audit_row_change() trigger, hand-appended (#180)
 │   │       ├── 0010_add_balance_transfers.sql # balance_transfers + its audit trigger, hand-appended (#417)
+│   │       ├── 0011_add_recurring_transactions.sql # recurring_transactions + the transactions link pair and its UNIQUE; audit trigger hand-appended (#135)
 │   │       └── meta/                     # Drizzle migration journal and snapshots
 │   │           ├── _journal.json         # Ordered list of applied migrations (idx, tag, breakpoints)
 │   │           └── 0000_snapshot.json    # Full schema snapshot at the 0000_baseline migration
@@ -154,12 +155,20 @@ finance-stack/
 │   │       ├── transaction-delete-dialog.tsx # Delete confirmation modal (uses deleteTransaction action)
 │   │       ├── transaction-discard-dialog.tsx # Discard-unsaved-changes confirmation when switching inline rows (#148, #241)
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
+│   │       ├── combobox-fields.tsx       # Account/type/category pickers, moved out of the transaction form to be shared (#135)
+│   │       ├── recurring-transactions-card.tsx # The Recurring tab: template table + add/edit/delete dialogs (#135)
+│   │       ├── recurring-transaction-dialog.tsx # Add/edit dialog: the six fields, "repeats every N", next/end dates, live preview (#135)
+│   │       ├── recurring-schedule-view.ts # Pure status + save preview for the Recurring tab, mirroring the save's rules; unit-tested (#135)
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
 │   │   ├── constants/reference-ids.ts    # Centralized seed-row references (id + canonical name): SEED_REFERENCES drives the /api/health/seed-data drift check, SHIPPED_ROWS drives row protection (#109)
 │   │   ├── constants/protected-rows.ts   # protectionFor() — which lookup rows /settings/categories refuses to rename or delete, and why (#109)
 │   │   ├── db/index.ts                   # Drizzle ORM client (PostgreSQL connection)
 │   │   ├── db/audited.ts                 # auditedTransaction() — names the actor for the audit trigger (#180)
+│   │   ├── db/system-transaction.ts      # systemTransaction() — the same for a background job, by label, with bounded lock waits (#135)
+│   │   ├── recurring/schedule.ts         # Pure recurring-date math, always from the anchor, UTC integers; unit-tested (#135)
+│   │   ├── recurring/materialize.ts      # Creates due occurrences: one template (a save) or every due one (the scheduler) (#135)
+│   │   ├── recurring/scheduler.ts        # The in-process hourly timer, started by instrumentation.ts register() (#135)
 │   │   ├── log.ts                        # Structured single-line JSON logger — isomorphic, LOG_LEVEL-gated (#129)
 │   │   ├── report.ts                     # reportError() — the one error choke point; redacts drizzle params + pg detail (#129)
 │   │   ├── auth/password.ts              # scrypt hashPassword/verifyPassword (node:crypto, no native deps)
@@ -175,6 +184,7 @@ finance-stack/
 │   │   ├── actions/account.ts            # Server actions for account create, update, delete
 │   │   ├── actions/categories.ts         # Server actions for category/type create, update, delete
 │   │   ├── actions/balance-transfer.ts   # Server actions for balance transfer create, update, delete (#417)
+│   │   ├── actions/recurring-transaction.ts # Server actions for recurring transaction create, update, delete; a save adds what is already due (#135)
 │   │   ├── queries/_aggregates.ts        # Shared SQL fragments (sum-by-type, balance-at-date, bound IN-list, promo-active interval)
 │   │   ├── queries/_percent.ts           # Shared percent math (round2, pct, pctOrNull) for the drilldown queries
 │   │   ├── queries/accounts.ts           # Account balance queries (ROLLUP aggregation)
@@ -190,6 +200,7 @@ finance-stack/
 │   │   ├── queries/balance-transfer-payoff.ts # Pure payoff math: the balance split between transfers, months left, pace, required, projection, status; unit-tested (#417, #427)
 │   │   ├── queries/liability-categories.ts # Pinned transaction_category_ids for debt payments and interest expense
 │   │   ├── queries/rebuild-balance.ts    # Per-account balance history rebuild
+│   │   ├── queries/recurring-transactions.ts # The Recurring tab's template list, and the database's today with when it ends (#135)
 │   │   ├── queries/transactions.ts       # Transaction queries (filtered, sorted, form options)
 │   │   ├── queries/date-range.ts         # Shared dateFrom/dateTo URL-param parsing + 30-day default
 │   │   ├── queries/categories.ts         # Queries for all four reference-data tables
@@ -200,15 +211,16 @@ finance-stack/
 │   │   ├── validations/transaction.ts    # Zod schema for transaction form validation
 │   │   ├── validations/categories.ts     # Zod schemas for category/type forms
 │   │   ├── validations/balance-transfer.ts # Zod schema + the pure link checker for balance transfers (#417)
+│   │   ├── validations/recurring-transaction.ts # Zod schema + the pure schedule checker for recurring transactions (#135)
 │   │   ├── validations/date-range.ts     # Canonical dateFrom/dateTo validator (format + ordering) + isValidIsoDate
 │   │   ├── validations/id.ts             # parseEntityId()/isEntityId() — the one positive-int4 check for every ID (#179)
 │   │   ├── validations/search-params.ts  # validateFilterParams() — ID lists, amount, descriptions from the URL (#179)
 │   │   └── utils.ts                      # Utility helpers (cn() class merge)
 │   ├── tests/                            # Vitest test suite
 │   │   ├── unit/                         # Unit tests (no DB required)
-│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range, id, search-params)
+│   │   │   ├── validations/              #   Zod schema tests (account, transaction, categories, date-range, id, search-params, recurring-transaction)
 │   │   │   ├── actions/                  #   Action utility tests (buildFieldErrors)
-│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros)
+│   │   │   ├── components/               #   Component function tests (waterfall transform, liquidity, asset perf, debt-mix, debt-waterfall, liability perf, date-range macros, recurring schedule view)
 │   │   │   ├── scripts/                  #   Build-tooling tests (seed-reference gate parse + diff)
 │   │   │   ├── next-config-headers.test.ts  #   Security-header + CSP contract — the CI gate for #182
 │   │   │   └── lib/                      #   Library utility tests
@@ -217,6 +229,7 @@ finance-stack/
 │   │   │       ├── forms/                #     Form helpers (transaction post-submit state)
 │   │   │       ├── format/               #     Formatters (signed-currency, change-color, percent helpers)
 │   │   │       ├── db/                   #     auditedTransaction() actor plumbing
+│   │   │       ├── recurring/            #     Recurring-date math (anchor clamping, due walks, labels, time-zone independence) and the scheduler's timer (#135)
 │   │   │       ├── log.test.ts           #     Structured logger (single-line output, LOG_LEVEL gate, hostile payloads)
 │   │   │       ├── report.test.ts        #     reportError() serialization + drizzle/pg redaction
 │   │   │       └── queries/              #     Query helpers (liability-categories pinned IDs, date-range param parsing)
@@ -228,14 +241,15 @@ finance-stack/
 │   │       ├── actions/                  #   Server action tests (account, transaction, auth gating, rate limiting, audit trail, failure logging, validation contract)
 │   │       ├── auth/                     #   Credential verification and sign-in rate limiting against the real users table
 │   │       ├── api/                      #   API route tests (health drift check)
-│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance, drilldowns)
+│   │       ├── recurring/                #   The recurring-transaction materializer against Postgres: exactly-once, backfill, ends, closed accounts, date parity, the link pair's constraints (#135)
+│   │       └── queries/                  #   Query function tests (accounting, grouping matrix, rebuild-balance and its lock, drilldowns, the recurring-transactions list)
 │   ├── e2e/                              # Playwright end-to-end suite (#141)
 │   │   ├── money-path.spec.ts            #   The one spec: account → transaction → rebuild → dashboard KPI
 │   │   ├── auth.setup.ts                 #   Signs in once, saves the session as storageState
 │   │   ├── global-setup.ts               #   Test-DB guard + creates the user the suite signs in as
 │   │   ├── global-teardown.ts            #   Deletes every row and the user the run created
 │   │   └── fixtures/                     #   Names, amounts and the psql-level helpers the three share
-│   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100)
+│   ├── playwright.config.ts              # Playwright configuration (builds the app, serves it on :3100, recurring scheduler off)
 │   └── vitest.config.ts                  # Vitest configuration (unit + integration projects)
 ├── importer/                              # File import service
 │   ├── Dockerfile                         # finance-importer image — bakes poll.py, lookups.py, heartbeat.py + pinned deps, non-root (#224)
