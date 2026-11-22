@@ -24,6 +24,10 @@ with the shared dev process (Dev process, below).
 
 ## Conventions
 
+- A shell check that reads an `.env` or `.env.example` value reads it as Compose does: the last
+  `NAME=` line, with one pair of quotes stripped (`env_file_get` in `deploy/deploy.sh`, and the
+  template check in `release.yml`'s boot step, Issue #260). Grep for an existing reader first.
+
 - A write that changes several accounts rebuilds them with `rebuildAccountBalances`, which
   locks them in ascending id order; a hand-rolled loop over `rebuildAccountBalance` can
   deadlock (`app/lib/queries/rebuild-balance.ts`, Issue #463).
