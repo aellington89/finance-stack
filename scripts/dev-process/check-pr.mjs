@@ -15,7 +15,12 @@
 // Exits 1 and lists the problems when the PR doesn't meet the standard.
 
 import { appendFileSync, readFileSync } from 'node:fs'
-import { closingProblems, deliveryPlanRows, mergedParts } from './delivery-plan.mjs'
+import {
+  closingProblems,
+  deliveryPlanRows,
+  mergedParts,
+  withoutComments,
+} from './delivery-plan.mjs'
 import { github } from './github.mjs'
 
 function option(name) {
@@ -54,7 +59,7 @@ if (author === 'dependabot[bot]') {
 const errors = []
 const warnings = []
 // Hidden template guidance doesn't count as content.
-const visible = body.replace(/<!--[\s\S]*?-->/g, '').replace(/\r\n/g, '\n')
+const visible = withoutComments(body).replace(/\r\n/g, '\n')
 const lines = visible.split('\n')
 
 function section(name) {

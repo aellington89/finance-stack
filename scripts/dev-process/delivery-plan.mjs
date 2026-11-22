@@ -4,7 +4,31 @@
 // (https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md#parts).
 
 const PART_OF = /\bpart of\s+#(\d+)/gi
-const visible = (text) => text.replace(/<!--[\s\S]*?-->/g, '').replace(/\r\n/g, '\n')
+
+/**
+ * The text without its HTML comments (template guidance, hidden from readers). Removing a comment
+ * can join the text around it into a new one ("<!-<!-- x -->-"), so it scans again until none
+ * is left; a "<!--" with no closing "-->" stays, as it renders as text.
+ */
+export function withoutComments(text) {
+  let current = text
+  for (;;) {
+    let out = ''
+    let from = 0
+    for (;;) {
+      const open = current.indexOf('<!--', from)
+      const close = open === -1 ? -1 : current.indexOf('-->', open + 4)
+      if (close === -1) break
+      out += current.slice(from, open)
+      from = close + 3
+    }
+    out += current.slice(from)
+    if (out === current) return out
+    current = out
+  }
+}
+
+const visible = (text) => withoutComments(text).replace(/\r\n/g, '\n')
 const cells = (line) =>
   line
     .trim()
