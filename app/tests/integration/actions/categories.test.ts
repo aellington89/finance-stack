@@ -1,9 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { eq, gt, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accountTypeCategories,
-  auditLog,
   transactionCategories,
   transactionTypes,
 } from "@/drizzle/schema";
@@ -18,6 +17,7 @@ import {
 } from "@/lib/actions/categories";
 import { OPENING_BALANCE_CATEGORY } from "@/lib/constants/reference-ids";
 import { REPORTING_ROLE_KEYS } from "@/lib/constants/reporting-roles";
+import { auditRowsSince, maxAuditId } from "../audit-watermark";
 
 // Behavioural coverage for the protection guards added in Issue #109. Before
 // this file the six lookup mutators were exercised only by the validation
@@ -129,9 +129,7 @@ describe("updateTransactionCategory — protection", () => {
   });
 
   it("writes no audit row when it refuses", async () => {
-    const [{ max }] = await db
-      .select({ max: sql<number>`coalesce(max(${auditLog.auditId}), 0)` })
-      .from(auditLog);
+    const watermark = await maxAuditId();
 
     await updateTransactionCategory(
       emptyState,
@@ -141,8 +139,7 @@ describe("updateTransactionCategory — protection", () => {
       })
     );
 
-    const after = await db.select({ id: auditLog.auditId }).from(auditLog).where(gt(auditLog.auditId, max));
-    expect(after).toEqual([]);
+    expect(await auditRowsSince(watermark)).toEqual([]);
   });
 
   it("does not reach actionFailure — a refusal is not an error", async () => {

@@ -41,6 +41,9 @@ with the shared dev process (Dev process, below).
   `transaction-edit-row.tsx`); blanking it makes a save silently clear the link.
 - ESLint's `react-hooks/purity` (React Compiler) rejects `Date.now()` in a function defined
   during render, even one only a click handler calls: read the clock in a helper it calls.
+- An integration test that reads `audit_log` filters on a watermark from `maxAuditId()`, taken
+  before the action; `row_pk` alone matches stale rows once a test database reuses ids
+  (`app/tests/integration/audit-watermark.ts`, PR #486).
 
 ## Dev process
 
