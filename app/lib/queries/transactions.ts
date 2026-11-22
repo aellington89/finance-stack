@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { accounts, transactionTypes, transactionCategories, vTransactionsFull } from "@/drizzle/schema";
+import { accounts, transactions, transactionTypes, transactionCategories, vTransactionsFull } from "@/drizzle/schema";
 import { isNull, desc, asc, and, gte, lte, inArray, eq, sql, type SQL, type Column } from "drizzle-orm";
 
 export type SortableColumn =
@@ -62,39 +62,58 @@ export async function getTransactionFormOptions() {
   return { accounts: accountList, types: typeList, categories: categoryList };
 }
 
-function buildWhereClause(filters: TransactionFilters): SQL | undefined {
+type FilterColumn =
+  | "transactionDate"
+  | "transactionDescription"
+  | "amount"
+  | "accountId"
+  | "transactionTypeId"
+  | "transactionCategoryId";
+
+/** `transactions` or `vTransactionsFull`: both name the filter columns alike. */
+type FilterSource = Pick<typeof transactions, FilterColumn> | Pick<typeof vTransactionsFull, FilterColumn>;
+
+// One builder for both sources, so the count and the page can't filter apart.
+function buildWhereClause(filters: TransactionFilters, source: FilterSource): SQL | undefined {
   const conditions: SQL[] = [];
 
   if (filters.dateFrom) {
-    conditions.push(gte(vTransactionsFull.transactionDate, filters.dateFrom));
+    conditions.push(gte(source.transactionDate, filters.dateFrom));
   }
   if (filters.dateTo) {
-    conditions.push(lte(vTransactionsFull.transactionDate, filters.dateTo));
+    conditions.push(lte(source.transactionDate, filters.dateTo));
   }
   if (filters.descriptions && filters.descriptions.length > 0) {
-    conditions.push(inArray(vTransactionsFull.transactionDescription, filters.descriptions));
+    conditions.push(inArray(source.transactionDescription, filters.descriptions));
   }
   if (filters.amount) {
-    conditions.push(eq(vTransactionsFull.amount, filters.amount));
+    conditions.push(eq(source.amount, filters.amount));
   }
   if (filters.accountIds && filters.accountIds.length > 0) {
-    conditions.push(inArray(vTransactionsFull.accountId, filters.accountIds));
+    conditions.push(inArray(source.accountId, filters.accountIds));
   }
   if (filters.typeIds && filters.typeIds.length > 0) {
-    conditions.push(inArray(vTransactionsFull.transactionTypeId, filters.typeIds));
+    conditions.push(inArray(source.transactionTypeId, filters.typeIds));
   }
   if (filters.categoryIds && filters.categoryIds.length > 0) {
-    conditions.push(inArray(vTransactionsFull.transactionCategoryId, filters.categoryIds));
+    conditions.push(inArray(source.transactionCategoryId, filters.categoryIds));
   }
 
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
+// The count and getUniqueDescriptions read `transactions`, not the view, to skip
+// its six joins (Issue #146). They return what the view would because every
+// inner join in v_transactions_full follows a NOT NULL foreign key, and its
+// only outer join (the related account) never drops a row.
+// tests/integration/queries/transactions.test.ts compares them with the view, on
+// its own rows and on the whole test database, so a join added to the view that
+// drops any of those rows fails it.
 export async function getFilteredTransactionsCount(filters: TransactionFilters): Promise<number> {
-  const where = buildWhereClause(filters);
+  const where = buildWhereClause(filters, transactions);
   const query = db
     .select({ count: sql<number>`cast(count(*) as integer)` })
-    .from(vTransactionsFull);
+    .from(transactions);
 
   const [result] = where ? await query.where(where) : await query;
   return result.count;
@@ -105,7 +124,7 @@ export async function getFilteredTransactions(filters: TransactionFilters) {
   const pageSize = filters.pageSize ?? 25;
   const offset = (page - 1) * pageSize;
 
-  const where = buildWhereClause(filters);
+  const where = buildWhereClause(filters, vTransactionsFull);
 
   const sortColumn = filters.sortBy && SORTABLE_COLUMNS[filters.sortBy]
     ? SORTABLE_COLUMNS[filters.sortBy]
@@ -122,13 +141,13 @@ export async function getFilteredTransactions(filters: TransactionFilters) {
   return where ? query.where(where) : query;
 }
 
-export async function getUniqueDescriptions() {
+// Reads `transactions` for the reason given above getFilteredTransactionsCount.
+// The column is NOT NULL and never blank, so the list is the view's.
+export async function getUniqueDescriptions(): Promise<string[]> {
   const rows = await db
-    .selectDistinct({ description: vTransactionsFull.transactionDescription })
-    .from(vTransactionsFull)
-    .orderBy(vTransactionsFull.transactionDescription);
+    .selectDistinct({ description: transactions.transactionDescription })
+    .from(transactions)
+    .orderBy(transactions.transactionDescription);
 
-  return rows
-    .map((r) => r.description)
-    .filter((d): d is string => d !== null);
+  return rows.map((r) => r.description);
 }
