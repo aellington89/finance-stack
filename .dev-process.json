@@ -1,22 +1,24 @@
 {
   "source": "github:aellington89/dev_process",
-  "version": "2.1.0",
-  "commit": "42edc352287beef69af936e91f1566a195bd26e8",
+  "version": "2.2.0",
+  "commit": "ceec2d5134596b08766f8ac453ea2ce2629e9888",
   "files": {
-    ".github/ISSUE_TEMPLATE/bug.yml": "d9fdbbfd55b387784df5c8cfd0d2ed8725cec425adaf5e9393399c8ab86414cd",
+    ".github/ISSUE_TEMPLATE/bug.yml": "e6ff66f4290cd93a306a8d307f03703d4906cde6984019d4218a5697ff986d52",
     ".github/ISSUE_TEMPLATE/feature.yml": "943ea2002ac5dac751ad434f3132c5c743b66525c149b48d0c45cad57cd3c6c7",
     ".github/ISSUE_TEMPLATE/spike.yml": "8f725f8658b69072687f88f9d355ac7f49027bfea6a6cc02f632078cf0c5d18e",
     ".github/ISSUE_TEMPLATE/upgrade.yml": "6018c53483ec12f188f91eabb06b8b90192bbe9a1d8b4c1ee4cd13baa66762f5",
-    ".github/labels.json": "17a296890646d1444bd4d8b6654290edd209085713dc4990885e3440cca58a60",
+    ".github/labels.json": "8923cf94f08221c5723c2fa2d5bf2964c1ddec9325051c471166c7c1e14203d7",
     ".github/pull_request_template.md": "4c95c6c793847cf643d46fdfd728c6342f872dcf3f5766ba0ce901dee9334303",
     ".github/workflows/claude-review.yml": "14e8b8d039eb6aff3d4a11bd7f0959498f8fc6dad750e03233b03565db6f0d10",
     ".github/workflows/claude.yml": "09153ba62180fe18855f2265c1fc2cfbf8774e5a9e8a23f116199beecb078b7f",
     ".github/workflows/labels.yml": "3cb9a84332d06592f292efaa404a9dc4048c15e18642443fa0cbc1381beb5183",
-    ".github/workflows/pr-standards.yml": "b38d815e419e102e5f3fcee70c0f3d36e4bc4e94e54cae190fac6a174cc64ffb",
+    ".github/workflows/pr-standards.yml": "b55b8636449ba23d73f295c82926ad9c597d2f051f067db1c0f33cf5e9449ab9",
     ".github/workflows/triage.yml": "cbaee33417f014a3920a0c9a133d8a648ff5636d515ea2652ff36463c7b8df03",
-    "scripts/dev-process/check-pr.mjs": "41f3ac5e4ccd16cf2bfd50051854937abf1f1448f4572648e4773a7cbcd93b25",
+    "scripts/dev-process/check-pr.mjs": "106b5217d4ff2d87edcf6ab49e4f64fc341b141028986dac83006f561029e63d",
     "scripts/dev-process/check-process.mjs": "2606215c7819c97adcf140aacb73b863a53df6dc3bc1c6516190578e3cb4d4ee",
+    "scripts/dev-process/delivery-plan.mjs": "9a236234c3a6f686f9c54c916c1363ce1ee79b8163db758f6f9361eff3e1bd35",
+    "scripts/dev-process/github.mjs": "725d4f6a68614b442b75f0df3fd4e798135f7c75b4557c32cee5e62067668d57",
     "scripts/dev-process/release.mjs": "c0de116e9b07ab023b27fbf3c53161748d46bd7f8a12e35c96f526e8c425b29d",
-    "scripts/dev-process/triage.mjs": "a100f675516de6bebe9cc38a41315d6b9cea03076ce480e16ae6da8ab5f58018"
+    "scripts/dev-process/triage.mjs": "ecda6acdfdf5ba69b52bd220beff680e9d1a3432a15c8a9920742c82a55701bb"
   }
 }

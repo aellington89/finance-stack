@@ -3,12 +3,20 @@
 //
 // In CI, it reads the pull_request event ($GITHUB_EVENT_PATH):
 //   node scripts/dev-process/check-pr.mjs
-// Locally, before opening or editing a PR:
-//   node scripts/dev-process/check-pr.mjs --title "<title>" --body-file <file>
+// Locally, before opening or editing a PR (--author gives the PR's author, for the exemption CI
+// applies to a Dependabot PR):
+//   node scripts/dev-process/check-pr.mjs --title "<title>" --body-file <file> [--author <login>]
+//
+// With $GITHUB_TOKEN and $GITHUB_REPOSITORY (set in CI; locally, for example
+// GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=<owner>/<repo>), it also reads each issue an
+// Issue PR closes, and fails the "Closes" line while a part of its delivery plan before the last
+// hasn't merged. Without them, it skips that step and says so.
 //
 // Exits 1 and lists the problems when the PR doesn't meet the standard.
 
 import { appendFileSync, readFileSync } from 'node:fs'
+import { closingProblems, deliveryPlanRows, mergedParts } from './delivery-plan.mjs'
+import { github } from './github.mjs'
 
 function option(name) {
   const index = process.argv.indexOf(`--${name}`)
@@ -22,11 +30,12 @@ if (option('title') !== undefined) {
   title = option('title')
   const bodyFile = option('body-file')
   body = bodyFile ? readFileSync(bodyFile, 'utf8') : ''
+  author = option('author') ?? ''
 } else {
   const eventPath = option('event') ?? process.env.GITHUB_EVENT_PATH
   if (!eventPath) {
     console.error(
-      'Usage: node scripts/dev-process/check-pr.mjs --title "<title>" --body-file <file>',
+      'Usage: node scripts/dev-process/check-pr.mjs --title "<title>" --body-file <file> [--author <login>]',
     )
     process.exit(2)
   }
@@ -152,7 +161,36 @@ for (const placeholder of new Set(leftovers)) {
 if (/^\s*Closes #\s*$/im.test(visible)) errors.push('"Closes #" is missing its issue number')
 if (/^\s*Part of #\s*$/im.test(visible)) errors.push('"Part of #" is missing its issue number')
 
+// An issue delivered in parts closes with its last part, once every earlier part has merged
+// (standards/pull-requests.md, "Parts"). Only the GitHub API knows what has merged.
+const notes = []
+const closing =
+  kind?.name === 'Issue' ? [...new Set([...visible.matchAll(CLOSES)].map((m) => Number(m[1])))] : []
+if (closing.length) {
+  const { GITHUB_TOKEN: token, GITHUB_REPOSITORY: repo } = process.env
+  if (!token || !repo) {
+    notes.push('skipped the delivery-plan check, which needs GITHUB_TOKEN and GITHUB_REPOSITORY')
+  } else {
+    const api = github(token)
+    for (const number of closing) {
+      try {
+        const rows = deliveryPlanRows(
+          (await api('GET', `/repos/${repo}/issues/${number}`)).body ?? '',
+        )
+        if (rows.length > 1) {
+          errors.push(...closingProblems(number, rows, await mergedParts(api, repo, number)))
+        }
+      } catch (error) {
+        warnings.push(
+          `couldn't read #${number}'s delivery plan, so it wasn't checked (${error.status ?? error.message})`,
+        )
+      }
+    }
+  }
+}
+
 const inActions = process.env.GITHUB_ACTIONS === 'true'
+for (const note of notes) console.log(`check-pr: ${note}`)
 for (const warning of warnings) {
   console.log(inActions ? `::warning title=PR standards::${warning}` : `warning: ${warning}`)
 }
@@ -175,6 +213,8 @@ if (errors.length) {
   console.log(
     `\ncheck-pr: ${errors.length} problem(s). See https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md.`,
   )
-  process.exit(1)
+  // exitCode, not exit(): exiting while fetch still holds a connection crashes Node on Windows.
+  process.exitCode = 1
+} else {
+  console.log(`check-pr: "${title}" meets the ${kind.name} PR standard.`)
 }
-console.log(`check-pr: "${title}" meets the ${kind.name} PR standard.`)

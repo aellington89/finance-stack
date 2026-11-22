@@ -6,7 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        - **Title:** `<feature id>.<n> · <name>`, for example `1.4.2 · Tag Filter Resets on Reload`.
+        - **Title:** `<feature id>.<n> · <name>`, for example `1.4.2 · Tag Filter Resets on Reload`. If its feature has no id, use a descriptive title instead.
+        - **A bug needn't be user-visible:** a defect in the project's own tooling, such as a script or a CI step that fails, is a bug too.
         - **Next step:** `/triage`, weekly, which gives it a stage, a milestone, and its Size and Priority on the repository's GitHub project. Add `release: blocker` if this can lose or corrupt user data, or breaks a core flow.
         - **Standard:** [standards/issues.md](https://github.com/aellington89/dev_process/blob/main/standards/issues.md)
   - type: textarea

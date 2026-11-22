@@ -17,6 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { github } from './github.mjs'
 
 const ISSUE_LABELS = [
   [/^Spike: \S/, ['type: spike', 'stage: research']],
@@ -80,28 +81,6 @@ export function plan(event, current, issueLabels = []) {
 function option(name) {
   const index = process.argv.indexOf(`--${name}`)
   return index === -1 ? undefined : process.argv[index + 1]
-}
-
-function github(token) {
-  const base = process.env.GITHUB_API_URL ?? 'https://api.github.com'
-  return async (method, path, body) => {
-    const response = await fetch(`${base}${path}`, {
-      method,
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    })
-    if (!response.ok) {
-      const error = new Error(`${method} ${path}: ${response.status} ${await response.text()}`)
-      error.status = response.status
-      throw error
-    }
-    return response.json()
-  }
 }
 
 const names = (list = []) => list.map((entry) => entry.login ?? entry.name)

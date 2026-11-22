@@ -4,6 +4,9 @@ name: PR standards
 # https://github.com/aellington89/dev_process/blob/main/standards/pull-requests.md, and re-runs whenever the title or description is
 # edited. Required to merge once the branch ruleset in
 # https://github.com/aellington89/dev_process/blob/main/PROCESS.md#one-time-setup is enabled.
+#
+# It reads each issue a PR closes, and the PRs that mention it, so a "Closes" line waits for the
+# last part of the issue's delivery plan; the read-only permissions below are all it needs.
 
 on:
   pull_request:
@@ -11,6 +14,8 @@ on:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   check:
@@ -19,3 +24,5 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: node scripts/dev-process/check-pr.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

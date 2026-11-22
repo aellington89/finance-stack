@@ -32,7 +32,7 @@
   {
     "name": "type: chore",
     "color": "ededed",
-    "description": "Maintenance with no user-facing change"
+    "description": "Maintenance, with no user-visible change and nothing broken"
   },
   {
     "name": "type: release",
