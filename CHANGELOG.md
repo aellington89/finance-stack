@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The chart and icon libraries took their minor bumps.** ([PR #459](https://github.com/aellington89/finance-stack/pull/459)) `recharts` 3.10.1 → 3.11.0 and `lucide-react` 1.72.0 → 1.74.0, both bundled into `finance-app`. recharts 3.11's headline feature, themes, is opt-in. Without a theme provider it keeps the defaults it has had since 2.x, and every chart here passes its own colors, so the dashboard looks the same. Every chart page was pixel-identical before and after on the test data. One fix users may notice: recharts no longer makes each of its internal drawing layers focusable. Tab now crosses a chart in one stop instead of a dozen, and clicking a chart no longer leaves a focus ring on it. lucide 1.74 renamed its `fold`, `unfold` and `centerline` icons to a new `axis` family, and the app uses none of them.
 
+- **Caddy moves to 2.11.9-alpine** (from 2.11.8-alpine). ([PR #456](https://github.com/aellington89/finance-stack/pull/456)) A patch release on the current line that fixes a 2.11.8 regression and several FastCGI security issues. Its breaking changes are all in directives the shipped `caddy/Caddyfile` doesn't use: `client_auth`, FastCGI, `try_files`, and path matchers with placeholders. That file is one `reverse_proxy` with a JSON access log, and it validates and proxies unchanged on 2.11.9. The release also updates go-jose for GHSA-mgcc-cww5-fp2q. That denial of service is reachable only when Caddy runs as an ACME server, and this stack runs it only as an ACME client. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.
+
 ## [1.6.0] - 2026-11-21
 
 **Migration:** backward-compatible

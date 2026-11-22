@@ -85,6 +85,9 @@ default branch, are in the Dev process table in `CLAUDE.md`; the workflow and ev
 
 - **Dependabot** opens npm (`app/`), pip (`importer/`), Docker, Compose, and GitHub Actions updates
   weekly against `master`, titled `Upgrade: bump …`, and nothing is merged by CI (see Differences).
+- **Compose bumps:** Dependabot edits `docker-compose.yml` only. Make the same bump in
+  `deploy/compose.yml` on its branch and run `./scripts/check-deploy-parity.sh` (#413, #456; the
+  note in `.github/dependabot.yml`).
 - **Changelog:** a bump that ships but changes nothing an operator notices goes under
   `### Dependencies`, a patch; one they notice, such as a service's new major, under `### Changed`.
 - **High risk:** Node majors (the images and CI move together, as in Issue #211), PostgreSQL majors
