@@ -27,6 +27,16 @@ with the shared dev process (Dev process, below).
 - A write that changes several accounts rebuilds them with `rebuildAccountBalances`, which
   locks them in ascending id order; a hand-rolled loop over `rebuildAccountBalance` can
   deadlock (`app/lib/queries/rebuild-balance.ts`, Issue #463).
+- "Today" for anything a save counts from is Postgres's `CURRENT_DATE`, read by the page, never
+  the browser's date; a client that must notice the day turning uses the instant it ends
+  (`getRecurringToday()` and `todayAsOf()`, Issue #135).
+- An edit form for a row a background job also writes posts the value it loaded, so a form left
+  open isn't read as an edit (`loadedNextRunDate` in `app/lib/actions/recurring-transaction.ts`).
+- Account pickers list open accounts only. An edit form keeps the row's own closed account
+  (`accountOptions` in `recurring-transaction-dialog.tsx`, `initialAccountValue` in
+  `transaction-edit-row.tsx`); blanking it makes a save silently clear the link.
+- ESLint's `react-hooks/purity` (React Compiler) rejects `Date.now()` in a function defined
+  during render, even one only a click handler calls: read the clock in a helper it calls.
 
 ## Dev process
 
