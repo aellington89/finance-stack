@@ -63,6 +63,14 @@ describe("previewSchedule (AC18)", () => {
     });
   });
 
+  it("counts a next date of today as added now, and lists from tomorrow", () => {
+    expect(previewSchedule(input({ cadence: "daily", nextRunDate: "2026-11-14" }))).toEqual({
+      kind: "scheduled",
+      dueNow: 1,
+      upcoming: ["2026-11-15", "2026-11-16", "2026-11-17"],
+    });
+  });
+
   it("stops the upcoming list at the end date", () => {
     expect(previewSchedule(input({ endDate: "2027-01-15" }))).toEqual({
       kind: "scheduled",
