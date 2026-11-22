@@ -92,7 +92,11 @@ default branch, are in the Dev process table in `CLAUDE.md`; the workflow and ev
   `### Dependencies`, a patch; one they notice, such as a service's new major, under `### Changed`.
 - **High risk:** Node majors (the images and CI move together, as in Issue #211), PostgreSQL majors
   (`pg_dump` must match the server), Next.js majors, and Metabase or GlitchTip versions that migrate
-  their own databases one way.
+  their own databases one way. A patch can carry a backported changeset (Metabase 58.41, PR #457),
+  so check by booting old → new → old on a restored backup, not from the version number.
+- **Image pins:** every image is pinned in both `docker-compose.yml` and `deploy/compose.yml`, and
+  Dependabot edits only the first. Make the same edit in `deploy/compose.yml` and run
+  `./scripts/check-deploy-parity.sh`, or the `image` job fails.
 - **Stored data:** Drizzle migrations (docs/schema-changes.md). The `**Migration:**` marker says
   whether an upgrade can be rolled back by re-pinning the previous image.
 
