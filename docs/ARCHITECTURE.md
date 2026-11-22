@@ -192,6 +192,11 @@ erDiagram
     accounts ||--o{ account_balance_history : "has a balance history"
     transactions ||--o| balance_transfers : "is the transfer of"
     transactions |o--o| balance_transfers : "is the fee of"
+    accounts ||--o{ recurring_transactions : "is scheduled on"
+    accounts |o--o{ recurring_transactions : "is the other side of"
+    transaction_types ||--o{ recurring_transactions : classifies
+    transaction_categories ||--o{ recurring_transactions : categorizes
+    recurring_transactions |o..o{ transactions : "added, by id and date"
     users {
         int user_id PK
         text username

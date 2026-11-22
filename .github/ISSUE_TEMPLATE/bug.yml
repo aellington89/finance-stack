@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         - **Title:** `<feature id>.<n> · <name>`, for example `1.4.2 · Tag Filter Resets on Reload`.
-        - **Next step:** weekly triage. Add `release: blocker` if this can lose or corrupt user data, or breaks a core flow.
+        - **Next step:** `/triage`, weekly, which gives it a stage, a milestone, and its Size and Priority on the repository's GitHub project. Add `release: blocker` if this can lose or corrupt user data, or breaks a core flow.
         - **Standard:** [standards/issues.md](https://github.com/aellington89/dev_process/blob/main/standards/issues.md)
   - type: textarea
     id: summary

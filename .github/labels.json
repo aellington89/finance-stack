@@ -1,5 +1,45 @@
 [
   {
+    "name": "enhancement",
+    "color": "a2eeef",
+    "description": "A roadmap item, or an enhancement to one"
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Broken or unexpected behavior"
+  },
+  {
+    "name": "documentation",
+    "color": "0075ca",
+    "description": "Documentation only: a Docs: PR"
+  },
+  {
+    "name": "duplicate",
+    "color": "cfd3d7",
+    "description": "Closed as a duplicate of another issue"
+  },
+  {
+    "name": "type: spike",
+    "color": "5319e7",
+    "description": "Research question; the output is a decision, not code"
+  },
+  {
+    "name": "type: upgrade",
+    "color": "006b75",
+    "description": "Dependency, runtime, or toolchain upgrade"
+  },
+  {
+    "name": "type: chore",
+    "color": "ededed",
+    "description": "Maintenance with no user-facing change"
+  },
+  {
+    "name": "type: release",
+    "color": "bfdadc",
+    "description": "A release PR (/release)"
+  },
+  {
     "name": "stage: research",
     "color": "d4c5f9",
     "description": "Open questions; needs a research spike (/research)"
@@ -17,27 +57,12 @@
   {
     "name": "stage: in progress",
     "color": "fbca04",
-    "description": "Being implemented on an issue branch (/implement)"
+    "description": "Being implemented (/implement); earlier parts of its delivery plan may have merged"
   },
   {
     "name": "stage: review",
     "color": "e99695",
-    "description": "PR open: code review, verification, and retro"
-  },
-  {
-    "name": "type: spike",
-    "color": "5319e7",
-    "description": "Research question; the output is a decision, not code"
-  },
-  {
-    "name": "type: upgrade",
-    "color": "006b75",
-    "description": "Dependency, runtime, or toolchain upgrade"
-  },
-  {
-    "name": "type: chore",
-    "color": "ededed",
-    "description": "Maintenance with no user-facing change"
+    "description": "The PR that closes it is open: code review, verification, and retro"
   },
   {
     "name": "dependencies",

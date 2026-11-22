@@ -3,6 +3,133 @@ import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { db } from "@/lib/db";
 
+type Tx = NodePgDatabase<Record<string, unknown>>;
+
+/**
+ * The advisory-lock key space for balance rebuilds (Issue #463). The lock is
+ * `pg_advisory_xact_lock(REBUILD_LOCK_NAMESPACE, account_id)`: the first key
+ * says what is locked, the second which account. Arbitrary, but fixed and used
+ * for nothing else in the app.
+ */
+export const REBUILD_LOCK_NAMESPACE = 463_001;
+
+/**
+ * How long a rebuild waits for another transaction's rebuild of the same
+ * account before giving up loudly. Generous next to a rebuild, which takes
+ * milliseconds. Its only job is to turn a stuck holder (a session idle in
+ * transaction) into a reported error rather than a request that hangs forever.
+ */
+export const REBUILD_LOCK_TIMEOUT = "15s";
+
+/**
+ * Raised when the rebuild lock isn't granted within the timeout. The enclosing
+ * transaction is aborted, so nothing the caller wrote is kept. `code` is the
+ * SQLSTATE Postgres raised (55P03, lock_not_available), carried on the error
+ * itself so reportError() records it: its serializer reads `code` off the error
+ * and one level of cause, and the driver error sits under drizzle's wrapper.
+ */
+export class BalanceRebuildLockTimeoutError extends Error {
+  readonly code = "55P03";
+
+  constructor(
+    readonly accountId: number,
+    readonly timeout: string,
+    options?: { cause?: unknown }
+  ) {
+    super(
+      `Timed out after ${timeout} waiting to rebuild balance history for account ${accountId}: another transaction held the account's rebuild lock. Nothing was written.`,
+      options
+    );
+    this.name = "BalanceRebuildLockTimeoutError";
+  }
+}
+
+/** The SQLSTATE of a driver error, directly or under drizzle's DrizzleQueryError. */
+function sqlStateOf(error: unknown): string | undefined {
+  for (let e: unknown = error, depth = 0; e && typeof e === "object" && depth < 3; depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+/** The driver error itself, unwrapped from drizzle's DrizzleQueryError if it has one. */
+function driverError(error: unknown): unknown {
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  return cause ?? error;
+}
+
+/**
+ * Serializes balance-history writes for one account, for the rest of the
+ * enclosing transaction (Issue #463).
+ *
+ * Without it, two transactions rebuilding the same account at once each sum
+ * from their own snapshot. The second to commit then overwrites the first's
+ * totals through ON CONFLICT DO UPDATE with figures that leave the first one's
+ * row out. Nothing errors and the balance is silently wrong until something
+ * rewrites that account. With it, the second waits, and its rebuild statement,
+ * under READ COMMITTED, takes a fresh snapshot that includes the first one's
+ * committed rows.
+ *
+ * The lock is reentrant within a transaction, so taking it again is free. A
+ * transaction that touches several accounts must take them in ascending id
+ * order, which rebuildAccountBalances() does, so two transactions can never
+ * wait on each other. If one ever did, Postgres's deadlock detector aborts one
+ * with SQLSTATE 40P01, and that error goes through the caller's reporting like
+ * any other.
+ *
+ * The wait is bounded by `lockTimeout`, applied to this one statement and then
+ * restored. lock_timeout covers advisory locks as well as table and row locks.
+ */
+export async function lockAccountBalance(
+  tx: Tx,
+  accountId: number,
+  options: { lockTimeout?: string } = {}
+): Promise<void> {
+  const timeout = options.lockTimeout ?? REBUILD_LOCK_TIMEOUT;
+  const previous = await tx.execute<{ lock_timeout: string }>(
+    sql`SELECT current_setting('lock_timeout') AS lock_timeout`
+  );
+  await tx.execute(sql`SELECT set_config('lock_timeout', ${timeout}, true)`);
+  try {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${REBUILD_LOCK_NAMESPACE}::integer, ${accountId}::integer)`
+    );
+  } catch (error) {
+    if (sqlStateOf(error) === "55P03") {
+      throw new BalanceRebuildLockTimeoutError(accountId, timeout, { cause: driverError(error) });
+    }
+    throw error;
+  }
+  await tx.execute(
+    sql`SELECT set_config('lock_timeout', ${previous.rows[0].lock_timeout}, true)`
+  );
+}
+
+/**
+ * Rebuilds several accounts' balance history in ascending id order: deduped,
+ * with nulls (an absent related account) dropped. The order is what keeps two
+ * multi-account transactions from deadlocking on the rebuild locks. Use this
+ * wherever a write touches more than one account.
+ */
+export async function rebuildAccountBalances(
+  tx: Tx,
+  accountIds: Iterable<number | null | undefined>,
+  options: { lockTimeout?: string } = {}
+): Promise<void> {
+  for (const id of sortedAccountIds(accountIds)) {
+    await rebuildAccountBalance(tx, id, options);
+  }
+}
+
+/** Distinct, non-null, ascending: the order every multi-account rebuild locks in. */
+export function sortedAccountIds(accountIds: Iterable<number | null | undefined>): number[] {
+  const ids = new Set<number>();
+  for (const id of accountIds) if (id !== null && id !== undefined) ids.add(id);
+  return [...ids].sort((a, b) => a - b);
+}
+
 /**
  * Rebuilds account_balance_history rows for a single account.
  *
@@ -11,12 +138,16 @@ import { db } from "@/lib/db";
  * through today, aggregates daily balances, computes cumulative
  * totals, and upserts into account_balance_history.
  *
- * Designed to run inside an existing Drizzle transaction.
+ * Designed to run inside an existing Drizzle transaction. Takes the account's
+ * rebuild lock first (lockAccountBalance), so concurrent rebuilds of one
+ * account serialize rather than overwrite each other.
  */
 export async function rebuildAccountBalance(
-  tx: NodePgDatabase<Record<string, unknown>>,
-  accountId: number
+  tx: Tx,
+  accountId: number,
+  options: { lockTimeout?: string } = {}
 ): Promise<void> {
+  await lockAccountBalance(tx, accountId, options);
   await tx.execute(sql`
     WITH date_series AS (
       SELECT generate_series(

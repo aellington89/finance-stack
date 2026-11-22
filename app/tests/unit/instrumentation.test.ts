@@ -1,6 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Instrumentation } from "next";
-import { onRequestError } from "@/instrumentation";
+
+// register() starts the recurring scheduler (Issue #135). Mocked so these
+// tests never start real timers or load the database client.
+const startRecurringScheduler = vi.fn();
+vi.mock("@/lib/recurring/scheduler", () => ({ startRecurringScheduler }));
+
+const { onRequestError, register } = await import("@/instrumentation");
 
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -128,5 +134,43 @@ describe("onRequestError", () => {
     // anything, and this hook runs while Next is already rendering an error.
     expect(() => onRequestError("string throw", request(), context())).not.toThrow();
     expect(parsed().level).toBe("error");
+  });
+});
+
+describe("register", () => {
+  const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  beforeEach(() => {
+    startRecurringScheduler.mockClear();
+    consoleLog.mockClear();
+  });
+  // stubEnv rather than assigning process.env: unstubbing restores a variable
+  // that was unset to unset, where assigning undefined stores "undefined".
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("starts the recurring scheduler in the Node runtime", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("RECURRING_SCHEDULER", undefined);
+    await register();
+    expect(startRecurringScheduler).toHaveBeenCalledOnce();
+  });
+
+  it("does nothing in the edge runtime", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "edge");
+    await register();
+    expect(startRecurringScheduler).not.toHaveBeenCalled();
+  });
+
+  it("stays off, and says so, under RECURRING_SCHEDULER=off", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("RECURRING_SCHEDULER", "off");
+    await register();
+    expect(startRecurringScheduler).not.toHaveBeenCalled();
+    expect(JSON.parse(consoleLog.mock.calls[0][0] as string)).toMatchObject({
+      level: "info",
+      msg: "recurring scheduler disabled by RECURRING_SCHEDULER=off",
+    });
   });
 });
