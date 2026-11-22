@@ -543,7 +543,7 @@ services:
   #
   # See docs/deployment.md for the exposure posture and the setup walkthrough.
   caddy:
-    image: caddy:2.11.8-alpine
+    image: caddy:2.11.9-alpine
     container_name: caddy
     profiles: ["edge"]                 # Not started by default; run with --profile edge
     restart: unless-stopped
