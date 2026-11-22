@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The Transactions count, and the description filter's list on Transactions and Accounting, are found a faster way.** ([Issue #146](https://github.com/aellington89/finance-stack/issues/146)) Both now read the transactions table directly, not a view that joins five tables. Only the time to find them has changed: the results are the same.
+
 ### Security
 
 - **Metabase moves to v0.58.42, which mitigates CVE-2026-114938** (from v0.58.40). ([PR #457](https://github.com/aellington89/finance-stack/pull/457)) The image's start script now runs the JVM with `-XX:-UseBASE64Intrinsics`, which turns off the HotSpot Base64 intrinsics the CVE is in. Neither compose file sets `JAVA_OPTS`, and the script appends to it in any case, so nothing here needs to change. It's a patch on the 0.58 LTS line. It also brings 58.41, which runs one data-only change on Metabase's metadata database: table-level "view data" permission rows that only repeat their database-level row are folded into it. The permissions stay the same, and v0.58.40 starts on the result, so rolling back by re-pinning v0.58.40 is safe. 58.41 also requires write permission on the root collection to move or create items in it, which an admin always has, and it fixes linked dashboard filters that could time out or join on the wrong foreign key. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.
