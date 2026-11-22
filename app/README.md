@@ -20,6 +20,8 @@ npm run dev
 
 The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` should point to `Finances_Test` for safe local development, and `AUTH_SECRET` (generate with `openssl rand -base64 33`) signs the session cookies. All app pages require sign-in — see [docs/auth.md](../docs/auth.md).
 
+The server also runs the recurring-transaction scheduler, 30 seconds after it starts and then hourly ([docs/database.md](../docs/database.md#recurring-transactions)). Against `Finances_Test` that creates any due template's rows like production would. Set `RECURRING_SCHEDULER=off` to run without it; the E2E suite does. The timer keeps the code it started with, so restart the dev server after changing anything under `lib/recurring/`.
+
 ## Scripts
 
 | Script | Description |

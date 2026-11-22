@@ -1,11 +1,10 @@
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import type { Mock } from "vitest";
-import { eq, gt, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accountTypeCategories,
   accountTypes,
-  auditLog,
   transactionCategories,
   transactionTypes,
   users,
@@ -22,6 +21,7 @@ import {
   createAccountType,
 } from "@/lib/actions/categories";
 import { __resetAllLimits } from "@/lib/security/rate-limit";
+import { auditRowsSince, maxAuditId } from "../audit-watermark";
 
 // The role gate from Issue #87.
 //
@@ -95,17 +95,6 @@ afterEach(async () => {
     .where(eq(accountTypes.accountType, "Gate Probe Account Type"));
 });
 
-async function auditHighWater(): Promise<number> {
-  const [{ max }] = await db
-    .select({ max: sql<number>`coalesce(max(${auditLog.auditId}), 0)` })
-    .from(auditLog);
-  return max;
-}
-
-async function auditRowsSince(max: number) {
-  return db.select({ id: auditLog.auditId }).from(auditLog).where(gt(auditLog.auditId, max));
-}
-
 // ── The four admin-only actions ───────────────────────────────────────────
 
 const ADMIN_ONLY = [
@@ -153,7 +142,7 @@ describe("requireAdminUser — refusal", () => {
   for (const { name, run } of ADMIN_ONLY) {
     it(`refuses ${name} for a non-admin, writing no row and no audit entry`, async () => {
       signInAs(USER_ID, "user");
-      const before = await auditHighWater();
+      const before = await maxAuditId();
 
       const result = await run();
 

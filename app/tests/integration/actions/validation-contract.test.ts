@@ -7,6 +7,7 @@ import * as accountActions from "@/lib/actions/account";
 import * as transactionActions from "@/lib/actions/transaction";
 import * as categoryActions from "@/lib/actions/categories";
 import * as balanceTransferActions from "@/lib/actions/balance-transfer";
+import * as recurringTransactionActions from "@/lib/actions/recurring-transaction";
 import type { ActionState } from "@/lib/actions/utils";
 
 /**
@@ -61,6 +62,20 @@ const BALANCE_TRANSFER_FIELDS = {
 };
 
 const BALANCE_TRANSFER_ID_FIELDS = ["accountId", "transferTransactionId", "feeTransactionId"];
+
+const RECURRING_FIELDS = {
+  transactionDescription: "Rent",
+  amount: "-1450.00",
+  accountId: "1",
+  relatedAccountId: "2",
+  transactionTypeId: "1",
+  transactionCategoryId: "1",
+  cadence: "monthly",
+  intervalCount: "1",
+  nextRunDate: "2030-01-01",
+};
+
+const RECURRING_ID_FIELDS = ["accountId", "relatedAccountId", "transactionTypeId", "transactionCategoryId"];
 
 const REGISTRY: Record<string, ActionCase> = {
   // ── transactions ──
@@ -191,6 +206,23 @@ const REGISTRY: Record<string, ActionCase> = {
     valid: { balanceTransferId: "1" },
     idFields: ["balanceTransferId"],
   },
+
+  // ── recurring transactions (Issue #135) ──
+  createRecurringTransaction: {
+    action: recurringTransactionActions.createRecurringTransaction,
+    valid: RECURRING_FIELDS,
+    idFields: RECURRING_ID_FIELDS,
+  },
+  updateRecurringTransaction: {
+    action: recurringTransactionActions.updateRecurringTransaction,
+    valid: { recurringTransactionId: "1", ...RECURRING_FIELDS },
+    idFields: ["recurringTransactionId", ...RECURRING_ID_FIELDS],
+  },
+  deleteRecurringTransaction: {
+    action: recurringTransactionActions.deleteRecurringTransaction,
+    valid: { recurringTransactionId: "1" },
+    idFields: ["recurringTransactionId"],
+  },
 };
 
 /**
@@ -236,12 +268,13 @@ function expectCleanRejection(result: ActionState) {
 }
 
 describe("server action validation contract", () => {
-  it("covers every action the four modules export", () => {
+  it("covers every action the five modules export", () => {
     const exported = [
       ...exportedActionNames(accountActions),
       ...exportedActionNames(transactionActions),
       ...exportedActionNames(categoryActions),
       ...exportedActionNames(balanceTransferActions),
+      ...exportedActionNames(recurringTransactionActions),
     ].sort();
 
     // Fails when an action is added without a row above. Add the row (and a

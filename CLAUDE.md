@@ -22,6 +22,29 @@ with the shared dev process (Dev process, below).
   bundle. `caddy/` and `scripts/`: the edge proxy and the operations scripts.
 - docs/README.md indexes the guides. CONTRIBUTING.md has the workflow and every CI gate.
 
+## Conventions
+
+- A shell check that reads an `.env` or `.env.example` value reads it as Compose does: the last
+  `NAME=` line, with one pair of quotes stripped (`env_file_get` in `deploy/deploy.sh`, and the
+  template check in `release.yml`'s boot step, Issue #260). Grep for an existing reader first.
+
+- A write that changes several accounts rebuilds them with `rebuildAccountBalances`, which
+  locks them in ascending id order; a hand-rolled loop over `rebuildAccountBalance` can
+  deadlock (`app/lib/queries/rebuild-balance.ts`, Issue #463).
+- "Today" for anything a save counts from is Postgres's `CURRENT_DATE`, read by the page, never
+  the browser's date; a client that must notice the day turning uses the instant it ends
+  (`getRecurringToday()` and `todayAsOf()`, Issue #135).
+- An edit form for a row a background job also writes posts the value it loaded, so a form left
+  open isn't read as an edit (`loadedNextRunDate` in `app/lib/actions/recurring-transaction.ts`).
+- Account pickers list open accounts only. An edit form keeps the row's own closed account
+  (`accountOptions` in `recurring-transaction-dialog.tsx`, `initialAccountValue` in
+  `transaction-edit-row.tsx`); blanking it makes a save silently clear the link.
+- ESLint's `react-hooks/purity` (React Compiler) rejects `Date.now()` in a function defined
+  during render, even one only a click handler calls: read the clock in a helper it calls.
+- An integration test that reads `audit_log` filters on a watermark from `maxAuditId()`, taken
+  before the action; `row_pk` alone matches stale rows once a test database reuses ids
+  (`app/tests/integration/audit-watermark.ts`, PR #486).
+
 ## Dev process
 
 @~/.claude/dev_process/CONVENTIONS.md
@@ -43,3 +66,4 @@ read these facts:
 | Prepare a release | `node scripts/dev-process/release.mjs prepare` in the root, then the `**Migration:**` marker under the new heading and `npm version X.Y.Z --no-git-tag-version` in `app/`; `npm run check:changelog` holds them together (docs/releases.md)                                             |
 | User guide        | README.md, and the guides that docs/README.md indexes                                                                                                                                                                                                                                   |
 | Roadmap           | GitHub milestones named `Phase N — <theme>`, with the Projects board (https://github.com/aellington89/finance-stack/projects); a feature is `<N>.<n> · <name>` in its phase                                                                                                             |
+| GitHub project    | https://github.com/users/aellington89/projects/24 ("Iterative Development - Finances Stack"; docs/PROCESS.md has its Priority and Size scales)                                                                                                                                          |

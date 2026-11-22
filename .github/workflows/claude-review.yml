@@ -48,6 +48,11 @@ jobs:
         run: node .dev-process/bin/dev-process.mjs install
       - uses: anthropics/claude-code-action@f431adaf77e0fecf918431e75a2b5b45b85af002 # v1.0.283
         if: env.READY == 'true'
+        env:
+          # Claude reads the review-pr skill here instead of invoking it, so the model and effort in
+          # its frontmatter don't apply on their own: the effort is set here, the model in
+          # claude_args. Keep both equal to the skill's.
+          CLAUDE_CODE_EFFORT_LEVEL: high
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -59,8 +64,9 @@ jobs:
             Read CLAUDE.md, then read ~/.claude/dev_process/skills/review-pr/SKILL.md and follow
             it for this PR. It points to the standard, the project's additions in
             docs/PROCESS.md, and the comment template. Read the PR with `gh pr view` and
-            `gh pr diff`, and the issue it closes with `gh issue view`. Post exactly one comment
-            with `gh pr comment`.
+            `gh pr diff`, and each issue it closes or is part of, with its delivery plan, with
+            `gh issue view`. Post exactly one comment with `gh pr comment`.
           claude_args: >-
+            --model opus
             --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Read,Glob,Grep"
             --add-dir ${{ github.workspace }}/.dev-process

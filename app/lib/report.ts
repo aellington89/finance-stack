@@ -7,8 +7,9 @@ import { log, type LogFields } from "@/lib/log";
  * Two sinks, both fed the *same serialized value*: the structured logger, and
  * whatever error-tracking backend `ERROR_DSN` points at (Issue #232). Every
  * capture path in the app routes through here — instrumentation.ts,
- * lib/actions/failure.ts, the two client error boundaries, and the seed-data
- * health route — so this is the only place either sink needs wiring.
+ * lib/actions/failure.ts, the two client error boundaries, the seed-data
+ * health route, and the recurring-transaction scheduler (lib/recurring/) — so
+ * this is the only place either sink needs wiring.
  *
  * **`serializeError()` runs once and both sinks receive its output.** That is the
  * load-bearing detail, not a tidiness one. The obvious shape —
@@ -35,6 +36,11 @@ export interface ReportContext extends LogFields {
   route?: string;
   /** Server-action name, e.g. "createAccount". */
   action?: string;
+  /**
+   * Background-job name, e.g. "recurring-schedule" (Issue #135). A job runs
+   * outside any request, so it has neither an action nor a route to name.
+   */
+  job?: string;
   /** users.user_id of the signed-in actor, where the call site can resolve it. */
   user_id?: string;
   /** React's error digest — correlates a browser record with the server one. */
@@ -148,6 +154,7 @@ function serializeError(error: unknown, includeCause = true): LogFields {
 
 function describe(context: ReportContext): string {
   if (context.action) return `${context.action} failed`;
+  if (context.job) return `${context.job} failed`;
   if (context.route) return `Unhandled error in ${context.route}`;
   return "Unhandled error";
 }

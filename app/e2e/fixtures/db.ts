@@ -25,7 +25,8 @@ export async function withClient<T>(fn: (client: Client) => Promise<T>): Promise
 /**
  * Removes every row the suite creates, in FK order — the same order and the
  * same reason as the afterEach in tests/integration/actions/transaction.test.ts
- * (transactions, then account_balance_history, then accounts).
+ * (recurring templates, transactions, then account_balance_history, then
+ * accounts).
  *
  * Runs in teardown *and* in setup: a run killed mid-flight (Ctrl-C, a CI
  * cancellation) never reaches teardown, and the developer's Finances_Test
@@ -39,6 +40,12 @@ export async function cleanupE2eRows(client: Client): Promise<void> {
   const prefix = `${E2E_ACCOUNT_PREFIX}%`;
   const ids = `SELECT account_id FROM accounts WHERE account_name LIKE $1`;
 
+  // A template's account keys are RESTRICT (Issue #135), so a template a spec
+  // left on an E2E account would block the account's delete below.
+  await client.query(
+    `DELETE FROM recurring_transactions WHERE account_id IN (${ids}) OR related_account_id IN (${ids})`,
+    [prefix]
+  );
   await client.query(
     `DELETE FROM transactions WHERE account_id IN (${ids}) OR related_account_id IN (${ids})`,
     [prefix]

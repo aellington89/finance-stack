@@ -8,6 +8,7 @@ import {
   accountBalanceHistory,
   auditLog,
   balanceTransfers,
+  recurringTransactions,
 } from "@/drizzle/schema";
 import {
   submitTransaction,
@@ -23,6 +24,13 @@ import {
   deleteBalanceTransfer,
 } from "@/lib/actions/balance-transfer";
 import { auditedTransaction } from "@/lib/db/audited";
+import { runDueTemplates } from "@/lib/recurring/materialize";
+import {
+  createRecurringTransaction,
+  updateRecurringTransaction,
+  deleteRecurringTransaction,
+} from "@/lib/actions/recurring-transaction";
+import { maxAuditId } from "../audit-watermark";
 
 // The session vitest-setup.ts installs by default.
 const SESSION_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -78,11 +86,7 @@ async function auditCountFor(tableName: string): Promise<number> {
 }
 
 beforeEach(async () => {
-  // int8 arrives from pg as a string.
-  const [{ max }] = await db
-    .select({ max: sql<string>`coalesce(max(audit_id), 0)` })
-    .from(auditLog);
-  auditWatermark = Number(max);
+  auditWatermark = await maxAuditId();
 
   createdAccountIds = [];
   const [inserted] = await db
@@ -94,6 +98,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Recurring templates before accounts: their account keys are RESTRICT.
+  await db
+    .delete(recurringTransactions)
+    .where(inArray(recurringTransactions.accountId, createdAccountIds));
   // Balance transfers first: a linked posting's foreign key is RESTRICT.
   await db.execute(sql`
     DELETE FROM balance_transfers bt
@@ -459,5 +467,89 @@ describe("audit logging — balance transfers (Issue #417)", () => {
     expect(rows[2].changedColumns).toEqual(["fee_transaction_id"]);
     expect(rows[2].afterData).toMatchObject({ fee_transaction_id: null });
     expect(rows[3].beforeData).toMatchObject({ transfer_transaction_id: posting.id });
+  });
+});
+
+describe("audit logging — recurring transactions (Issue #135)", () => {
+  it("attributes rows the scheduler creates to recurring-schedule, with the link in after_data (AC27)", async () => {
+    const [template] = await db
+      .insert(recurringTransactions)
+      .values({
+        transactionDescription: "Audit recurring",
+        amount: "-9.99",
+        accountId,
+        transactionTypeId: 1,
+        transactionCategoryId: 1,
+        cadence: "monthly",
+        anchorDate: "2020-03-31",
+        nextRunDate: "2020-03-31",
+      })
+      .returning({ id: recurringTransactions.recurringTransactionId });
+
+    await runDueTemplates({ today: "2020-04-30" });
+
+    const created = await db
+      .select({ id: transactions.transactionId })
+      .from(transactions)
+      .where(eq(transactions.recurringTransactionId, template.id))
+      .orderBy(transactions.recurringOccurrenceDate);
+    expect(created).toHaveLength(2);
+
+    const [insertRow] = await auditRowsFor("transactions", created[1].id);
+    expect(insertRow).toMatchObject({
+      action: "INSERT",
+      actorSource: "database",
+      actorUserId: null,
+      actorLabel: "recurring-schedule",
+    });
+    expect(insertRow.afterData).toMatchObject({
+      recurring_transaction_id: template.id,
+      recurring_occurrence_date: "2020-04-30",
+      transaction_date: "2020-04-30",
+    });
+
+    // The template's own advance is audited the same way. Its insert came
+    // straight from the test's connection, so it carries the role's name.
+    const templateRows = await auditRowsFor("recurring_transactions", template.id);
+    expect(templateRows.map((r) => r.action)).toEqual(["INSERT", "UPDATE"]);
+    expect(templateRows[0].actorLabel).not.toBe("recurring-schedule");
+    expect(templateRows[1]).toMatchObject({ actorSource: "database", actorLabel: "recurring-schedule" });
+    expect(templateRows[1].changedColumns).toEqual(["next_run_date"]);
+    expect(templateRows[1].afterData).toMatchObject({ next_run_date: "2020-05-31" });
+  });
+
+  it("audits template create, edit and delete through the actions (AC28)", async () => {
+    const fields = {
+      transactionDescription: "Audit template",
+      amount: "-5.00",
+      accountId: String(accountId),
+      transactionTypeId: "1",
+      transactionCategoryId: "1",
+      cadence: "monthly",
+      intervalCount: "1",
+      nextRunDate: "2031-01-15",
+    };
+    expect(await createRecurringTransaction(emptyState, makeFormData(fields))).toMatchObject({ success: true });
+    const [template] = await db
+      .select({ id: recurringTransactions.recurringTransactionId })
+      .from(recurringTransactions)
+      .where(eq(recurringTransactions.accountId, accountId));
+
+    const idField = { recurringTransactionId: String(template.id) };
+    expect(
+      await updateRecurringTransaction(emptyState, makeFormData({ ...fields, ...idField, amount: "-6.00" }))
+    ).toMatchObject({ success: true });
+    expect(await deleteRecurringTransaction(emptyState, makeFormData(idField))).toMatchObject({ success: true });
+
+    const rows = await auditRowsFor("recurring_transactions", template.id);
+    expect(rows.map((r) => r.action)).toEqual(["INSERT", "UPDATE", "DELETE"]);
+    for (const row of rows) {
+      expect(row.actorSource).toBe("app");
+      expect(row.actorUserId).toBe(SESSION_USER_ID);
+      expect(row.actorLabel).toBe(SESSION_USER_NAME);
+    }
+    expect(rows[0].afterData).toMatchObject({ cadence: "monthly", anchor_date: "2031-01-15", is_active: true });
+    expect(rows[1].changedColumns).toEqual(["amount"]);
+    expect(rows[2].beforeData).toMatchObject({ recurring_transaction_id: template.id });
   });
 });

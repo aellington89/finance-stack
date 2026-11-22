@@ -61,6 +61,7 @@ Two consequences worth knowing:
 |---|---|---|---|
 | `app` | the user's uuid | their username | a signed-in user through the UI |
 | `database` | `NULL` | `finance_importer` | the importer |
+| `database` | `NULL` | `recurring-schedule` | the recurring-transaction scheduler (Issue #135). It sets only the label, through `systemTransaction()` in [`lib/db/system-transaction.ts`](../app/lib/db/system-transaction.ts), because `auditedTransaction()` needs a request to read the session from |
 | `database` | `NULL` | `postgres` | an operator in `psql`, a migration, a restore |
 
 `actor_user_id` has **no foreign key** to `users`: the log has to survive the
@@ -74,6 +75,15 @@ Audited: `transactions`, `accounts`, `transaction_categories`,
 an `UPDATE` of `fee_transaction_id` to `NULL`, attributed to whoever deleted
 the fee transaction: `ON DELETE SET NULL` is a row update, so the trigger fires
 for it.
+
+`recurring_transactions` (Issue #135, migration 0011) is audited too. A row a
+template adds carries the template and its scheduled date in its INSERT
+`after_data` (`recurring_transaction_id`, `recurring_occurrence_date`). Rows
+the hourly scheduler adds are attributed to `recurring-schedule`, as
+are the template's own `next_run_date` advance and an automatic pause on a
+closed account. Saving a template adds whatever is already due in the same
+transaction, so those rows, like the template's own insert, update and delete,
+are attributed to the person saving.
 
 Two deliberate exclusions:
 
@@ -167,6 +177,25 @@ The column has no foreign key, for the same reason `actor_user_id` has none: a
 copy's provenance outlives its source. The value can therefore name a
 transaction that has since been deleted. That row's history is still here under
 its `row_pk`.
+
+Every row one recurring template added
+([Issue #135](https://github.com/aellington89/finance-stack/issues/135)), and
+who added it: `recurring-schedule` for the scheduler, or the person who saved
+the template:
+
+```sql
+SELECT occurred_at, actor_label, row_pk AS transaction_id,
+       after_data ->> 'recurring_occurrence_date' AS scheduled_for
+FROM v_audit_log
+WHERE table_name = 'transactions'
+  AND action = 'INSERT'
+  AND after_data ->> 'recurring_transaction_id' = '4'
+ORDER BY scheduled_for;
+```
+
+As with copies, the link has no foreign key, so it can name a template that has
+since been deleted; the template's own history stays here under its `row_pk` in
+`recurring_transactions`.
 
 Anything not done by a signed-in user:
 

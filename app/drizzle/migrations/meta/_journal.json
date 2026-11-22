@@ -78,6 +78,13 @@
       "when": 1794369981002,
       "tag": "0010_add_balance_transfers",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794714142501,
+      "tag": "0011_add_recurring_transactions",
+      "breakpoints": true
     }
   ]
 }
