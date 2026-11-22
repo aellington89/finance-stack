@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accountBalanceHistory,
@@ -20,6 +20,7 @@ import { deleteTransactionCategory, deleteTransactionType } from "@/lib/actions/
 import { currentDate } from "@/lib/recurring/materialize";
 import { addMonthsToDate, nextOccurrenceOnOrAfter } from "@/lib/recurring/schedule";
 import type { ActionState } from "@/lib/actions/utils";
+import { maxAuditId } from "../audit-watermark";
 
 /**
  * The recurring-transaction actions (Issue #135), and the guards that keep an
@@ -97,12 +98,6 @@ async function insertTemplate(values: Partial<typeof recurringTransactions.$infe
 
 async function templatesOn(accountId: number) {
   return db.select().from(recurringTransactions).where(eq(recurringTransactions.accountId, accountId));
-}
-
-/** The highest audit_id so far; int8 arrives from pg as a string. */
-async function maxAuditId(): Promise<number> {
-  const [{ max }] = await db.select({ max: sql<string>`coalesce(max(audit_id), 0)` }).from(auditLog);
-  return Number(max);
 }
 
 async function rowsOf(templateId: number) {

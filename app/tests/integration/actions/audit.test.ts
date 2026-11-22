@@ -30,6 +30,7 @@ import {
   updateRecurringTransaction,
   deleteRecurringTransaction,
 } from "@/lib/actions/recurring-transaction";
+import { maxAuditId } from "../audit-watermark";
 
 // The session vitest-setup.ts installs by default.
 const SESSION_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -85,11 +86,7 @@ async function auditCountFor(tableName: string): Promise<number> {
 }
 
 beforeEach(async () => {
-  // int8 arrives from pg as a string.
-  const [{ max }] = await db
-    .select({ max: sql<string>`coalesce(max(audit_id), 0)` })
-    .from(auditLog);
-  auditWatermark = Number(max);
+  auditWatermark = await maxAuditId();
 
   createdAccountIds = [];
   const [inserted] = await db
