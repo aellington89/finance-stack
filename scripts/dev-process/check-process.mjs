@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withoutComments } from './delivery-plan.mjs'
 
 export const MANIFEST = '.dev-process.json'
 export const CONVENTIONS_IMPORT = '@~/.claude/dev_process/CONVENTIONS.md'
@@ -67,8 +68,7 @@ const read = (root, path) => readFileSync(join(root, path), 'utf8').replace(/\r\
 // Lines outside fenced code and HTML comments, which hold examples and guidance.
 function contentLines(text) {
   let fenced = false
-  return text
-    .replace(/<!--[\s\S]*?-->/g, '')
+  return withoutComments(text)
     .split('\n')
     .filter((line) => {
       if (/^\s*(`{3,}|~{3,})/.test(line)) {
