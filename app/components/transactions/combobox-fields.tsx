@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/combobox";
 
 /**
- * The New Transaction form's account, type and category pickers, moved here
- * unchanged from transaction-form.tsx so that the recurring-transaction dialog
- * (Issue #135) can share them. Each posts its value through a hidden input
- * named `name`, and gives the visible input `id={name}` for its label.
+ * The account, type and category pickers shared by the New Transaction form
+ * and the recurring-transaction dialog (Issue #135). Moved here unchanged from
+ * transaction-form.tsx. Each posts its value through a hidden input named
+ * `name`, and gives the visible input `id={name}` for its label.
  */
 
 export interface LookupOption {
