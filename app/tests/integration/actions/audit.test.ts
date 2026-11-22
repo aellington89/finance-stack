@@ -25,6 +25,11 @@ import {
 } from "@/lib/actions/balance-transfer";
 import { auditedTransaction } from "@/lib/db/audited";
 import { runDueTemplates } from "@/lib/recurring/materialize";
+import {
+  createRecurringTransaction,
+  updateRecurringTransaction,
+  deleteRecurringTransaction,
+} from "@/lib/actions/recurring-transaction";
 
 // The session vitest-setup.ts installs by default.
 const SESSION_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -469,47 +474,6 @@ describe("audit logging — balance transfers (Issue #417)", () => {
 });
 
 describe("audit logging — recurring transactions (Issue #135)", () => {
-  it("audits a template's insert, update and delete, attributed to the user", async () => {
-    const id = await auditedTransaction(async (tx) => {
-      const [row] = await tx
-        .insert(recurringTransactions)
-        .values({
-          transactionDescription: "Audit recurring",
-          amount: "-9.99",
-          accountId,
-          transactionTypeId: 1,
-          transactionCategoryId: 1,
-          cadence: "monthly",
-          anchorDate: "2030-01-31",
-          nextRunDate: "2030-01-31",
-        })
-        .returning({ id: recurringTransactions.recurringTransactionId });
-      return row.id;
-    });
-    await auditedTransaction(async (tx) => {
-      await tx
-        .update(recurringTransactions)
-        .set({ isActive: false })
-        .where(eq(recurringTransactions.recurringTransactionId, id));
-    });
-    await auditedTransaction(async (tx) => {
-      await tx
-        .delete(recurringTransactions)
-        .where(eq(recurringTransactions.recurringTransactionId, id));
-    });
-
-    const rows = await auditRowsFor("recurring_transactions", id);
-    expect(rows.map((r) => r.action)).toEqual(["INSERT", "UPDATE", "DELETE"]);
-    for (const row of rows) {
-      expect(row.actorSource).toBe("app");
-      expect(row.actorUserId).toBe(SESSION_USER_ID);
-    }
-    expect(rows[0].afterData).toMatchObject({ transaction_description: "Audit recurring", cadence: "monthly" });
-    expect(rows[1].beforeData).toMatchObject({ is_active: true });
-    expect(rows[1].afterData).toMatchObject({ is_active: false });
-    expect(rows[2].beforeData).toMatchObject({ recurring_transaction_id: id });
-  });
-
   it("attributes rows the scheduler creates to recurring-schedule, with the link in after_data (AC27)", async () => {
     const [template] = await db
       .insert(recurringTransactions)
@@ -555,5 +519,40 @@ describe("audit logging — recurring transactions (Issue #135)", () => {
     expect(templateRows[1]).toMatchObject({ actorSource: "database", actorLabel: "recurring-schedule" });
     expect(templateRows[1].changedColumns).toEqual(["next_run_date"]);
     expect(templateRows[1].afterData).toMatchObject({ next_run_date: "2020-05-31" });
+  });
+
+  it("audits template create, edit and delete through the actions (AC28)", async () => {
+    const fields = {
+      transactionDescription: "Audit template",
+      amount: "-5.00",
+      accountId: String(accountId),
+      transactionTypeId: "1",
+      transactionCategoryId: "1",
+      cadence: "monthly",
+      intervalCount: "1",
+      nextRunDate: "2031-01-15",
+    };
+    expect(await createRecurringTransaction(emptyState, makeFormData(fields))).toMatchObject({ success: true });
+    const [template] = await db
+      .select({ id: recurringTransactions.recurringTransactionId })
+      .from(recurringTransactions)
+      .where(eq(recurringTransactions.accountId, accountId));
+
+    const idField = { recurringTransactionId: String(template.id) };
+    expect(
+      await updateRecurringTransaction(emptyState, makeFormData({ ...fields, ...idField, amount: "-6.00" }))
+    ).toMatchObject({ success: true });
+    expect(await deleteRecurringTransaction(emptyState, makeFormData(idField))).toMatchObject({ success: true });
+
+    const rows = await auditRowsFor("recurring_transactions", template.id);
+    expect(rows.map((r) => r.action)).toEqual(["INSERT", "UPDATE", "DELETE"]);
+    for (const row of rows) {
+      expect(row.actorSource).toBe("app");
+      expect(row.actorUserId).toBe(SESSION_USER_ID);
+      expect(row.actorLabel).toBe(SESSION_USER_NAME);
+    }
+    expect(rows[0].afterData).toMatchObject({ cadence: "monthly", anchor_date: "2031-01-15", is_active: true });
+    expect(rows[1].changedColumns).toEqual(["amount"]);
+    expect(rows[2].beforeData).toMatchObject({ recurring_transaction_id: template.id });
   });
 });

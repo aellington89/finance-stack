@@ -10,15 +10,16 @@ import { reportError } from "@/lib/report";
 
 /**
  * Turns due recurring-transaction templates into transactions rows (Issue
- * #135). Two entry points, one per caller the issue plans:
+ * #135). Two entry points, one per caller:
  *
  *   - **runDueTemplates()** is the scheduler's (lib/recurring/scheduler.ts),
  *     hourly. Each template runs in its own systemTransaction, so the rows are
  *     audited as `recurring-schedule`, and one bad template is reported and
  *     skipped without holding up the rest.
  *   - **materializeTemplate()** runs inside a caller's transaction. A template
- *     save will call it inside its own auditedTransaction, so a template that
- *     is already due fills in at once, attributed to the person saving.
+ *     save (lib/actions/recurring-transaction.ts) calls it inside its own
+ *     auditedTransaction, so a template that is already due fills in at once,
+ *     attributed to the person saving.
  *
  * "Exactly once" holds on two levels. The template row is locked FOR UPDATE
  * with the due predicate in the WHERE, so a second runner either waits and
@@ -34,9 +35,9 @@ import { reportError } from "@/lib/report";
 
 /**
  * The most occurrences one template creates in one run. More than a year of a
- * daily schedule, which is as far back as a save will let one start (a save
- * will refuse a next date more than a year back), so any accepted backfill
- * completes in a single pass. A template still behind after a run stays due, and the next run
+ * daily schedule, which is as far back as a save may start one (the one-year
+ * floor in checkRecurringSchedule), so any accepted backfill completes in a
+ * single pass. A template still behind after a run stays due, and the next run
  * carries on from where this one stopped.
  */
 export const MATERIALIZE_CAP = 400;

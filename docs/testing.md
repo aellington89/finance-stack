@@ -664,7 +664,7 @@ Nothing depends on a timer being long enough, so the test is as reliable on a sl
 
 [`tests/integration/actions/validation-contract.test.ts`](../app/tests/integration/actions/validation-contract.test.ts) is the executable form of the [Issue #179](https://github.com/aellington89/finance-stack/issues/179) checklist. For every mutating server action it asserts that an empty payload, and a payload carrying `1.5` / `Infinity` / `2147483648` in each ID field, is rejected with an authored message that contains no driver text.
 
-**It is self-maintaining in both directions**, which is the point: the registry is checked against the action modules' actual exports *and* against the table in [Input Validation](input-validation.md). Adding a nineteenth action fails the suite until it appears in all three places.
+**It is self-maintaining in both directions**, which is the point: the registry is checked against the action modules' actual exports *and* against the table in [Input Validation](input-validation.md). Adding an action fails the suite until it appears in all three places. A new action module also has to be imported into the test and added to its export check, or the self-check never sees it.
 
 The sharpest assertion is the `console.error` spy. Every rejection must happen *before* the database is reached, so a log line means the action let the payload through to `actionFailure()` and tidied up afterwards — which fails the test even though the returned message looks right.
 
