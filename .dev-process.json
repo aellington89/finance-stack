@@ -1,7 +1,7 @@
 {
   "source": "github:aellington89/dev_process",
-  "version": "2.0.0",
-  "commit": "eed234e69f05ef1f6ae324bffeb1dc6aa235df4a",
+  "version": "2.1.0",
+  "commit": "42edc352287beef69af936e91f1566a195bd26e8",
   "files": {
     ".github/ISSUE_TEMPLATE/bug.yml": "d9fdbbfd55b387784df5c8cfd0d2ed8725cec425adaf5e9393399c8ab86414cd",
     ".github/ISSUE_TEMPLATE/feature.yml": "943ea2002ac5dac751ad434f3132c5c743b66525c149b48d0c45cad57cd3c6c7",
