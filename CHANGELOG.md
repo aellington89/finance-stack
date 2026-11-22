@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Migration:** backward-compatible
 
+### Added
+
+- **Recurring transactions: set up rent, pay, subscriptions or bills once on Transactions → Recurring, and each one is added on its schedule.** ([Issue #135](https://github.com/aellington89/finance-stack/issues/135)) A recurring transaction holds the details every transaction it adds will carry: description, amount, account, related account, type and category. It also says how often it repeats: every N days, weeks, months or years. Every 2 weeks covers biweekly pay, and every 3 months a quarterly bill. Give it a next date and, optionally, an end date. The dialog previews the next three dates as you type, and how many dates a save adds at once. The list shows each one's schedule, next date and status: Active, Paused, Ended, Account closed, or Paused — account closed.
+
+  Each scheduled date becomes an ordinary transaction, so balances, the dashboards and Metabase see it with no change. The app checks hourly, and once shortly after it starts. A date missed while it was down is added then, on its own date. Saving a template whose next date is today, or already past, adds those dates at once. A save refuses a next date more than a year back, or before the account opened, so a mistyped year can't add hundreds of rows. Extending an Ended template is held to the same year.
+
+  Monthly dates keep their day: a template on the 31st falls on the last day of shorter months and comes back to the 31st. Each date is added exactly once, however many times the check runs.
+
+  To skip one occurrence, delete the transaction it added; it doesn't come back. To stop for a while, untick Active. Resuming skips the dates it was paused for. Editing a template changes only dates still to come, and deleting it keeps the transactions it already added. A template on an account that has been closed adds nothing from the close date on, and pauses itself.
+
+  "Today" is the database's date, as it is for balances. That date is in UTC, so it turns over in the early evening in US time zones. A template dated the 1st can appear on the evening of the 31st. [Database → Recurring transactions](docs/database.md#recurring-transactions) has the rules.
+
+  The migration adds a `recurring_transactions` table, with an audit trigger. It also adds two nullable columns to `transactions`, `recurring_transaction_id` and `recurring_occurrence_date`, under a UNIQUE that makes "exactly once" a database guarantee. Metabase's `finance_bi` role can read the new table, and the importer's role can't. Rows the hourly check adds are audited as `recurring-schedule`; rows a save adds are attributed to the person saving. The previous app version never reads the table and never writes the new columns, so rolling back by re-pinning the previous image is safe: templates simply stop running.
+
 ### Changed
 
 - **Caddy moves to 2.11.8-alpine and Metabase to v0.58.40** (from 2.11.7-alpine and v0.58.39). ([PR #413](https://github.com/aellington89/finance-stack/pull/413), [PR #445](https://github.com/aellington89/finance-stack/pull/445)) Both are patch releases on their current lines. Metabase stays on the 0.58 LTS line, so it runs no one-way metadata migration. Caddy 2.11.8 lists breaking changes, but they are in directives the shipped `caddy/Caddyfile` does not use. That file is one `reverse_proxy` with a JSON access log, and it validates and proxies unchanged on 2.11.8. The one change it does see is a `400` for a request whose host is invalid, such as `..`. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.

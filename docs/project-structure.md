@@ -63,7 +63,7 @@ finance-stack/
 │   │       │   │   ├── page.tsx              #       Overview — filter bar + list + new-transaction form
 │   │       │   │   ├── categories/page.tsx   #       Categories drill-down (stub)
 │   │       │   │   ├── merchants/page.tsx    #       Merchants drill-down (stub)
-│   │       │   │   └── recurring/page.tsx    #       Recurring drill-down (stub)
+│   │       │   │   └── recurring/page.tsx    #       Recurring — recurring-transaction templates: list + add/edit/delete (#135)
 │   │       │   ├── accounts/             #     Accounts:
 │   │       │   │   ├── page.tsx              #       Overview — visual balance sheet
 │   │       │   │   ├── activity/page.tsx     #       Activity drill-down (stub)
@@ -156,6 +156,8 @@ finance-stack/
 │   │       ├── transaction-discard-dialog.tsx # Discard-unsaved-changes confirmation when switching inline rows (#148, #241)
 │   │       ├── transaction-filters.tsx   # Label-less filter bar with date range, multi-select, amount
 │   │       ├── combobox-fields.tsx       # Account/type/category pickers, moved out of the transaction form to be shared (#135)
+│   │       ├── recurring-transactions-card.tsx # The Recurring tab: template table + add/edit/delete dialogs (#135)
+│   │       ├── recurring-transaction-dialog.tsx # Add/edit dialog: the six fields, "repeats every N", next/end dates, live preview (#135)
 │   │       ├── recurring-schedule-view.ts # Pure status + save preview for the Recurring tab, mirroring the save's rules; unit-tested (#135)
 │   │       └── transaction-columns.ts    # Shared ColumnKey type + visible-columns cookie helpers (server- and client-safe)
 │   ├── lib/                              # Shared libraries
