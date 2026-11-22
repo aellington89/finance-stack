@@ -44,6 +44,12 @@ with the shared dev process (Dev process, below).
 - An integration test that reads `audit_log` filters on a watermark from `maxAuditId()`, taken
   before the action; `row_pk` alone matches stale rows once a test database reuses ids
   (`app/tests/integration/audit-watermark.ts`, PR #486).
+- A transaction read that needs no joined name reads `transactions`, not `v_transactions_full`,
+  through the one `buildWhereClause(filters, source)`. It matches the view only while every
+  inner join there follows a `NOT NULL` foreign key, which
+  `app/tests/integration/queries/transactions.test.ts` checks (Issue #146).
+- An integration test that compares whole tables fails if a `npm run dev` server on the same
+  `Finances_Test` writes between its reads: stop it or start it with `RECURRING_SCHEDULER=off`.
 
 ## Dev process
 
