@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dependencies
+
+- **The chart and icon libraries took their minor bumps.** ([PR #459](https://github.com/aellington89/finance-stack/pull/459)) `recharts` 3.10.1 → 3.11.0 and `lucide-react` 1.72.0 → 1.74.0, both bundled into `finance-app`. recharts 3.11's headline feature, themes, is opt-in. Without a theme provider it keeps the defaults it has had since 2.x, and every chart here passes its own colors, so the dashboard looks the same. Every chart page was pixel-identical before and after on the test data. One fix users may notice: recharts no longer makes each of its internal drawing layers focusable. Tab now crosses a chart in one stop instead of a dozen, and clicking a chart no longer leaves a focus ring on it. lucide 1.74 renamed its `fold`, `unfold` and `centerline` icons to a new `axis` family, and the app uses none of them.
+
 ## [1.6.0] - 2026-11-21
 
 **Migration:** backward-compatible
