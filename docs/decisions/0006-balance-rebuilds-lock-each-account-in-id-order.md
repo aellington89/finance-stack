@@ -1,4 +1,4 @@
-# 0007. Balance rebuilds lock each account, in ascending id order
+# 0006. Balance rebuilds lock each account, in ascending id order
 
 Date: 2026-11-21 · Status: Accepted · Issue: #463
 
@@ -9,13 +9,14 @@ rebuilds the history of the accounts it touched by summing the rows it can see.
 [Issue #463](https://github.com/aellington89/finance-stack/issues/463) showed that two writes to one
 account committing at the same moment could each sum from their own snapshot under READ COMMITTED,
 so the later rebuild overwrote the other's totals, with no error. The recurring scheduler
-([0006](0006-recurring-transactions-run-in-process-on-postgres-today.md)) writes on its own clock,
+([0007](0007-recurring-transactions-run-in-process-on-postgres-today.md)) writes on its own clock,
 which makes that overlap likelier. Recorded on 2026-11-23 from
 [database.md](../database.md) and the issue's plan.
 
 ## Decision
 
-- Every rebuild first takes a per-account, transaction-scoped advisory lock,
+- Every rebuild the app runs (`rebuildAccountBalance`) first takes a per-account,
+  transaction-scoped advisory lock,
   `pg_advisory_xact_lock(463001, account_id)`, as a statement of its own, so the rebuild that follows
   gets a fresh snapshot that includes the other writer's rows.
 - A write that touches several accounts goes through `rebuildAccountBalances`, which takes the

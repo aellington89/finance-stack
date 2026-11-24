@@ -1,4 +1,4 @@
-# 0006. Recurring transactions run in-process, on Postgres's "today"
+# 0007. Recurring transactions run in-process, on Postgres's "today"
 
 Date: 2026-11-22 · Status: Accepted · Issue: #135
 
@@ -39,9 +39,9 @@ The issue's first sketch put that job in the importer or in a Next.js cron route
 
 ## Alternatives considered
 
-- **A job in the importer** (#135's first sketch). `finance_importer` may only append to
-  `transactions` and `import_log` ([0002](0002-each-service-connects-as-its-own-least-privilege-role.md)), so it
-  couldn't advance a template's next date or rebuild the balances it touched.
-- **A Next.js cron route** (the sketch's other option). Something outside would have to call it, so
-  it needs a URL and a secret to guard it; the timer needs neither.
+- **A job in the importer, or a Next.js cron route.** #135's first sketch named both, and its spec
+  chose a timer inside the app server without recording a comparison. As built, `finance_importer`
+  has no grant on `recurring_transactions`
+  ([0002](0002-each-service-connects-as-its-own-least-privilege-role.md)), and the timer needs no
+  cron container, URL or secret. A change here should weigh both options again.
 - **The browser's date.** It would let the page and the save disagree on "today" (CLAUDE.md).

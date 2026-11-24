@@ -28,6 +28,9 @@ a default SDK call would send the raw error and the row with it. Recorded on 202
   no build-time `SENTRY_AUTH_TOKEN` ([secrets.md](../secrets.md)).
 - Given up: breadcrumbs, source-mapped frames, automatic instrumentation and release health. Stack
   traces arrive as text.
+- Alerting is still off by default: GlitchTip needs a mail relay before it can notify anyone
+  ([Alerting is not configured by default](../observability.md#alerting-is-not-configured-by-default),
+  #340). Until then, errors are collected but seen only by someone who looks.
 - A genuine browser-side throw isn't captured; Server Component errors are, under the same digest.
   A same-origin ingest route would recover it (#339).
 

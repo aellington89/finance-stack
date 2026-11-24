@@ -15,7 +15,8 @@ A `SECURITY DEFINER` trigger function, `audit_row_change()`, owned by the superu
 `audit_log` row per inserted, updated or deleted row, with `to_jsonb(OLD)` and `to_jsonb(NEW)`. The
 app names the actor out of band, through transaction-local settings that `auditedTransaction()`
 sets for a signed-in user and `systemTransaction()` sets for a background job.
-Each audited table gets its trigger hand-appended to the migration that creates it.
+Each audited table gets its trigger hand-appended to a migration: the one that creates the table,
+or a later one, as `0004_add_audit_log.sql` did for the six tables that already existed.
 
 ## Consequences
 

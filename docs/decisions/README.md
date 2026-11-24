@@ -15,5 +15,5 @@ them; each is dated when its decision was made.
 | 0003 | [Database triggers write the audit log](0003-database-triggers-write-the-audit-log.md)                                                       | Accepted |
 | 0004 | [Releases ship GHCR images and a deploy bundle, with a migration marker for rollback](0004-releases-ship-ghcr-images-and-a-deploy-bundle.md) | Accepted |
 | 0005 | [Errors are captured server-side, through reportError(), without an SDK](0005-errors-are-captured-server-side-without-an-sdk.md)             | Accepted |
-| 0006 | [Recurring transactions run in-process, on Postgres's "today"](0006-recurring-transactions-run-in-process-on-postgres-today.md)              | Accepted |
-| 0007 | [Balance rebuilds lock each account, in ascending id order](0007-balance-rebuilds-lock-each-account-in-id-order.md)                          | Accepted |
+| 0006 | [Balance rebuilds lock each account, in ascending id order](0006-balance-rebuilds-lock-each-account-in-id-order.md)                          | Accepted |
+| 0007 | [Recurring transactions run in-process, on Postgres's "today"](0007-recurring-transactions-run-in-process-on-postgres-today.md)              | Accepted |

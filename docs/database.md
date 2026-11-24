@@ -30,7 +30,7 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 
 ## Balance History
 
-Decision record: [0007](decisions/0007-balance-rebuilds-lock-each-account-in-id-order.md), why rebuilds lock each account, in id order.
+Decision record: [0006](decisions/0006-balance-rebuilds-lock-each-account-in-id-order.md), why rebuilds lock each account, in id order.
 
 `account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change.
 
@@ -111,7 +111,7 @@ The account edit page shows what's left on each active transfer, or "Paid off".
 
 ## Recurring transactions
 
-Decision record: [0006](decisions/0006-recurring-transactions-run-in-process-on-postgres-today.md), why the scheduler runs in-process, on Postgres's today.
+Decision record: [0007](decisions/0007-recurring-transactions-run-in-process-on-postgres-today.md), why the scheduler runs in-process, on Postgres's today.
 
 Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app runs due templates hourly, and saving one adds whatever is already due. Templates are managed on **Transactions → Recurring**, which lists each one with its schedule, next date and status, and adds, edits and deletes them in a dialog that previews the next three dates and how many a save adds at once. Its "today" is Postgres's, read when the page loads and moved on when a dialog opens after that day has ended, so the preview counts what the save will.
 

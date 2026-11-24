@@ -36,8 +36,8 @@ only.
 
 ## Alternatives considered
 
-- **Keep `schema.sql` from `pg_dump`, and pull `schema.ts` from it.** That was the state that
-  caused the drift.
+- **Keep `schema.sql` from `pg_dump` and `schema.ts` from `drizzle-kit pull`, both from the live
+  database.** That was the state that caused the drift.
 - **Apply migrations when the app boots.** #121 offered this or a dedicated Compose service, and
   the service was built. It gates the app and the importer with `service_completed_successfully`,
   and it later let the app's own role go without DDL rights

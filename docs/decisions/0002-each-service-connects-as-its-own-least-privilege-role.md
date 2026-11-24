@@ -12,8 +12,9 @@ that came later. Recorded on 2026-11-23 from
 
 ## Decision
 
-The long-running services never connect as the superuser. Each one authenticates as its own login
-role, scoped to what it does:
+The services that serve requests or read data (`finance-app`, `importer`, Metabase and GlitchTip)
+never connect as the superuser. Each one authenticates as its own login role, scoped to what it
+does:
 
 | Role                                      | Service                               | Can                                                                  |
 | ----------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
@@ -37,8 +38,13 @@ and 443 on purpose.
 - `finance_app` is granted broadly and then revoked, with `ALTER DEFAULT PRIVILEGES`, so a new
   table is covered automatically. The two narrow roles are enumerated, so a migration that adds a
   table or view they need must also update `init-db/roles/02-grants.sql`.
-- `assert-grants.sql` is a CI gate: it checks the grant matrix against the catalog and fails on
-  any undeclared login role, so a role added by hand is reported, not silently rewritten.
+- `assert-grants.sql` checks the grant matrix against the catalog. It fails any login role with a
+  cluster attribute (`SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION`, `BYPASSRLS`), and any role
+  the stack doesn't declare that has `CONNECT` on the database. CI runs it on every PR against a
+  fresh `Finances_Test`; nothing runs it against a live install, so an operator who wants a server
+  checked runs `scripts/verify-db-roles.sh` there
+  ([Verifying the roles](../database.md#verifying-the-roles)). `migrate` never rewrites a role the
+  stack doesn't declare.
 - `migrate` can't converge the superuser's own password, because it authenticates with it; it
   detects a mismatch and reports it instead (Issue #189).
 

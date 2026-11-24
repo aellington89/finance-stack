@@ -40,5 +40,5 @@ nothing said which (Issue #277). Recorded on 2026-11-23 from
 
 - **Build on the server from a checkout.** The state before #223.
 - **Unattended upgrades on a timer.** Rejected: rolling back a `breaking` release needs a person.
-- **Down migrations.** Drizzle doesn't generate them, and the marker plus the backup gate covers
-  the same need without hand-written reverse SQL.
+- **Down migrations.** Not weighed: #277 took their absence as a given ("drizzle-kit does not
+  generate them") and built the marker and the backup gate around it.
