@@ -113,6 +113,8 @@ gh release edit v0.1.4 --notes-file <changelog-section.md>
 
 ## Published images
 
+Decision record: [0004](decisions/0004-releases-ship-ghcr-images-and-a-deploy-bundle.md), why releases ship images and a bundle, and what the migration marker promises.
+
 Every `vX.Y.Z` tag publishes four images to the GitHub Container Registry
 ([Issue #226](https://github.com/aellington89/finance-stack/issues/226)):
 

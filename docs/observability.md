@@ -234,6 +234,8 @@ theirs.
 
 ## Error tracking
 
+Decision record: [0005](decisions/0005-errors-are-captured-server-side-without-an-sdk.md), why capture is server-side, with no SDK.
+
 `reportError()` has a second sink: any backend speaking the Sentry ingest
 protocol, configured with a single optional variable.
 Added in [Issue #232](https://github.com/aellington89/finance-stack/issues/232).

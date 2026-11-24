@@ -30,6 +30,8 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 
 ## Balance History
 
+Decision record: [0007](decisions/0007-balance-rebuilds-lock-each-account-in-id-order.md), why rebuilds lock each account, in id order.
+
 `account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change.
 
 Every balance the app shows reads this table: net worth, `v_account_balances_current`, and each drilldown. What keeps it current depends on how a transaction arrived:
@@ -108,6 +110,8 @@ The account edit page shows what's left on each active transfer, or "Paid off".
 - Above 0%, interest is approximated at the nominal monthly rate (APR ÷ 12). It is not daily compounding, and not the interest postings in the ledger.
 
 ## Recurring transactions
+
+Decision record: [0006](decisions/0006-recurring-transactions-run-in-process-on-postgres-today.md), why the scheduler runs in-process, on Postgres's today.
 
 Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app runs due templates hourly, and saving one adds whatever is already due. Templates are managed on **Transactions → Recurring**, which lists each one with its schedule, next date and status, and adds, edits and deletes them in a dialog that previews the next three dates and how many a save adds at once. Its "today" is Postgres's, read when the page loads and moved on when a dialog opens after that day has ended, so the preview counts what the save will.
 
@@ -371,6 +375,8 @@ A role for a **new domain** (assets, income) is the same five steps; nothing is 
 
 ## Roles & Privileges
 
+Decision record: [0002](decisions/0002-each-service-connects-as-its-own-least-privilege-role.md), why each service has its own role.
+
 The long-running services do **not** connect as the `postgres` superuser (Issue #130). Each authenticates as its own login role, scoped to what it actually does:
 
 | Role | Used by | Privileges |
@@ -393,6 +399,7 @@ Those three are not the whole story, and describing only them is how a **superus
 |---|---|---|
 | `finance_app`, `finance_importer`, `finance_bi` | the long-running services and the BI connection | the matrix above |
 | `MB_DB_USER` (default `metabase_user`) | Metabase, for its **own metadata database** | Owns `MB_DB_DBNAME` and holds `USAGE`+`CREATE` on its `public` schema — it runs its own schema migrations there. **No cluster attributes, and no `CONNECT` on `Finances`** |
+| `GLITCHTIP_DB_USER` (default `glitchtip`) | GlitchTip, for its **own database** | Owns `GLITCHTIP_DB_DBNAME`, converged by [`04-glitchtip-role.sql`](../init-db/roles/04-glitchtip-role.sql) the same way as the Metabase role — it runs its own schema migrations there. **No cluster attributes, and no `CONNECT` on `Finances`** (Issue #232) |
 | `POSTGRES_USER` (default `postgres`) | `migrate`, `init-script`, `pg-backup` | Superuser, deliberately — these are maintenance jobs that need DDL and cluster-wide reads, and none has a network-facing surface |
 
 **Exactly one login role is a superuser, and it is the maintenance identity.** That is now an assertion rather than a description: [`assert-grants.sql`](../init-db/roles/assert-grants.sql) sweeps *every* login role in `pg_roles`, exempting only `current_user` — the identity running the gate. A role added later, by a future service or by hand, fails the gate by default instead of being invisible to it, and a role the stack does not declare must additionally hold no `CONNECT` on the database under test.

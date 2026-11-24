@@ -15,16 +15,20 @@ that came later. Recorded on 2026-11-23 from
 The long-running services never connect as the superuser. Each one authenticates as its own login
 role, scoped to what it does:
 
-| Role               | Service                | Can                                                                 |
-| ------------------ | ---------------------- | ------------------------------------------------------------------- |
-| `finance_app`      | `finance-app`          | Read and write the core tables; only read `users` and `audit_log`   |
-| `finance_importer` | `importer`             | Append to `transactions` and `import_log`; read accounts and lookups |
-| `finance_bi`       | `metabase` (`bi`)      | Read the core tables and views, never `users` or `audit_log` (#249) |
-| `metabase_user`    | `metabase`, own state  | Own the separate `metabase` database only (#239)                     |
+| Role                                      | Service                               | Can                                                                  |
+| ----------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| `finance_app`                             | `finance-app`                         | Read and write the core tables; only read `users` and `audit_log`    |
+| `finance_importer`                        | `importer`                            | Append to `transactions` and `import_log`; read accounts and lookups |
+| `finance_bi`                              | `metabase` (`bi`)                     | Read the core tables and views, never `users` or `audit_log` (#249)  |
+| `MB_DB_USER` (default `metabase_user`)    | `metabase` (`bi`), its own state      | Own the separate Metabase database only (#239)                       |
+| `GLITCHTIP_DB_USER` (default `glitchtip`) | `glitchtip` (`errors`), its own state | Own the separate GlitchTip database only (#232)                      |
 
-The superuser is the maintenance identity: only the one-shot `migrate` job and `pg-backup` use it.
-`migrate` creates the roles and re-applies their attributes, passwords and grants on every run
-(`init-db/roles/`). Host ports bind to `127.0.0.1`.
+The superuser is the maintenance identity: only the one-shot `migrate` and `init-script` jobs and
+`pg-backup` use it. `migrate` creates the roles and re-applies their attributes, passwords and
+grants on every run (`init-db/roles/`). Postgres, Metabase and GlitchTip publish their ports on
+`127.0.0.1` only, and so does `finance-app` on a server (`deploy/compose.yml`); the development
+`docker-compose.yml` publishes `finance-app` on every interface, and Caddy (`edge`) publishes 80
+and 443 on purpose.
 
 ## Consequences
 
