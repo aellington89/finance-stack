@@ -12,9 +12,8 @@ that came later. Recorded on 2026-11-23 from
 
 ## Decision
 
-The services that serve requests or read data (`finance-app`, `importer`, Metabase and GlitchTip)
-never connect as the superuser. Each one authenticates as its own login role, scoped to what it
-does:
+`finance-app`, the `importer`, Metabase and GlitchTip never connect as the superuser. Each one
+authenticates as its own login role, scoped to what it does:
 
 | Role                                      | Service                               | Can                                                                  |
 | ----------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
@@ -38,9 +37,11 @@ and 443 on purpose.
 - `finance_app` is granted broadly and then revoked, with `ALTER DEFAULT PRIVILEGES`, so a new
   table is covered automatically. The two narrow roles are enumerated, so a migration that adds a
   table or view they need must also update `init-db/roles/02-grants.sql`.
-- `assert-grants.sql` checks the grant matrix against the catalog. It fails any login role with a
-  cluster attribute (`SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION`, `BYPASSRLS`), and any role
-  the stack doesn't declare that has `CONNECT` on the database. CI runs it on every PR against a
+- `assert-grants.sql` checks the grant matrix against the catalog. It exempts the identity running
+  it, the maintenance superuser, and fails any other login role with a cluster attribute
+  (`SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION`, `BYPASSRLS`). Only the three service roles
+  may hold `CONNECT` on the database: any other login role that does fails it, including the
+  Metabase and GlitchTip roles in the table above. CI runs it on every PR against a
   fresh `Finances_Test`; nothing runs it against a live install, so an operator who wants a server
   checked runs `scripts/verify-db-roles.sh` there
   ([Verifying the roles](../database.md#verifying-the-roles)). `migrate` never rewrites a role the

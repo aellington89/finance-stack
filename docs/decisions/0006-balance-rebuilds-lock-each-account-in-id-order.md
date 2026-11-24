@@ -5,7 +5,9 @@ Date: 2026-11-21 · Status: Accepted · Issue: #463
 ## Context
 
 `account_balance_history` holds each account's balance per day, and every create, edit or delete
-rebuilds the history of the accounts it touched by summing the rows it can see.
+made through the app rebuilds the history of the accounts it touched by summing the rows it can
+see. Imported rows reach balances only through the full rebuild (#394), which doesn't take the
+lock this record describes (#465).
 [Issue #463](https://github.com/aellington89/finance-stack/issues/463) showed that two writes to one
 account committing at the same moment could each sum from their own snapshot under READ COMMITTED,
 so the later rebuild overwrote the other's totals, with no error. The recurring scheduler
