@@ -69,7 +69,10 @@
 # bases had been rebuilt onto apt 3.0.4. Deleted with its comment. The two zlib
 # findings that turned the gate red in the same window (CVE-2026-76844 and
 # CVE-2026-85091, zlib1g, DSA-6613-1) were never entered here, because both
-# Dockerfiles take zlib1g from trixie-security instead (#399).
+# Dockerfiles take zlib1g from trixie-security instead (#399). Nor were the
+# fourteen krb5 findings in finance-backup (CVE-2026-71199 and the rest,
+# 1.21.3-5+deb13u1, DSA-6650-1): scripts/Dockerfile takes the four krb5 library
+# packages from trixie-security in the same layer.
 #
 # EMPTIED ONCE BEFORE THAT, BECAUSE THE BASE CAUGHT UP. Before the apt entry,
 # this block held three entries from #352,
