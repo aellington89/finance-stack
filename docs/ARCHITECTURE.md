@@ -3,7 +3,8 @@
 How Finance Stack fits together: a PostgreSQL 18 server holding the data, a Next.js app and a Python
 importer that write it, each as its own least-privilege role, and optional services for dashboards,
 error tracking, and TLS, all run with Docker Compose. The guides go deep on each part; this page
-shows how the parts connect and how data moves between them.
+shows how the parts connect and how data moves between them, and
+[the decision records](decisions/README.md) say why the costly-to-reverse choices were made.
 
 ## Services and profiles
 
