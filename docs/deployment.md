@@ -129,6 +129,8 @@ and `deploy.sh`'s upgrade path all read the profiles from the compose file.
 
 ## The deployment bundle
 
+Decision record: [0004](decisions/0004-releases-ship-ghcr-images-and-a-deploy-bundle.md), why releases ship images and a bundle, and what the migration marker promises.
+
 A server does not get a checkout. It gets `finance-stack-X.Y.Z.tar.gz`, attached
 to every GitHub Release
 ([#227](https://github.com/aellington89/finance-stack/issues/227)), which expands

@@ -4,6 +4,8 @@ Covers making schema changes and adopting migrations on existing databases.
 
 ## Making Schema Changes
 
+Decision record: [0001](decisions/0001-drizzle-migrations-are-the-schema-source-of-truth.md), why migrations, not a dumped schema, are the source of truth.
+
 `app/drizzle/schema.ts` is the single source of truth for the database schema. The flow for any schema change is:
 
 1. **Edit `app/drizzle/schema.ts`** — add a column, table, index, or view.

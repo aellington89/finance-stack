@@ -30,6 +30,8 @@ Covers the schema, views, balance-history table, first-launch initialization, th
 
 ## Balance History
 
+Decision record: [0006](decisions/0006-balance-rebuilds-lock-each-account-in-id-order.md), why rebuilds lock each account, in id order.
+
 `account_balance_history` stores daily cumulative balances for each account, filling in days with no transactions with a zero daily change.
 
 Every balance the app shows reads this table: net worth, `v_account_balances_current`, and each drilldown. What keeps it current depends on how a transaction arrived:
@@ -109,6 +111,8 @@ The account edit page shows what's left on each active transfer, or "Paid off".
 
 ## Recurring transactions
 
+Decision record: [0007](decisions/0007-recurring-transactions-run-in-process-on-postgres-today.md), why the scheduler runs in-process, on Postgres's today.
+
 Rent, pay, subscriptions and bills repeat on a schedule (Issue #135). A `recurring_transactions` row is a **template**: the six fields every transaction it creates will carry (description, signed amount, account, related account, type, category), plus when it repeats. Each due date becomes an ordinary `transactions` row, so everything that reads the ledger (balances, the drilldowns, Metabase) sees it with no change. The app runs due templates hourly, and saving one adds whatever is already due. Templates are managed on **Transactions → Recurring**, which lists each one with its schedule, next date and status, and adds, edits and deletes them in a dialog that previews the next three dates and how many a save adds at once. Its "today" is Postgres's, read when the page loads and moved on when a dialog opens after that day has ended, so the preview counts what the save will.
 
 **The schedule** is a cadence (`daily`, `weekly`, `monthly`, `yearly`) and an "every N" interval of 1–99: biweekly pay is every 2 weeks, a quarterly bill every 3 months. Complex cadences such as "last business day" are out of scope.
@@ -150,7 +154,7 @@ Everything comes from the `migrate` Compose service, which runs after postgres i
 
 The migrate service:
 
-0. Creates the databases — `Finances` (or whatever `FINANCE_APP_DB` names), `Finances_Test`, and the Metabase metadata role + database — from [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql). Metabase is provisioned only when `MB_DB_PASS` is non-empty; leave it blank and that role and database are skipped. **This runs on every `docker compose up`, not only the first**, which is the point of it living here: it used to be a postgres initdb hook, which runs once on an empty data volume and never again, so a database added later would never appear on an existing volume.
+0. Creates the databases — `Finances` (or whatever `FINANCE_APP_DB` names), `Finances_Test`, and the Metabase and GlitchTip roles and their databases — from [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql). Metabase is provisioned only when `MB_DB_PASS` is non-empty, and GlitchTip only when `GLITCHTIP_DB_PASSWORD` is. On a cluster that has never provisioned one, a blank password skips its role and database. Once the database exists, a blank password fails `migrate` on purpose, so the app and the importer, which wait on it, don't start: `migrate` sets the role's password from `.env` on every run, and a blank value would quietly set an empty one (Issues #189, #232). **This runs on every `docker compose up`, not only the first**, which is the point of it living here: it used to be a postgres initdb hook, which runs once on an empty data volume and never again, so a database added later would never appear on an existing volume.
 1. Creates the least-privilege service roles, then applies pending Drizzle migrations from [`app/drizzle/migrations/`](../app/drizzle/migrations/) to both `Finances` and `Finances_Test` and grants each role its privileges — see [Roles & Privileges](#roles--privileges).
 2. Seeds the **app-owned reference rows** (all of `account_type_categories` and `transaction_types`, plus the single `transaction_categories` row id 6 `Other`) into both databases so they start in sync — see [Seed-data taxonomy](#seed-data-taxonomy) for why that one category row ships and the rest do not. This runs on **every** migrate run, not only on an empty database: the seed is purely additive (`ON CONFLICT DO NOTHING`, `setval`, and `UPDATE`s guarded by `WHERE liquidity_class IS NULL`), so **existing Finances user data is never overwritten** and a reference row added to the seed after your database was first created is backfilled automatically. See [Repairing seed drift](#repairing-seed-drift).
 3. Seeds `Finances_Test` with mock data: all 19 `account_types`, 44 `transaction_categories`, 9 accounts, ~400 transactions spanning the past 12 months relative to `CURRENT_DATE` at seed time, and one active balance transfer (Visa → Discover, with its fee) linked in `balance_transfers`.
@@ -371,6 +375,8 @@ A role for a **new domain** (assets, income) is the same five steps; nothing is 
 
 ## Roles & Privileges
 
+Decision record: [0002](decisions/0002-each-service-connects-as-its-own-least-privilege-role.md), why each service has its own role.
+
 The long-running services do **not** connect as the `postgres` superuser (Issue #130). Each authenticates as its own login role, scoped to what it actually does:
 
 | Role | Used by | Privileges |
@@ -393,6 +399,7 @@ Those three are not the whole story, and describing only them is how a **superus
 |---|---|---|
 | `finance_app`, `finance_importer`, `finance_bi` | the long-running services and the BI connection | the matrix above |
 | `MB_DB_USER` (default `metabase_user`) | Metabase, for its **own metadata database** | Owns `MB_DB_DBNAME` and holds `USAGE`+`CREATE` on its `public` schema — it runs its own schema migrations there. **No cluster attributes, and no `CONNECT` on `Finances`** |
+| `GLITCHTIP_DB_USER` (default `glitchtip`) | GlitchTip, for its **own database** | Owns `GLITCHTIP_DB_DBNAME`, converged by [`04-glitchtip-role.sql`](../init-db/roles/04-glitchtip-role.sql) the same way as the Metabase role — it runs its own schema migrations there. **No cluster attributes, and no `CONNECT` on `Finances`** (Issue #232) |
 | `POSTGRES_USER` (default `postgres`) | `migrate`, `init-script`, `pg-backup` | Superuser, deliberately — these are maintenance jobs that need DDL and cluster-wide reads, and none has a network-facing surface |
 
 **Exactly one login role is a superuser, and it is the maintenance identity.** That is now an assertion rather than a description: [`assert-grants.sql`](../init-db/roles/assert-grants.sql) sweeps *every* login role in `pg_roles`, exempting only `current_user` — the identity running the gate. A role added later, by a future service or by hand, fails the gate by default instead of being invisible to it, and a role the stack does not declare must additionally hold no `CONNECT` on the database under test.
@@ -423,15 +430,16 @@ Roles and grants are applied by the **`migrate` service** on every `docker compo
 
 | File | Purpose |
 |---|---|
-| [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql) | Creates `FINANCE_APP_DB`, `Finances_Test`, and — when `MB_DB_PASS` is set — the Metabase metadata role and database (Issue #225) |
+| [`init-db/roles/00-create-databases.sql`](../init-db/roles/00-create-databases.sql) | Creates `FINANCE_APP_DB`, `Finances_Test`, and — when `MB_DB_PASS` or `GLITCHTIP_DB_PASSWORD` is set — the Metabase or GlitchTip role and database (Issues #225, #232) |
 | [`init-db/roles/01-create-roles.sql`](../init-db/roles/01-create-roles.sql) | Creates the three login roles (cluster-global, so it runs once per migrate run) |
 | [`init-db/roles/02-grants.sql`](../init-db/roles/02-grants.sql) | Applies the matrix above to one database; run against `Finances` and `Finances_Test` |
 | [`init-db/roles/03-metabase-role.sql`](../init-db/roles/03-metabase-role.sql) | Converges the Metabase metadata role — attributes, ownership, and its password; run against `MB_DB_DBNAME` (Issues #239, #189) |
+| [`init-db/roles/04-glitchtip-role.sql`](../init-db/roles/04-glitchtip-role.sql) | Converges the GlitchTip role the same way — attributes, ownership, and its password; run against `GLITCHTIP_DB_DBNAME` (Issue #232) |
 | [`init-db/roles/assert-grants.sql`](../init-db/roles/assert-grants.sql) | Asserts the matrix against the catalog — the CI grant gate |
 
-`02-grants.sql` **revokes before it grants**, inside a transaction, so it converges: a privilege widened by hand is removed on the next `up`, and there is no window in which a running app has no access. `01-create-roles.sql` and `03-metabase-role.sql` converge the same way, with an unconditional `ALTER ROLE`.
+`02-grants.sql` **revokes before it grants**, inside a transaction, so it converges: a privilege widened by hand is removed on the next `up`, and there is no window in which a running app has no access. `01-create-roles.sql`, `03-metabase-role.sql` and `04-glitchtip-role.sql` converge the same way, with an unconditional `ALTER ROLE`.
 
-**One story about out-of-band changes, applied everywhere:** the stack silently converges what it *declares* — the three service roles and the Metabase metadata role, attributes and passwords alike — and refuses to be silent about anything else. A login role the stack does not declare is never rewritten by `migrate`; it fails `assert-grants.sql` instead, so an operator who added one deliberately gets told rather than quietly overruled. `POSTGRES_PASSWORD` sits in that second category by necessity rather than by choice: `migrate` cannot converge the credential it authenticates with, so it detects the divergence and reports it instead (Issue #189).
+**One story about out-of-band changes, applied everywhere:** the stack silently converges what it *declares* — the three service roles and the Metabase and GlitchTip roles, attributes and passwords alike — and refuses to be silent about anything else. A login role the stack does not declare is never rewritten by `migrate`; it fails `assert-grants.sql` instead, so an operator who added one deliberately gets told rather than quietly overruled. `POSTGRES_PASSWORD` sits in that second category by necessity rather than by choice: `migrate` cannot converge the credential it authenticates with, so it detects the divergence and reports it instead (Issue #189).
 
 ### Verifying the roles
 

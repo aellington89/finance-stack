@@ -4,7 +4,7 @@
 
 Finance Stack documentation is split by purpose. The root [README](../README.md) is the **entry point** — overview, stack, security, quick start, and links out. The guides in this `docs/` folder hold **focused operational and reference content** (deployment, database, schema changes, testing, the importer, and project structure). [`CHANGELOG.md`](../CHANGELOG.md) (release history, with tagging and release conventions in [Releases & Tagging](releases.md)) and [`CONTRIBUTING.md`](../CONTRIBUTING.md) (dev workflow, conventions, and the release process) round out the set.
 
-Planning lives outside the repository: the roadmaps are GitHub [Projects](https://github.com/aellington89/finance-stack/projects).
+Planning lives outside the repository: the roadmaps are GitHub [Projects](https://github.com/aellington89/finance-stack/projects). Decisions that are costly to reverse are recorded in [`docs/decisions/`](decisions/README.md). Designs too big for an issue go in [`docs/design/`](design/README.md), which has none yet.
 
 ## Guides
 

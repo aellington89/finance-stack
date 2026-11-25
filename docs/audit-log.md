@@ -6,6 +6,8 @@ Added in [Issue #180](https://github.com/aellington89/finance-stack/issues/180).
 
 ## Why triggers rather than application code
 
+Decision record: [0003](decisions/0003-database-triggers-write-the-audit-log.md), the decision this section explains.
+
 The obvious implementation is to write an audit row from each server action in
 `app/lib/actions/`. This does not, because:
 

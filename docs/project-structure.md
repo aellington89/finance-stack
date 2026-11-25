@@ -73,6 +73,8 @@ finance-stack/
 │   │       │       └── reimbursements/page.tsx #     Reimbursements drill-down (stub)
 │   │       ├── accounts/                 #   /accounts, /accounts/new, /accounts/[id]/edit
 │   │       ├── settings/categories/      #   /settings/categories — CRUD for all reference-data tables
+│   │       ├── settings/admin/           #   /settings/admin — transaction types and account type categories, admins only (notFound() otherwise; #87)
+│   │       ├── settings/about/           #   /settings/about — "What's New": the running version and CHANGELOG.md (lib/changelog.ts)
 │   │       └── test-ui/                  #   /test-ui — UI component verification page
 │   ├── components.json                   # shadcn/ui configuration
 │   ├── drizzle/                          # Drizzle ORM schema + migrations
