@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-25
+
+**Migration:** none
+
 ### Changed
 
 - **The Transactions count, and the description filter's list on Transactions and Accounting, are found a faster way.** ([Issue #146](https://github.com/aellington89/finance-stack/issues/146)) Both now read the transactions table directly, not a view that joins five tables. Only the time to find them has changed: the results are the same.
@@ -880,7 +884,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Unified, persistent sidebar navigation (shadcn Sidebar) connecting all application sections, with a Next.js route-group split for the landing page vs. the app shell ([Issue #77](https://github.com/aellington89/finance-stack/issues/77)).
 
-[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/aellington89/finance-stack/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/aellington89/finance-stack/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/aellington89/finance-stack/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aellington89/finance-stack/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/aellington89/finance-stack/compare/v1.4.0...v1.4.1
