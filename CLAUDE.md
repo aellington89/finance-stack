@@ -52,6 +52,9 @@ with the shared dev process (Dev process, below).
 - An integration test that compares whole tables fails if a `next dev` server (`npm run dev` or
   `npm run dev:verify`) on the same `Finances_Test` writes between its reads: stop it or start it
   with `RECURRING_SCHEDULER=off`.
+- Browsers don't scope cookies by port, so signing in to `dev:verify` on 3003 signs that browser
+  out of 3001 (the `finance-app` container). Check in a private window or a Playwright context,
+  never the user's own signed-in browser (`app/README.md`, Issue #501).
 
 ## Dev process
 
