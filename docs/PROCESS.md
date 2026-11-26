@@ -133,5 +133,6 @@ in the process's "What's automated".
 
 ## Known gaps
 
-- Nothing checks that a Dependabot bump that ships has its `### Dependencies` entry before the
-  release; `/release` asks for one.
+- Nothing checks that a Dependabot bump that ships has its `### Dependencies` entry when it
+  merges. The docs audit before a release looks for one (PR #496's `lucide-react` bump was found
+  that way, in PR #504), and `/release` asks again.
