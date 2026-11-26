@@ -26,8 +26,9 @@ import {
 //
 // The two whole-table comparisons read the database twice, so a write between
 // the reads fails them. fileParallelism: false keeps other test files out; a
-// `npm run dev` server on the same Finances_Test can still write through its
-// recurring scheduler, so stop it or set RECURRING_SCHEDULER=off.
+// `next dev` server (`npm run dev` or `npm run dev:verify`) on the same
+// Finances_Test can still write through its recurring scheduler, so stop it or
+// set RECURRING_SCHEDULER=off.
 
 const TYPE_CHECKING = 2;
 const TYPE_CREDIT_CARD = 15;
