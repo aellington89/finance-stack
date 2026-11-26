@@ -14,21 +14,23 @@
 # entry in .github/dependabot.yml.
 FROM python:3.15-slim
 
-# ZLIB AND ZSTD COME FROM TRIXIE-SECURITY, NOT FROM THE BASE (DSA-6613-1). The
-# base ships zlib1g 1:1.3.dfsg+really1.3.1-1+b1, which reports CVE-2026-76844 and
-# CVE-2026-85091 (two HIGH heap overflows in zlib's gz* write path) against the
-# `image` gate. Debian fixed both in -1+deb13u1, in trixie-security since
-# 2026-11-02, but the upstream rebuilds since then (python:3.15-slim on
-# 2026-11-07, postgres:18.6 on 2026-11-06) still carried -1+b1, so re-running the
-# job could not clear them. Taking the one fixed package here is CONTRIBUTING.md's
-# fix option 3 applied below the base, and it ranks above suppressing the finding.
-# scripts/Dockerfile carries the same layer for the same reason.
+# ZLIB AND ZSTD COME FROM TRIXIE-SECURITY, NOT FROM THE BASE.
 #
-# libzstd1 is the same case: 1.5.7+dfsg-1 reports CVE-2026-124851 (HIGH, an
-# information disclosure through an uninitialized buffer), fixed in
-# 1.5.7+dfsg-1+deb13u1 in trixie-security, and python:3.15-slim, rebuilt
-# 2026-11-24, still carries -1. Drop libzstd1 from this layer once the base ships
-# -deb13u1 itself. python:3.15-slim ships the library but not the zstd tool.
+# zlib (DSA-6613-1): the base ships zlib1g 1:1.3.dfsg+really1.3.1-1+b1, which
+# reports CVE-2026-76844 and CVE-2026-85091 (two HIGH heap overflows in zlib's gz*
+# write path) against the `image` gate. Debian fixed both in -1+deb13u1, in
+# trixie-security since 2026-11-02, but the upstream rebuilds since then
+# (python:3.15-slim on 2026-11-07, postgres:18.6 on 2026-11-06) still carried
+# -1+b1, so re-running the job could not clear them. Taking the fixed packages here
+# is CONTRIBUTING.md's fix option 3 applied below the base, and it ranks above
+# suppressing the finding. scripts/Dockerfile carries the same layer for the same
+# reason.
+#
+# zstd (DSA-6657-1): libzstd1 is the same case. 1.5.7+dfsg-1 reports
+# CVE-2026-124851 (HIGH, an information disclosure through an uninitialized
+# buffer), fixed in 1.5.7+dfsg-1+deb13u1 in trixie-security, and python:3.15-slim,
+# rebuilt 2026-11-24, still carries -1. Drop libzstd1 from this layer once the base
+# ships -deb13u1 itself. python:3.15-slim ships the library but not the zstd tool.
 #
 # This is the image's only apt step, so it stays off the path a base still on
 # apt 3.0.3 would expose (CVE-2026-109518; both bases have since moved to 3.0.4).

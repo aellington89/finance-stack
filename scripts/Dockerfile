@@ -36,11 +36,12 @@ FROM postgres:18.6
 # source package and depend on each other's exact version, so they move
 # together. Drop them from this layer once postgres:18.6 ships -deb13u2.
 #
-# zstd: libzstd1 and the zstd tool 1.5.7+dfsg-1 report CVE-2026-124851 (HIGH, an
-# information disclosure through an uninitialized buffer), fixed in
-# 1.5.7+dfsg-1+deb13u1. postgres:18.6 still carries -1, so re-running the scan
-# can't clear it. The tool depends on libzstd1 at its exact version, so the two
-# move together. Drop them from this layer once postgres:18.6 ships -deb13u1.
+# zstd (DSA-6657-1): libzstd1 and the zstd tool 1.5.7+dfsg-1 report
+# CVE-2026-124851 (HIGH, an information disclosure through an uninitialized
+# buffer), fixed in 1.5.7+dfsg-1+deb13u1. postgres:18.6 still carries -1, so
+# re-running the scan can't clear it. The tool depends on libzstd1 at its exact
+# version, so the two move together. Drop them from this layer once postgres:18.6
+# ships -deb13u1.
 #
 # `--only-upgrade` moves only the packages it names, so it cannot pull
 # postgresql-18 forward from the pgdg repository and break the pg_dump version
