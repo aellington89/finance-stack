@@ -21,7 +21,7 @@
 # merged together — see CONTRIBUTING.md "Dependabot PRs".
 FROM postgres:18.6
 
-# ZLIB AND KRB5 COME FROM TRIXIE-SECURITY, NOT FROM THE BASE.
+# ZLIB, KRB5 AND ZSTD COME FROM TRIXIE-SECURITY, NOT FROM THE BASE.
 #
 # zlib (DSA-6613-1): the same CVE-2026-76844 / CVE-2026-85091 finding, fix and
 # reasoning as the identical layer in importer/Dockerfile, which explains it in
@@ -36,6 +36,12 @@ FROM postgres:18.6
 # source package and depend on each other's exact version, so they move
 # together. Drop them from this layer once postgres:18.6 ships -deb13u2.
 #
+# zstd: libzstd1 and the zstd tool 1.5.7+dfsg-1 report CVE-2026-124851 (HIGH, an
+# information disclosure through an uninitialized buffer), fixed in
+# 1.5.7+dfsg-1+deb13u1. postgres:18.6 still carries -1, so re-running the scan
+# can't clear it. The tool depends on libzstd1 at its exact version, so the two
+# move together. Drop them from this layer once postgres:18.6 ships -deb13u1.
+#
 # `--only-upgrade` moves only the packages it names, so it cannot pull
 # postgresql-18 forward from the pgdg repository and break the pg_dump version
 # match described above, and the build fails unless every fixed version
@@ -43,11 +49,14 @@ FROM postgres:18.6
 # apt 3.0.3's advisory (CVE-2026-109518) needs, should the base still carry it.
 RUN apt-get -o Acquire::Retries=0 update \
  && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --only-upgrade \
-      zlib1g libkrb5-3 libgssapi-krb5-2 libk5crypto3 libkrb5support0 \
+      zlib1g libkrb5-3 libgssapi-krb5-2 libk5crypto3 libkrb5support0 libzstd1 zstd \
  && rm -rf /var/lib/apt/lists/* \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
  && for p in libkrb5-3 libgssapi-krb5-2 libk5crypto3 libkrb5support0; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$p")" ge '1.21.3-5+deb13u2' || exit 1; \
+    done \
+ && for p in libzstd1 zstd; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$p")" ge '1.5.7+dfsg-1+deb13u1' || exit 1; \
     done
 
 COPY backup.sh restore.sh /scripts/

@@ -14,8 +14,8 @@
 # entry in .github/dependabot.yml.
 FROM python:3.15-slim
 
-# ZLIB COMES FROM TRIXIE-SECURITY, NOT FROM THE BASE (DSA-6613-1). The base ships
-# zlib1g 1:1.3.dfsg+really1.3.1-1+b1, which reports CVE-2026-76844 and
+# ZLIB AND ZSTD COME FROM TRIXIE-SECURITY, NOT FROM THE BASE (DSA-6613-1). The
+# base ships zlib1g 1:1.3.dfsg+really1.3.1-1+b1, which reports CVE-2026-76844 and
 # CVE-2026-85091 (two HIGH heap overflows in zlib's gz* write path) against the
 # `image` gate. Debian fixed both in -1+deb13u1, in trixie-security since
 # 2026-11-02, but the upstream rebuilds since then (python:3.15-slim on
@@ -24,21 +24,28 @@ FROM python:3.15-slim
 # fix option 3 applied below the base, and it ranks above suppressing the finding.
 # scripts/Dockerfile carries the same layer for the same reason.
 #
+# libzstd1 is the same case: 1.5.7+dfsg-1 reports CVE-2026-124851 (HIGH, an
+# information disclosure through an uninitialized buffer), fixed in
+# 1.5.7+dfsg-1+deb13u1 in trixie-security, and python:3.15-slim, rebuilt
+# 2026-11-24, still carries -1. Drop libzstd1 from this layer once the base ships
+# -deb13u1 itself. python:3.15-slim ships the library but not the zstd tool.
+#
 # This is the image's only apt step, so it stays off the path a base still on
 # apt 3.0.3 would expose (CVE-2026-109518; both bases have since moved to 3.0.4).
 # That advisory requires Acquire::Retries above zero, so both calls pass
-# `-o Acquire::Retries=0`. `--only-upgrade` moves zlib1g alone, and the lists are
-# deleted in the same layer, so the image keeps no apt state.
+# `-o Acquire::Retries=0`. `--only-upgrade` moves only the packages it names, and
+# the lists are deleted in the same layer, so the image keeps no apt state.
 #
-# The last line is the layer asserting its own outcome. A security mirror that
-# served nothing would otherwise look exactly like success, so the build fails
-# unless the installed zlib1g is at least the fixed version. Once the base ships
-# -deb13u1 itself, the upgrade is a no-op and the assertion still holds; delete
-# the layer then.
+# The last two lines are the layer asserting its own outcome. A security mirror
+# that served nothing would otherwise look exactly like success, so the build
+# fails unless the installed zlib1g and libzstd1 are at least the fixed versions.
+# Once the base ships -deb13u1 itself, the upgrade is a no-op and the assertions
+# still hold; delete the layer then.
 RUN apt-get -o Acquire::Retries=0 update \
- && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --only-upgrade zlib1g \
+ && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --only-upgrade zlib1g libzstd1 \
  && rm -rf /var/lib/apt/lists/* \
- && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1'
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libzstd1)" ge '1.5.7+dfsg-1+deb13u1'
 
 WORKDIR /app
 
