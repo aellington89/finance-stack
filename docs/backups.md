@@ -38,7 +38,7 @@ Set in `.env` (see `.env.example`):
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BACKUP_DBS` | `Finances,metabase` | Comma-separated databases to dump. Keep in sync with `FINANCE_APP_DB` / `MB_DB_DBNAME` if you rename them. |
+| `BACKUP_DBS` | `Finances,metabase,glitchtip` | Comma-separated databases to dump. Keep in sync with `FINANCE_APP_DB` / `MB_DB_DBNAME` / `GLITCHTIP_DB_DBNAME` if you rename them. |
 | `BACKUP_RETENTION_DAYS` | `14` | Dumps older than this are pruned — but the newest dump of each database is always kept. |
 | `BACKUP_INTERVAL_SECONDS` | `86400` | Seconds between backup runs (default daily). |
 

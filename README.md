@@ -41,7 +41,7 @@ Credentials are sourced from a single `.env` file on the deployment host — nev
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Node.js 24+](https://nodejs.org/) — for the Next.js application, **local development only**. A deployed server needs neither Node nor a checkout; see [Deploying to a server](#deploying-to-a-server).
+- [Node.js 26](https://nodejs.org/), the version the images and CI run — for the Next.js application, **local development only**. A deployed server needs neither Node nor a checkout; see [Deploying to a server](#deploying-to-a-server).
 
 ## Getting Started
 
@@ -156,8 +156,8 @@ pointing Metabase at its read-only role.
 
 ## Backups
 
-The `pg-backup` service runs a scheduled `pg_dump` of the `Finances` and
-`metabase` databases into `./backups/` (default daily, 14-day retention). It
+The `pg-backup` service runs a scheduled `pg_dump` of the `Finances`,
+`metabase` and `glitchtip` databases into `./backups/` (default daily, 14-day retention). It
 starts automatically with `docker compose up`. Restore the newest dump into a
 throwaway database with:
 
@@ -189,6 +189,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, commit conventions,
 - [Importer](docs/importer.md) — the importer service and adding new import types
 - [Project Structure](docs/project-structure.md) — repository layout and directory tree
 - [Development Process](docs/PROCESS.md) — how work moves from an issue to a release: Finance Stack's additions to the shared dev process, and where it differs
+- [Decisions](docs/decisions/README.md) — the architecture decision records: the choices that are costly to reverse, and why they were made
 - [Releases & Tagging](docs/releases.md) — versioning, the `vX.Y.Z` tag convention, and how releases map to `CHANGELOG.md`
 - [Milestones](https://github.com/aellington89/finance-stack/milestones) and [Projects](https://github.com/aellington89/finance-stack/projects) — the roadmap: one milestone per phase, and what is planned and in flight
 - [Changelog](CHANGELOG.md) — release history and version notes
