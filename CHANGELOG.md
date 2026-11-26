@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Caddy moves to 2.11.9-alpine** (from 2.11.8-alpine). ([PR #456](https://github.com/aellington89/finance-stack/pull/456)) A patch release on the current line that fixes a 2.11.8 regression and several FastCGI security issues. Its breaking changes are all in directives the shipped `caddy/Caddyfile` doesn't use: `client_auth`, FastCGI, `try_files`, and path matchers with placeholders. That file is one `reverse_proxy` with a JSON access log, and it validates and proxies unchanged on 2.11.9. The release also updates go-jose for GHSA-mgcc-cww5-fp2q. That denial of service is reachable only when Caddy runs as an ACME server, and this stack runs it only as an ACME client. `deploy/compose.yml` moved together with `docker-compose.yml`, so an upgrade picks both up by itself.
 
+### Internal
+
+- **The dev-verify port moves from 3002 to 3003, and `npm run dev:verify` starts it.** ([Issue #501](https://github.com/aellington89/finance-stack/issues/501)) Synapse runs beside finance-stack on the same host and publishes its app on 3002, which its Spotify connection needs as its redirect. With Synapse up, the dev check couldn't bind 3002, and with it down, the check took the port Synapse expects. `npm run dev:verify` in `app/` is `npm run dev` on 3003, for checking a change while the `finance-app` container holds 3001, and like `npm run dev` it runs the recurring-transaction scheduler. The end-to-end suite stays on 3100.
+
 ## [1.6.0] - 2026-11-21
 
 **Migration:** backward-compatible

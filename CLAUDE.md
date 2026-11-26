@@ -9,10 +9,11 @@ with the shared dev process (Dev process, below).
 
 - `docker compose up`: the whole stack (README, "Getting Started"). `COMPOSE_PROFILES` in
   `.env` adds the optional services.
-- In `app/`: `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test` (Vitest), and
-  `npm run test:e2e` (Playwright); the gates `npm run check:changelog`, `npm run check:docs`,
-  `npm run check:seed-references`, and `npm run check:audit`; and
-  `npm run db:generate -- --name <description>` for a migration (docs/schema-changes.md).
+- In `app/`: `npm run dev`, `npm run dev:verify` (port 3003, beside the stack), `npm run lint`,
+  `npm run typecheck`, `npm test` (Vitest), and `npm run test:e2e` (Playwright); the gates
+  `npm run check:changelog`, `npm run check:docs`, `npm run check:seed-references`, and
+  `npm run check:audit`; and `npm run db:generate -- --name <description>` for a migration
+  (docs/schema-changes.md).
 - In `importer/`: `pytest tests -v`.
 
 ## Where things are
@@ -48,8 +49,9 @@ with the shared dev process (Dev process, below).
   through the one `buildWhereClause(filters, source)`. It matches the view only while every
   inner join there follows a `NOT NULL` foreign key, which
   `app/tests/integration/queries/transactions.test.ts` checks (Issue #146).
-- An integration test that compares whole tables fails if a `npm run dev` server on the same
-  `Finances_Test` writes between its reads: stop it or start it with `RECURRING_SCHEDULER=off`.
+- An integration test that compares whole tables fails if a `next dev` server (`npm run dev` or
+  `npm run dev:verify`) on the same `Finances_Test` writes between its reads: stop it or start it
+  with `RECURRING_SCHEDULER=off`.
 
 ## Dev process
 
@@ -66,7 +68,7 @@ read these facts:
 | Verify            | In `app/`: `npm run lint`, `npm run typecheck`, `npm test`, `npm run check:changelog`, `npm run check:docs`, and `npm run check:seed-references`; in `importer/`: `pytest tests`; in the root: `node scripts/dev-process/check-process.mjs`. CI runs every other gate (CONTRIBUTING.md) |
 | Unit tests        | `npm test` in `app/`; `test:unit`, `test:jsdom`, and `test:integration` run one project each                                                                                                                                                                                            |
 | End-to-end tests  | `npm run test:e2e` in `app/` (Playwright)                                                                                                                                                                                                                                               |
-| Run the app       | `docker compose up`, or `npm run dev` in `app/` against it (README)                                                                                                                                                                                                                     |
+| Run the app       | `docker compose up`, or `npm run dev:verify` in `app/` beside it (port 3003; `npm run dev` on 3001 once `finance-app` is stopped; README)                                                                                                                                               |
 | Format            | n/a: ESLint (`npm run lint` in `app/`) is the style gate; there's no formatter                                                                                                                                                                                                          |
 | Next version      | `node scripts/dev-process/release.mjs next` in the root (docs/releases.md, "Choosing the bump")                                                                                                                                                                                         |
 | Prepare a release | `node scripts/dev-process/release.mjs prepare` in the root, then the `**Migration:**` marker under the new heading and `npm version X.Y.Z --no-git-tag-version` in `app/`; `npm run check:changelog` holds them together (docs/releases.md)                                             |

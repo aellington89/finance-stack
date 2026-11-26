@@ -113,7 +113,7 @@ cd app
 npm run dev
 ```
 
-The app starts on http://localhost:3001 with Turbopack for fast refresh.
+The app starts on http://localhost:3001 with Turbopack for fast refresh. While the stack's `finance-app` container holds 3001, run `npm run dev:verify` instead, which starts the same dev server on http://localhost:3003.
 
 ### 5. Access the services
 

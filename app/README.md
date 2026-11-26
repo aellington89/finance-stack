@@ -18,7 +18,7 @@ npm run auth:create-user -- <username>
 npm run dev
 ```
 
-The app is available at http://localhost:3001. `DATABASE_URL` in `.env.local` should point to `Finances_Test` for safe local development, and `AUTH_SECRET` (generate with `openssl rand -base64 33`) signs the session cookies. All app pages require sign-in — see [docs/auth.md](../docs/auth.md).
+The app is available at http://localhost:3001. While the stack's `finance-app` container holds 3001, run `npm run dev:verify` instead, on http://localhost:3003. `DATABASE_URL` in `.env.local` should point to `Finances_Test` for safe local development, and `AUTH_SECRET` (generate with `openssl rand -base64 33`) signs the session cookies. All app pages require sign-in — see [docs/auth.md](../docs/auth.md).
 
 The server also runs the recurring-transaction scheduler, 30 seconds after it starts and then hourly ([docs/database.md](../docs/database.md#recurring-transactions)). Against `Finances_Test` that creates any due template's rows like production would. Set `RECURRING_SCHEDULER=off` to run without it; the E2E suite does. The timer keeps the code it started with, so restart the dev server after changing anything under `lib/recurring/`.
 
@@ -27,6 +27,7 @@ The server also runs the recurring-transaction scheduler, 30 seconds after it st
 | Script | Description |
 |---|---|
 | `npm run dev` | Start dev server with Turbopack on port 3001 |
+| `npm run dev:verify` | Start the dev server on port 3003, for checking a change while the `finance-app` container holds 3001 |
 | `npm run build` | Production build (outputs to `.next/standalone`) |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Type-check the whole app, tests and scripts included (generates Next's route types first) |

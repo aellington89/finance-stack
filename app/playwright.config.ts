@@ -9,10 +9,10 @@ import { STORAGE_STATE } from "./e2e/fixtures/constants";
 // are already set, so a CI job's environment still wins.
 loadEnv({ path: resolve(__dirname, ".env.local") });
 
-// Not 3001 and not 3002. 3001 is the port the `start` script and the
+// Not 3001 and not 3003. 3001 is the port the `start` script and the
 // finance-app container both bind, so a suite on that port either fights the
 // running stack or — worse — passes by testing it instead of the build under
-// test. 3002 is taken by the deploy/dev verification flow.
+// test. 3003 is the dev-verify port (`npm run dev:verify`).
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
