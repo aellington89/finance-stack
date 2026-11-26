@@ -72,7 +72,10 @@
 # Dockerfiles take zlib1g from trixie-security instead (#399). Nor were the
 # fourteen krb5 findings in finance-backup (CVE-2026-71199 and the rest,
 # 1.21.3-5+deb13u1, DSA-6650-1): scripts/Dockerfile takes the four krb5 library
-# packages from trixie-security in the same layer.
+# packages from trixie-security in the same layer. Nor were the zstd findings
+# (CVE-2026-124851 in libzstd1, and in finance-backup the zstd tool, both
+# 1.5.7+dfsg-1, DSA-6657-1): importer/Dockerfile takes libzstd1 and
+# scripts/Dockerfile takes both from trixie-security the same way.
 #
 # EMPTIED ONCE BEFORE THAT, BECAUSE THE BASE CAUGHT UP. Before the apt entry,
 # this block held three entries from #352,
