@@ -41,8 +41,9 @@ FROM python:3.15-slim
 # The last two lines are the layer asserting its own outcome. A security mirror
 # that served nothing would otherwise look exactly like success, so the build
 # fails unless the installed zlib1g and libzstd1 are at least the fixed versions.
-# Once the base ships -deb13u1 itself, the upgrade is a no-op and the assertions
-# still hold; delete the layer then.
+# Once the base ships a package's fix itself, its upgrade is a no-op and its
+# assertion still holds; delete that package from the upgrade and its assertion
+# then, and the whole layer once both are gone.
 RUN apt-get -o Acquire::Retries=0 update \
  && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --only-upgrade zlib1g libzstd1 \
  && rm -rf /var/lib/apt/lists/* \
