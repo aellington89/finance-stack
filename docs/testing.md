@@ -495,7 +495,8 @@ Five of those are decisions rather than defaults:
 - **Port 3100.** 3001 is bound by the `start` script *and* by the `finance-app`
   container, so a suite on that port either fights the running stack or passes
   by testing it instead of the build under test. 3003 is the dev-verify port
-  (`npm run dev:verify`).
+  (`npm run dev:verify`), and the same goes for it: Playwright reuses a server
+  it finds on its port outside CI, so a suite there would test the dev server.
 - **The KPI assertion is a delta, not an absolute.** The mock seed generates
   twelve months relative to `CURRENT_DATE`, so Net Worth has no fixed value; the
   spec reads the headline before and after and asserts the difference. A broken

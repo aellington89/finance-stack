@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 
-- **The dev-verify port moves from 3002 to 3003, and `npm run dev:verify` starts it.** ([Issue #501](https://github.com/aellington89/finance-stack/issues/501)) Synapse runs beside finance-stack on the same host and publishes its app on 3002, which its Spotify connection needs as its redirect. With Synapse up, the dev check couldn't bind 3002, and with it down, the check took the port Synapse expects. `npm run dev:verify` in `app/` is `npm run dev` on 3003, for checking a change while the `finance-app` container holds 3001, and like `npm run dev` it runs the recurring-transaction scheduler. The end-to-end suite stays on 3100.
+- **The dev-verify port moves from 3002 to 3003, and `npm run dev:verify` starts it.** ([Issue #501](https://github.com/aellington89/finance-stack/issues/501)) Synapse runs beside finance-stack on the same host and publishes its app on 3002, which its Spotify connection needs as its redirect. With Synapse up, the dev check couldn't bind 3002, and with it down, the check took the port Synapse expects. `npm run dev:verify` in `app/` is `npm run dev` on 3003, for checking a change while the `finance-app` container holds 3001, and like `npm run dev` it runs the recurring-transaction scheduler, which writes to the database in `.env.local` (`Finances_Test` by default); set `RECURRING_SCHEDULER=off` to run without it. The end-to-end suite stays on 3100.
 
 ## [1.6.0] - 2026-11-21
 

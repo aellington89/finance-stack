@@ -12,7 +12,9 @@ loadEnv({ path: resolve(__dirname, ".env.local") });
 // Not 3001 and not 3003. 3001 is the port the `start` script and the
 // finance-app container both bind, so a suite on that port either fights the
 // running stack or — worse — passes by testing it instead of the build under
-// test. 3003 is the dev-verify port (`npm run dev:verify`).
+// test. 3003 is the dev-verify port (`npm run dev:verify`): the `webServer`
+// below reuses a server it finds on its port outside CI, so a suite there
+// would test that dev server instead of the build under test.
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
