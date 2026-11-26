@@ -11,7 +11,7 @@ import { cleanupE2eRows, deleteE2eUser, withClient } from "./fixtures/db";
  *
  * CI's database is thrown away with the job, so this is for the developer's
  * local Finances_Test — which is the same database the integration project and
- * a `npm run dev` session read.
+ * a `next dev` session (`npm run dev` or `npm run dev:verify`) read.
  */
 export default async function globalTeardown() {
   loadEnv({ path: resolve(__dirname, "..", ".env.local") });

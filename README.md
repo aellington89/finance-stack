@@ -110,10 +110,11 @@ npm run auth:create-user -- <username>
 
 ```bash
 cd app
-npm run dev
+npm run dev:verify   # http://localhost:3003, beside the stack from step 2
+# npm run dev        # http://localhost:3001, once its finance-app container is stopped
 ```
 
-The app starts on http://localhost:3001 with Turbopack for fast refresh.
+Both start the same dev server with Turbopack for fast refresh. The stack's `finance-app` container holds 3001, so `npm run dev` can't bind it until that container is stopped, and `npm run dev:verify` is the one to use beside it.
 
 ### 5. Access the services
 
