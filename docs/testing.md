@@ -48,10 +48,10 @@ test lives next to the transform test for the same feature.
 The [end-to-end suite](#end-to-end-tests) is Playwright rather than Vitest and
 runs separately — `npm run test:e2e`.
 
-> **CI and the images run Node 26; local development is typically on Node 22.**
-> That matters for any assertion whose expected value comes from `Intl` rather
-> than from our own code, because the two ship different ICU builds (78.2 in
-> Node 22.22, 78.3 in Node 24 and 26). `Intl.NumberFormat` with
+> **CI and the images run Node 26, the version the README asks for; a machine
+> still on Node 22 ships a different ICU build** (78.2 in Node 22.22, 78.3 in
+> Node 24 and 26). That matters for any assertion whose expected value comes
+> from `Intl` rather than from our own code. `Intl.NumberFormat` with
 > `notation: "compact"` is the one that has actually bitten: below the
 > compaction threshold, Node 22 renders `$12.0` where Node 24 and 26 render
 > `$12`, so an exact assertion there passes locally and fails in CI. Assert on
